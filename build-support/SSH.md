@@ -15,3 +15,8 @@ Record every source correction in this repository and rerun a clean build before
 The expected installed kernel is `out/kernel/work/fakeroot/System/Library/Kernels/kernel.development.a04br3`. The clean Python builder produces the kernel copy and `build.json` only after the driver succeeds and that file exists. Do not infer success from an SSH connection or header generation.
 
 End the retained runner with `touch /tmp/a04br3-debug-done`. The job also has a 120-minute limit. Transfer needed logs and outputs before ending it. The current diagnostic workflow avoids artifact upload because account artifact storage was full; that does not affect compilation.
+
+A failed automated build is reported as a failed job after the retained session
+ends, even if manual repair later succeeds. Validate the final source revision
+with a fresh source archive and output directory on the same runner before
+claiming a clean build. This reuses the installed Xcode/KDK, not failed objects.

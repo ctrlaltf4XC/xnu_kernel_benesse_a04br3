@@ -41,6 +41,7 @@ jobs:
           subprocess.run(['gh','api','--method','POST',f"repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",'-f','state=pending','-f','context=a04br3/ssh','-f',f'description={command}'],check=True,stdout=subprocess.DEVNULL)
           PYTHON
       - name: Build committed source and declared dependencies
+        id: kernel
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -50,3 +51,9 @@ jobs:
         run: |
           echo "SSH repair environment retained. End with: touch /tmp/a04br3-debug-done"
           while [ ! -f /tmp/a04br3-debug-done ]; do sleep 60; done
+      - name: Report the automated build result
+        if: always()
+        env:
+          BUILD_OUTCOME: ${{ steps.kernel.outcome }}
+        run: |
+          test "$BUILD_OUTCOME" = success
