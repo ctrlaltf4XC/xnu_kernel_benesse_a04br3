@@ -1,0 +1,5 @@
+{
+  "repository": "https://github.com/apple-oss-distributions/xnu",
+  "tag": "xnu-8796.141.3",
+  "commit": "1b191cb58250d0705d8a51287127505aa4bc0789"
+}
