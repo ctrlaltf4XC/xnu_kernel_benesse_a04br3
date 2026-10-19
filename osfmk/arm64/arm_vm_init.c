@@ -1812,6 +1812,41 @@ init_ptpages(tt_entry_t *tt, vm_map_address_t start, vm_map_address_t end, bool 
 #define ARM64_PHYSMAP_SLIDE_RANGE (1ULL << 30) // 1 GB
 #define ARM64_PHYSMAP_SLIDE_MASK  (ARM64_PHYSMAP_SLIDE_RANGE - 1)
 
+#if defined(A04BR3)
+/* Adapted from ios-sweet patch 0012: retain early diagnostics across TTBR0
+ * teardown. MT8167 uses a Device UART block instead of SWEET's framebuffer. */
+#define A04BR3_EARLY_UART_VA (VM_MIN_KERNEL_ADDRESS + ARM_TT_L2_SIZE)
+static void
+a04br3_vm_trace(const char *text, boolean_t final_mapping)
+{
+	volatile uint32_t *uart = (volatile uint32_t *)(uintptr_t)
+	    (final_mapping ? A04BR3_EARLY_UART_VA + 0x01005000 : 0x11005000);
+	while (*text) {
+		unsigned int remaining = 0xffff;
+		while (!(uart[5] & 0x20) && --remaining) { }
+		if (!remaining) { return; }
+		uart[0] = (uint8_t)*text++;
+	}
+}
+
+static void
+a04br3_early_map_final(void)
+{
+	const vm_map_address_t va = A04BR3_EARLY_UART_VA;
+	assert(va + ARM_TT_L2_SIZE <= gVirtBase);
+	tt_entry_t l1 = cpu_tte[(va & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT];
+	assert((l1 & (ARM_TTE_VALID | ARM_TTE_TYPE_MASK)) ==
+	    (ARM_TTE_VALID | ARM_TTE_TYPE_TABLE));
+	tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
+	tt_entry_t *slot = &l2[(va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT];
+	assert(*slot == ARM_TTE_EMPTY);
+	*slot = 0x10000000ULL | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
+	    ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_DISABLE) |
+	    ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX;
+	__asm__ volatile("dsb ishst" ::: "memory");
+}
+#endif
+
 void
 arm_vm_init(uint64_t memory_size, boot_args * args)
 {
@@ -2140,14 +2175,28 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 
 	arm_set_user_tbi();
 
+#if defined(A04BR3)
+	a04br3_vm_trace("XNU_VM_TABLES_BUILT\r\n", FALSE);
+	a04br3_early_map_final();
+	a04br3_vm_trace("XNU_VM_UART_ALIAS_BUILT\r\n", FALSE);
+#endif
 	arm_vm_physmap_init(args);
+#if defined(A04BR3)
+	a04br3_vm_trace("XNU_VM_PHYSMAP_READY\r\n", FALSE);
+#endif
 	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
+#if defined(A04BR3)
+	a04br3_vm_trace("XNU_VM_TTBR1_ACTIVE\r\n", TRUE);
+#endif
 
 	ml_enable_monitor();
 
 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
 
 	flush_mmu_tlb();
+#if defined(A04BR3)
+	a04br3_vm_trace("XNU_VM_TTBR0_OFF\r\n", TRUE);
+#endif
 	kva_active = TRUE;
 	// global table pointers may need to be different due to physical aperture remapping
 	cpu_tte = (tt_entry_t*)(phystokv(cpu_ttep));
@@ -2244,7 +2293,13 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
     }
 #endif
 #endif
+#if defined(A04BR3)
+	a04br3_vm_trace("XNU_VM_BEFORE_PMAP\r\n", TRUE);
+#endif
 	pmap_bootstrap(dynamic_memory_begin);
+#if defined(A04BR3)
+	a04br3_vm_trace("XNU_VM_PMAP_READY\r\n", TRUE);
+#endif
 
 	disable_preemption();
 
