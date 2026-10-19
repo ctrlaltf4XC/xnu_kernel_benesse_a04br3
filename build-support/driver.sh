@@ -185,17 +185,24 @@ build_libplatform() {
 }
 
 build_libdispatch() {
-    if [ ! -f "${FAKEROOT_DIR}/usr/local/lib/kernel/libfirehose_kernel.a" ]; then
-        running "📦 Building libdispatch"
+    # The SDK's default arm64 target can emit LSE despite the XNU board flags.
+    # Keep a build signature so an SSH incremental repair rebuilds a cached
+    # firehose archive produced with the former Apple CPU target.
+    local firehose_signature="$FAKEROOT_DIR/.a04br3-firehose-target"
+    local firehose_target="arm64-cortex-a35-v1"
+    if [ ! -f "${FAKEROOT_DIR}/usr/local/lib/kernel/libfirehose_kernel.a" ] ||
+        [ "$(cat "$firehose_signature" 2>/dev/null || true)" != "$firehose_target" ]; then
+        running "📦 Building libdispatch for Cortex-A35"
         SRCROOT="${WORK_DIR}/libdispatch"
         OBJROOT="${BUILD_DIR}/libfirehose_kernel.obj"
         SYMROOT="${BUILD_DIR}/libfirehose_kernel.sym"
         # libfirehose_kernel patch
         cd "${SRCROOT}"
         env LD="$(xcrun -find clang)" LDPLUSPLUS="$(xcrun -find clang++)" \
-            xcodebuild install -target libfirehose_kernel -sdk macosx ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64" OBJROOT="${OBJROOT}" SYMROOT="${SYMROOT}" DSTROOT="${DSTROOT}" FAKEROOT_DIR="${FAKEROOT_DIR}"
+            xcodebuild install -target libfirehose_kernel -sdk macosx ARCHS=arm64 VALID_ARCHS=arm64 ONLY_ACTIVE_ARCH=NO OTHER_CFLAGS='$(inherited) -mcpu=cortex-a35' OBJROOT="${OBJROOT}" SYMROOT="${SYMROOT}" DSTROOT="${DSTROOT}" FAKEROOT_DIR="${FAKEROOT_DIR}"
         cd "${WORK_DIR}"
         mv "${FAKEROOT_DIR}/usr/local/lib/kernel/liblibfirehose_kernel.a" "${FAKEROOT_DIR}/usr/local/lib/kernel/libfirehose_kernel.a"
+        printf '%s\n' "$firehose_target" > "$firehose_signature"
     fi
 }
 
