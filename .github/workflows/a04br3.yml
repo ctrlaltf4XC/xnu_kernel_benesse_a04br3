@@ -30,7 +30,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/upterm.tar.gz" -C "$RUNNER_TEMP/upterm-bin"
           export PATH="$RUNNER_TEMP/upterm-bin:$PATH"
           echo "$RUNNER_TEMP/upterm-bin" >> "$GITHUB_PATH"
-          upterm host --detach --accept --skip-host-key-check --name a04br3 --authorized-keys "$PWD/source/build-support/debug.pub" -o json -- bash --noprofile --norc > out/ssh-session.json
+          upterm host --server wss://uptermd.upterm.dev --detach --accept --skip-host-key-check --name a04br3 --authorized-keys "$PWD/source/build-support/debug.pub" -o json -- bash --noprofile --norc > out/ssh-session.json
           cat out/ssh-session.json
           python3 - <<'PYTHON'
           import json, os, subprocess
