@@ -11,6 +11,10 @@ Usage:
   python syntax_checker.py <python_source_file> [<python_source_file> ..] 
 """
 import sys
+# This standalone checker needs only the standard library. Its sibling
+# collections.py is an LLDB package module, not Python collections.
+if __name__ == "__main__":
+    del sys.path[0]
 import os
 import re
 
