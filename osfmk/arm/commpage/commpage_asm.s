@@ -273,7 +273,20 @@ _pfz_trylock_and_enqueue:
 	mov		w11, #1			 // locked value = w11 = 1
 
 	// Try to grab the lock
+#if defined(__ARM_FEATURE_ATOMICS)
 	casa	w10, w11, [x3]	 // Atomic CAS with acquire barrier
+#else
+	// ARMv8.0 (including Cortex-A35): acquire CAS using exclusives.
+Ltrylock_enqueue_retry:
+	ldaxr	w10, [x3]
+	cbnz	w10, Ltrylock_enqueue_busy
+	stxr	w12, w11, [x3]
+	cbnz	w12, Ltrylock_enqueue_retry
+	b	Ltrylock_enqueue_tested
+Ltrylock_enqueue_busy:
+	clrex
+Ltrylock_enqueue_tested:
+#endif
 	cbz		w10, Ltrylock_enqueue_success
 
 	mov		x0, #-1			// Failed
@@ -323,7 +336,20 @@ _pfz_trylock_and_dequeue:
 	mov		w10, wzr		 // unlock value = w10 = 0
 	mov		w11, #1			 // locked value = w11 = 1
 
+#if defined(__ARM_FEATURE_ATOMICS)
 	casa	w10, w11, [x2]	 // Atomic CAS with acquire barrier
+#else
+	// ARMv8.0 (including Cortex-A35): acquire CAS using exclusives.
+Ltrylock_dequeue_retry:
+	ldaxr	w10, [x2]
+	cbnz	w10, Ltrylock_dequeue_busy
+	stxr	w12, w11, [x2]
+	cbnz	w12, Ltrylock_dequeue_retry
+	b	Ltrylock_dequeue_tested
+Ltrylock_dequeue_busy:
+	clrex
+Ltrylock_dequeue_tested:
+#endif
 	cbz		w10, Ltrylock_dequeue_success
 
 	mov		x0, #-1			// Failed
