@@ -18,3 +18,20 @@ The ios-sweet project (https://github.com/dipa-studio/ios-sweet, reference commi
 Kernel source belongs here. Boot handoff code belongs in `xnu_bootshim_benesse_a04br3`; board configuration and packaging belong in `xnu_device_benesse_a04br3`. Research logs, device dumps and Apple userland binaries are excluded. The shared kernel/board direction leaves both iOS and macOS userland experiments open, without claiming either boots.
 
 The new `pexpert/pexpert/arm64/A04BR3.h` is copyright 2026 yuma shimizu under `LICENSE.port` (MIT). Modifications to existing Apple files and the derived MASTER configuration retain their upstream notices and licenses.
+
+## Source build
+
+The private `A04BR3 source kernel` workflow builds this tree with Xcode 15.4
+and KDK 13.5 22G74. The same entry point on a configured Mac is:
+
+```sh
+python3 build-support/build.py --out /absolute/path/to/empty-output
+```
+
+Pass `--install-kdk` explicitly if the declared KDK needs installation.
+Dependency source and changes are committed under `build-support/deps`;
+there is no runtime patch or upstream kernel download. See
+`build-support/CREDITS.md` and `dependencies.json`. Build attempts are not
+proof that compilation succeeds. The kernel entry has an A04BR3-only physical
+UART marker `XNU_A04BR3_KERNEL_ENTRY` before stack/MMU setup so actual kernel
+execution can be distinguished from shim diagnostics.

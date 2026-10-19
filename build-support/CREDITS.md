@@ -1,0 +1,27 @@
+# Build sources
+
+The build driver adapts blacktop/darwin-xnu-build at
+`663906528d1cd5ea8fde7de6f16de73db9511549` (MIT), originally crediting
+https://github.com/pwn0rz/xnu-build. Its license is preserved in
+`LICENSE.darwin-xnu-build`. This driver does not download replacement kernel
+sources, clone dependencies or apply patches. It builds copies of this tree.
+
+The six dependencies under `deps/` are source snapshots without `.git` from
+Apple OSS macOS 13.5. Exact repositories, tags and commits are recorded in
+`dependencies.json`; each dependency's original licenses and notices remain.
+Changes for installation without source-owner flags and fakeroot header paths
+are already incorporated into the committed source.
+
+Kernel source compatibility changes adapt blacktop's kas_info and Ventura
+Skywalk changes, and dipa-studio/ios-sweet at
+`fdad0de8dc0e75c5ea84762adc03f7232dc91f19`: changes 0001, 0002, 0005,
+0007, 0008 and 0009. These cover newer Clang, non-PAC compilation, missing
+Apple-only source interfaces, unsupported KPC counters, and unavailable Apple
+SoC exports. They are integrated source, not build-time patch files. Original
+notices are retained. The unsupported backends do not establish working
+interrupts, storage, entropy, graphics or userspace on MT8167.
+
+The Apple Xcode/SDK and KDK are toolchain inputs, not source vendored into this
+repository. `sdk.json` declares Xcode 15.4 and KDK 13.5 build 22G74. The script
+can install that declared KDK on an explicitly selected macOS build host.
+New orchestration code is copyright 2026 yuma shimizu, under `LICENSE.port`.

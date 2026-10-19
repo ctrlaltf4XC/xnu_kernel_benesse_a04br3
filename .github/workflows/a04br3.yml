@@ -1,0 +1,35 @@
+name: A04BR3 source kernel
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 120
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
+    steps:
+      - name: Copy this source revision without Git history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir source out
+          curl -fL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${{ github.repository }}/tarball/${{ github.sha }}" -o "$RUNNER_TEMP/source.tar.gz"
+          tar -xzf "$RUNNER_TEMP/source.tar.gz" --strip-components=1 -C source
+      - name: Build committed source and declared dependencies
+        run: |
+          set -euo pipefail
+          python3 source/build-support/build.py --out "$PWD/out/kernel" --install-kdk 2>&1 | tee out/build.log
+      - name: Save complete build log and any kernel output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a04br3-xnu-build
+          path: |
+            out/build.log
+            out/kernel/build.json
+            out/kernel/kernel.*
+          if-no-files-found: error
+          retention-days: 14

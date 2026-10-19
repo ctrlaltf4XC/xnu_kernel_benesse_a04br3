@@ -1,0 +1,9 @@
+{
+  "xcode_version": "15.4",
+  "sdk": "macosx",
+  "kdk_version": "13.5",
+  "kdk_build": "22G74",
+  "url": "https://github.com/dortania/KdkSupportPkg/releases/download/22G74/Kernel_Debug_Kit_13.5_build_22G74.dmg",
+  "sha256": "29866842eef039812888daea4176ce493be153b0d6d1b88f90753d69ea51b7d4",
+  "bytes": 658949979
+}

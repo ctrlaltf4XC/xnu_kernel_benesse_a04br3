@@ -198,8 +198,8 @@ Lskip_cpu_reset_handler:
 	.align 3
 	.global EXT(LowResetVectorEnd)
 LEXT(LowResetVectorEnd)
-	.global	EXT(SleepToken)
 #if WITH_CLASSIC_S2R
+	.global	EXT(SleepToken)
 LEXT(SleepToken)
 	.space	(stSize_NUM),0
 #endif
@@ -455,6 +455,34 @@ start_cpu:
 	.align 2
 	.globl EXT(start_first_cpu)
 LEXT(start_first_cpu)
+
+#if defined(A04BR3)
+	/* First real kernel-entry evidence, before stack/MMU initialization.
+	 * Preserve x0 (boot_args) and the inherited MediaTek UART configuration.
+	 */
+	msr DAIFSet, #0xf
+	adrp x9, L_a04br3_entry_message@page
+	add x9, x9, L_a04br3_entry_message@pageoff
+	mov x10, #0x5000
+	movk x10, #0x1100, lsl #16
+L_a04br3_entry_char:
+	ldrb w11, [x9], #1
+	cbz w11, L_a04br3_entry_done
+	mov w13, #0xffff
+L_a04br3_entry_wait:
+	ldr w12, [x10, #0x14]
+	tbnz w12, #5, L_a04br3_entry_send
+	subs w13, w13, #1
+	b.ne L_a04br3_entry_wait
+	b L_a04br3_entry_done
+L_a04br3_entry_send:
+	str w11, [x10]
+	b L_a04br3_entry_char
+L_a04br3_entry_message:
+	.asciz "\r\nXNU_A04BR3_KERNEL_ENTRY\r\n"
+	.align 2
+L_a04br3_entry_done:
+#endif
 
 	// Unlock the core for debugging
 	msr		OSLAR_EL1, xzr

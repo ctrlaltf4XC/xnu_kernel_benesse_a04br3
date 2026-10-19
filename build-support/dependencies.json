@@ -1,0 +1,47 @@
+{
+  "darwin_release": "macos-135",
+  "projects": [
+    {
+      "name": "AvailabilityVersions",
+      "repository": "https://github.com/apple-oss-distributions/AvailabilityVersions",
+      "tag": "AvailabilityVersions-121",
+      "commit": "f3b52ca75ee842a8ac593bd7b03f9f4768c15755",
+      "source_path": "deps/AvailabilityVersions"
+    },
+    {
+      "name": "Libsystem",
+      "repository": "https://github.com/apple-oss-distributions/Libsystem",
+      "tag": "Libsystem-1319.100.3",
+      "commit": "d62d97fb29402b70e3348af7f67771e60c5da477",
+      "source_path": "deps/Libsystem"
+    },
+    {
+      "name": "bootstrap_cmds",
+      "repository": "https://github.com/apple-oss-distributions/bootstrap_cmds",
+      "tag": "bootstrap_cmds-129",
+      "commit": "fc3180f320239c85da79fc30a281a8830f1301f1",
+      "source_path": "deps/bootstrap_cmds"
+    },
+    {
+      "name": "dtrace",
+      "repository": "https://github.com/apple-oss-distributions/dtrace",
+      "tag": "dtrace-397",
+      "commit": "3df488e9184b2ecbeeccebe0cc05f504714722b2",
+      "source_path": "deps/dtrace"
+    },
+    {
+      "name": "libdispatch",
+      "repository": "https://github.com/apple-oss-distributions/libdispatch",
+      "tag": "libdispatch-1415.140.2",
+      "commit": "cdb61e93e803d0093635f356753a9a30c09836db",
+      "source_path": "deps/libdispatch"
+    },
+    {
+      "name": "libplatform",
+      "repository": "https://github.com/apple-oss-distributions/libplatform",
+      "tag": "libplatform-292.120.1.0.1",
+      "commit": "c7b97b198e8329813fd9ca7fe122a82c2cffc109",
+      "source_path": "deps/libplatform"
+    }
+  ]
+}

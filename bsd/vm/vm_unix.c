@@ -3685,6 +3685,9 @@ kas_info(struct proc *p,
 		}
 	}
 	break;
+	case KAS_INFO_KERNEL_SPECIAL_SEGMENT_1:
+	case KAS_INFO_KERNEL_SPECIAL_SEGMENT_2:
+	break;
 	default:
 		return EINVAL;
 	}

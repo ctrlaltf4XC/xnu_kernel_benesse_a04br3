@@ -187,10 +187,10 @@ ifeq ($(origin CXX),default)
 	export CXX := $(shell $(XCRUN) -sdk $(SDKROOT) -find clang++)
 endif
 ifeq ($(origin MIG),undefined)
-	export MIG := $(shell $(XCRUN) -sdk $(SDKROOT) -find mig)
+	export MIG := $(shell find $(FAKEROOT_DIR) -type f -name mig | head -1)
 endif
 ifeq ($(origin MIGCOM),undefined)
-	export MIGCOM := $(shell $(XCRUN) -sdk $(SDKROOT) -find migcom)
+	export MIGCOM := $(shell find $(FAKEROOT_DIR) -type f -name migcom | head -1)
 endif
 ifeq ($(origin MIGCC),undefined)
 	export MIGCC := $(CC)
