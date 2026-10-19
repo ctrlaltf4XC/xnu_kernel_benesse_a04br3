@@ -63,7 +63,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - name: Keep the same environment for SSH repairs
-        if: !cancelled() && inputs.keep_ssh
+        if: ${{ !cancelled() && inputs.keep_ssh }}
         run: |
           echo "SSH repair environment retained. End with: touch /tmp/a04br3-debug-done"
           # A disconnected guest must not terminate the hosting command.
