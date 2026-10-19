@@ -1073,6 +1073,11 @@ panic_trap_to_debugger(const char *panic_format_str, va_list *panic_args, unsign
 	read_lbr();
 #endif
 
+#if defined(A04BR3)
+	extern void a04br3_early_panic(const char *, va_list *);
+	a04br3_early_panic(panic_format_str, panic_args);
+#endif
+
 	/* Turn off I/O tracing once we've panicked */
 	iotrace_disable();
 

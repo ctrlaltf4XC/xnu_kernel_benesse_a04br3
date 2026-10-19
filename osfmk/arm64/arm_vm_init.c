@@ -1815,7 +1815,10 @@ init_ptpages(tt_entry_t *tt, vm_map_address_t start, vm_map_address_t end, bool 
 #if defined(A04BR3)
 /* Adapted from ios-sweet patch 0012: retain early diagnostics across TTBR0
  * teardown. MT8167 uses a Device UART block instead of SWEET's framebuffer. */
-#define A04BR3_EARLY_UART_VA (VM_MIN_KERNEL_ADDRESS + ARM_TT_L2_SIZE)
+#define A04BR3_EARLY_UART_VA (LOW_GLOBAL_BASE_ADDRESS + ARM_TT_L2_SIZE)
+static boolean_t a04br3_uart_final;
+static boolean_t a04br3_uart_panicking;
+
 static void
 a04br3_vm_trace(const char *text, boolean_t final_mapping)
 {
@@ -1827,6 +1830,28 @@ a04br3_vm_trace(const char *text, boolean_t final_mapping)
 		if (!remaining) { return; }
 		uart[0] = (uint8_t)*text++;
 	}
+}
+
+/* The raw console is independent of normal serial/debugger initialization. */
+static void
+a04br3_panic_putc(char c)
+{
+	char text[2] = {c, 0};
+	a04br3_vm_trace(text, a04br3_uart_final);
+}
+
+void a04br3_early_panic(const char *fmt, va_list *args);
+void
+a04br3_early_panic(const char *fmt, va_list *args)
+{
+	if (a04br3_uart_panicking) { return; }
+	a04br3_uart_panicking = TRUE;
+	a04br3_vm_trace("\r\nXNU_EARLY_PANIC: ", a04br3_uart_final);
+	va_list copy;
+	va_copy(copy, *args);
+	_doprnt(fmt, &copy, a04br3_panic_putc, 16);
+	va_end(copy);
+	a04br3_vm_trace("\r\n", a04br3_uart_final);
 }
 
 static void
@@ -2186,6 +2211,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 #endif
 	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
 #if defined(A04BR3)
+	a04br3_uart_final = TRUE;
 	a04br3_vm_trace("XNU_VM_TTBR1_ACTIVE\r\n", TRUE);
 #endif
 

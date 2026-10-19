@@ -33,3 +33,5 @@ unrelated GitHub account keys. No private key is committed. The workflow keeps
 the same runner alive until `/tmp/a04br3-debug-done` is created or timeout.
 
 The A04BR3 early UART alias across TTBR0 teardown adapts the reserved VA mapping approach in dipa-studio/ios-sweet patch `0012-sweet-keep-debug-console-after-ttbr0.patch` (reference snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19). The MT8167 Device mapping and UART tracing are platform-specific adaptations.
+
+Early panic formatting follows ios-sweet patch 0010 (`va_copy` and `_doprnt` before debugger initialization), adapted to the MT8167 UART. In the A04BR3 39-bit layout the retained alias is relative to LOW_GLOBAL_BASE_ADDRESS, not VM_MIN_KERNEL_ADDRESS.
