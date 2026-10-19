@@ -35,7 +35,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/upterm.tar.gz" -C "$RUNNER_TEMP/upterm-bin"
           export PATH="$RUNNER_TEMP/upterm-bin:$PATH"
           echo "$RUNNER_TEMP/upterm-bin" >> "$GITHUB_PATH"
-          upterm host --server wss://uptermd.upterm.dev --detach --accept --skip-host-key-check --name a04br3 --authorized-keys "$PWD/source/build-support/debug.pub" -o json -- bash --noprofile --norc > out/ssh-session.json
+          upterm host --server wss://uptermd.upterm.dev --detach --accept --skip-host-key-check --name a04br3 --authorized-keys "$PWD/source/build-support/debug.pub" --force-command "bash --noprofile --norc -i" -o json -- sleep 21000 > out/ssh-session.json
           cat out/ssh-session.json
           python3 - <<'PYTHON'
           import json, os, subprocess
@@ -66,8 +66,14 @@ jobs:
         if: always() && inputs.keep_ssh
         run: |
           echo "SSH repair environment retained. End with: touch /tmp/a04br3-debug-done"
+          # A disconnected guest must not terminate the hosting command.
+          # Conversely, do not bill for a dead SSH host until the deadline.
+          (upterm session wait a04br3 || true; touch /tmp/a04br3-debug-done) &
+          host_watch_pid=$!
           deadline=$((SECONDS + 3600))
           while [ ! -f /tmp/a04br3-debug-done ] && [ "$SECONDS" -lt "$deadline" ]; do sleep 60; done
+          kill "$host_watch_pid" 2>/dev/null || true
+          upterm session stop a04br3 || true
       - name: Report the automated build result
         if: always()
         env:
