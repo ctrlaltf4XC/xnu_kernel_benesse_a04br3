@@ -16,3 +16,5 @@ The source snapshot was copied without upstream Git history into this independen
 The ios-sweet project (https://github.com/dipa-studio/ios-sweet, reference commit `fdad0de8dc0e75c5ea84762adc03f7232dc91f19`) is a porting reference. It is not the source of this XNU snapshot.
 
 Kernel source belongs here. Boot handoff code belongs in `xnu_bootshim_benesse_a04br3`; board configuration and packaging belong in `xnu_device_benesse_a04br3`. Research logs, device dumps and Apple userland binaries are excluded. The shared kernel/board direction leaves both iOS and macOS userland experiments open, without claiming either boots.
+
+The new `pexpert/pexpert/arm64/A04BR3.h` is copyright 2026 yuma shimizu under `LICENSE.port` (MIT). Modifications to existing Apple files and the derived MASTER configuration retain their upstream notices and licenses.
