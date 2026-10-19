@@ -256,7 +256,7 @@ ctf_tool_overrides() {
 }
 
 build_xnu() {
-    if [ ! -f "${BUILD_DIR}/xnu.obj/kernel.${KERNEL_TYPE}" ]; then
+    # Always run make install: a link product can exist after a later stage failed.
         if [ "$JSONDB" -ne "0" ]; then
             running "📦 Building XNU kernel with JSON compilation database"
                 ensure_hw_env_overrides
@@ -285,9 +285,6 @@ build_xnu() {
             make install -j8 VERBOSE=YES "${CTF_TOOL_OVERRIDES[@]}" SDKROOT=macosx TARGET_CONFIGS="$KERNEL_CONFIG $ARCH_CONFIG $MACHINE_CONFIG" CONCISE=0 LOGCOLORS=y BUILD_WERROR=0 BUILD_LTO=0 SRCROOT="${SRCROOT}" OBJROOT="${OBJROOT}" SYMROOT="${SYMROOT}" DSTROOT="${DSTROOT}" FAKEROOT_DIR="${FAKEROOT_DIR}" KDKROOT="${KDKROOT}" TIGHTBEAMC=${TIGHTBEAMC} RC_DARWIN_KERNEL_VERSION=${RC_DARWIN_KERNEL_VERSION} MEMORY_SIZE="${MEMORY_SIZE_OVERRIDE}" SYSCTL_HW_PHYSICALCPU="${PHYS_CPU_OVERRIDE}" SYSCTL_HW_LOGICALCPU="${LOGICAL_CPU_OVERRIDE}" KERNEL_BUILDS_IN_PARALLEL="${KERNEL_PARALLELISM_OVERRIDE:-1}"
             cd "${WORK_DIR}"
         fi
-    else
-        info "📦 XNU kernel.${KERNEL_TYPE} already built"
-    fi
 }
 
 setup_xcode_toolchain
