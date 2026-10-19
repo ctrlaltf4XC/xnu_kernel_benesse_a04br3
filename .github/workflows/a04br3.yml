@@ -1,6 +1,11 @@
 name: A04BR3 source kernel
 on:
   workflow_dispatch:
+    inputs:
+      keep_ssh:
+        description: Keep SSH available for repairs after the build (bounded to 60 minutes)
+        type: boolean
+        default: false
 permissions:
   contents: read
   statuses: write
@@ -47,10 +52,11 @@ jobs:
           set -euo pipefail
           python3 source/build-support/build.py --out "$PWD/out/kernel" --install-kdk 2>&1 | tee out/build.log
       - name: Keep the same environment for SSH repairs
-        if: always()
+        if: always() && inputs.keep_ssh
         run: |
           echo "SSH repair environment retained. End with: touch /tmp/a04br3-debug-done"
-          while [ ! -f /tmp/a04br3-debug-done ]; do sleep 60; done
+          deadline=$((SECONDS + 3600))
+          while [ ! -f /tmp/a04br3-debug-done ] && [ "$SECONDS" -lt "$deadline" ]; do sleep 60; done
       - name: Report the automated build result
         if: always()
         env:
