@@ -9,6 +9,7 @@ include $(MakeInc_def)
 PRIVATE_DATAFILES = boot.h
 
 PRIVATE_KERNELFILES = \
+	A04BR3.h \
 	AIC.h \
 	apple_arm64_common.h \
 	apple_arm64_regs.h \

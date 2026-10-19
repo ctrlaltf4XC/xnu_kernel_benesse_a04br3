@@ -25,3 +25,9 @@ The Apple Xcode/SDK and KDK are toolchain inputs, not source vendored into this
 repository. `sdk.json` declares Xcode 15.4 and KDK 13.5 build 22G74. The script
 can install that declared KDK on an explicitly selected macOS build host.
 New orchestration code is copyright 2026 yuma shimizu, under `LICENSE.port`.
+
+The interactive debugging workflow uses mxschmitt/action-tmate at
+`35b54afac29c97fb54faba5b513f8fbd1882f113`. A command wrapper supplies tmate
+with `-a` and the committed public debug key, so access does not depend on
+unrelated GitHub account keys. No private key is committed. The workflow keeps
+the same runner alive until `/tmp/a04br3-debug-done` is created or timeout.

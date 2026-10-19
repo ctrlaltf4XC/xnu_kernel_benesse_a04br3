@@ -18,18 +18,30 @@ jobs:
           mkdir source out
           curl -fL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${{ github.repository }}/tarball/${{ github.sha }}" -o "$RUNNER_TEMP/source.tar.gz"
           tar -xzf "$RUNNER_TEMP/source.tar.gz" --strip-components=1 -C source
+      - name: Restrict runner SSH to the debug public key
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ssh-debug-bin"
+          cp source/build-support/debug.pub "$RUNNER_TEMP/a04br3-authorized-keys"
+          cat > "$RUNNER_TEMP/ssh-debug-bin/tmate" <<'SCRIPT'
+          #!/bin/bash
+          exec /opt/homebrew/bin/tmate -a "$RUNNER_TEMP/a04br3-authorized-keys" "$@"
+          SCRIPT
+          chmod 700 "$RUNNER_TEMP/ssh-debug-bin/tmate"
+          echo "$RUNNER_TEMP/ssh-debug-bin" >> "$GITHUB_PATH"
+      - name: Start persistent SSH debug session
+        id: ssh
+        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113
+        with:
+          detached: true
+          limit-access-to-actor: false
       - name: Build committed source and declared dependencies
+        continue-on-error: true
         run: |
           set -euo pipefail
           python3 source/build-support/build.py --out "$PWD/out/kernel" --install-kdk 2>&1 | tee out/build.log
-      - name: Save complete build log and any kernel output
+      - name: Keep the same environment for SSH repairs
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: a04br3-xnu-build
-          path: |
-            out/build.log
-            out/kernel/build.json
-            out/kernel/kernel.*
-          if-no-files-found: error
-          retention-days: 14
+        run: |
+          echo "SSH repair environment retained. End with: touch /tmp/a04br3-debug-done"
+          while [ ! -f /tmp/a04br3-debug-done ]; do sleep 60; done
