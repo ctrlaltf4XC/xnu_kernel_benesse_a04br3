@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  statuses: write
 jobs:
   build:
     runs-on: macos-14
@@ -18,23 +19,27 @@ jobs:
           mkdir source out
           curl -fL -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${{ github.repository }}/tarball/${{ github.sha }}" -o "$RUNNER_TEMP/source.tar.gz"
           tar -xzf "$RUNNER_TEMP/source.tar.gz" --strip-components=1 -C source
-      - name: Restrict runner SSH to the debug public key
+      - name: Start persistent public-key SSH session
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ssh-debug-bin"
-          cp source/build-support/debug.pub "$RUNNER_TEMP/a04br3-authorized-keys"
-          cat > "$RUNNER_TEMP/ssh-debug-bin/tmate" <<'SCRIPT'
-          #!/bin/bash
-          exec /opt/homebrew/bin/tmate -a "$RUNNER_TEMP/a04br3-authorized-keys" "$@"
-          SCRIPT
-          chmod 700 "$RUNNER_TEMP/ssh-debug-bin/tmate"
-          echo "$RUNNER_TEMP/ssh-debug-bin" >> "$GITHUB_PATH"
-      - name: Start persistent SSH debug session
-        id: ssh
-        uses: mxschmitt/action-tmate@35b54afac29c97fb54faba5b513f8fbd1882f113
-        with:
-          detached: true
-          limit-access-to-actor: false
+          curl -fL https://github.com/owenthereal/upterm/releases/download/v0.38.0/upterm_darwin_arm64.tar.gz -o "$RUNNER_TEMP/upterm.tar.gz"
+          echo "8258498167a8e7671680699f765c4cdf6814fe957256ac3fc7452cbd5ad1366f  $RUNNER_TEMP/upterm.tar.gz" | shasum -a 256 -c -
+          mkdir -p "$RUNNER_TEMP/upterm-bin"
+          tar -xzf "$RUNNER_TEMP/upterm.tar.gz" -C "$RUNNER_TEMP/upterm-bin"
+          export PATH="$RUNNER_TEMP/upterm-bin:$PATH"
+          echo "$RUNNER_TEMP/upterm-bin" >> "$GITHUB_PATH"
+          upterm host --detach --accept --skip-host-key-check --name a04br3 --authorized-keys "$PWD/source/build-support/debug.pub" -o json -- bash --noprofile --norc > out/ssh-session.json
+          cat out/ssh-session.json
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          session=json.load(open('out/ssh-session.json'))
+          command=session['sshCommand']
+          if len(command)>140:
+              raise SystemExit('SSH descriptor exceeds status API limit')
+          subprocess.run(['gh','api','--method','POST',f"repos/{os.environ['GITHUB_REPOSITORY']}/statuses/{os.environ['GITHUB_SHA']}",'-f','state=pending','-f','context=a04br3/ssh','-f',f'description={command}'],check=True,stdout=subprocess.DEVNULL)
+          PYTHON
       - name: Build committed source and declared dependencies
         continue-on-error: true
         run: |
