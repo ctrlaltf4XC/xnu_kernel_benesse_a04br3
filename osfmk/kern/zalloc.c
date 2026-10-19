@@ -160,7 +160,10 @@ ZONE_DEFINE_TYPE(percpu_u64_zone, "percpu.64", uint64_t,
 #define ZONE_GUARD_SPARSE       (64  * 1024)
 #endif /* ZSECURITY_CONFIG(SAD_FENG_SHUI) */
 
-#if XNU_PLATFORM_MacOSX
+/* A04BR3 uses the 39-bit non-ARM_LARGE_MEMORY layout. Its heap above
+ * LOW_GLOBAL_BASE_ADDRESS is under 48 GiB, so the 128 GiB Mac reservation
+ * cannot fit. Use the existing compact zone layout on this board. */
+#if XNU_PLATFORM_MacOSX && !defined(A04BR3)
 #define ZONE_MAP_MAX            (32ULL << 30)
 #define ZONE_MAP_VA_SIZE        (128ULL << 30)
 #else /* XNU_PLATFORM_MacOSX */
