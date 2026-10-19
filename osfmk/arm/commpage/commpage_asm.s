@@ -277,11 +277,11 @@ _pfz_trylock_and_enqueue:
 	casa	w10, w11, [x3]	 // Atomic CAS with acquire barrier
 #else
 	// ARMv8.0 (including Cortex-A35): acquire CAS using exclusives.
-Ltrylock_enqueue_retry:
 	ldaxr	w10, [x3]
 	cbnz	w10, Ltrylock_enqueue_busy
 	stxr	w12, w11, [x3]
-	cbnz	w12, Ltrylock_enqueue_retry
+	// A failed exclusive store is a failed trylock; retry outside PFZ.
+	mov	w10, w12
 	b	Ltrylock_enqueue_tested
 Ltrylock_enqueue_busy:
 	clrex
@@ -340,11 +340,11 @@ _pfz_trylock_and_dequeue:
 	casa	w10, w11, [x2]	 // Atomic CAS with acquire barrier
 #else
 	// ARMv8.0 (including Cortex-A35): acquire CAS using exclusives.
-Ltrylock_dequeue_retry:
 	ldaxr	w10, [x2]
 	cbnz	w10, Ltrylock_dequeue_busy
 	stxr	w12, w11, [x2]
-	cbnz	w12, Ltrylock_dequeue_retry
+	// A failed exclusive store is a failed trylock; retry outside PFZ.
+	mov	w10, w12
 	b	Ltrylock_dequeue_tested
 Ltrylock_dequeue_busy:
 	clrex
