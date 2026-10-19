@@ -334,6 +334,21 @@ arm_setup_pre_sign(void)
  *		Function:		Runs on the boot CPU, once, on entry from iBoot.
  */
 
+#if defined(A04BR3)
+/* Only valid while the initial TTBR0 V=P device mapping is installed. */
+static void
+a04br3_bootstrap_trace(const char *text)
+{
+	volatile uint32_t *uart = (volatile uint32_t *)(uintptr_t)0x11005000;
+	while (*text) {
+		unsigned int remaining = 0xffff;
+		while (!(uart[5] & 0x20) && --remaining) { }
+		if (!remaining) { return; }
+		uart[0] = (uint8_t)*text++;
+	}
+}
+#endif
+
 __startup_func
 void
 arm_init(
@@ -346,6 +361,9 @@ arm_init(
 	DTEntry chosen = NULL;
 	unsigned int dt_entry_size = 0;
 
+#if defined(A04BR3)
+	a04br3_bootstrap_trace("\r\nXNU_A04BR3_C_ENTRY_MMU_ON\r\n");
+#endif
 	arm_setup_pre_sign();
 
 	arm_slide_rebase_and_sign_image();
@@ -361,7 +379,13 @@ arm_init(
 	BootCpuData.jop_key = ml_default_jop_pid();
 #endif /* defined(HAS_APPLE_PAC) */
 
+#if defined(A04BR3)
+	a04br3_bootstrap_trace("XNU_A04BR3_BEFORE_PLATFORM\r\n");
+#endif
 	PE_init_platform(FALSE, args); /* Get platform expert set up */
+#if defined(A04BR3)
+	a04br3_bootstrap_trace("XNU_A04BR3_PLATFORM_READY\r\n");
+#endif
 
 #if __arm64__
 	configure_timer_apple_regs();
@@ -513,6 +537,9 @@ arm_init(
 	__builtin_arm_wsr("pan", 1);
 #endif  /* __ARM_PAN_AVAILABLE__ */
 
+#if defined(A04BR3)
+	a04br3_bootstrap_trace("XNU_A04BR3_BEFORE_VM_INIT\r\n");
+#endif
 	arm_vm_init(xmaxmem, args);
 
 	if (debug_boot_arg) {

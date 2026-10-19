@@ -637,6 +637,18 @@ Lkernelcache_base_found:
 	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
 
+#if defined(A04BR3)
+	/* Temporary V=P UART access for early C bootstrap checkpoints. The
+	 * 0x10000000 block shares the first L1 entry with our DRAM window.
+	 * Device, privileged RW, execute-never; no peripheral is reconfigured.
+	 * arm_vm_init replaces this bootstrap map; normal serial uses ml_io_map.
+	 */
+	ldr x9, [x25]
+	and x9, x9, #(ARM_TTE_TABLE_MASK)
+	MOV64 x10, (0x10000000 | ARM_TTE_VALID | ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_DISABLE) | (1ULL << 53) | (1ULL << 54))
+	str x10, [x9, #64]
+#endif
+
 	/* Ensure TTEs are visible */
 	dsb		ish
 

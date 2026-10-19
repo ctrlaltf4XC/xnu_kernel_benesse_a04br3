@@ -681,6 +681,47 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
 
 /*****************************************************************************/
 
+#if defined(A04BR3)
+/* MT8167 UART: 16550-compatible registers at 32-bit spacing. Retain LK's
+ * clock, divisors and 921600 baud line setup; polling needs no IRQ driver.
+ */
+static vm_offset_t mtk_uart_base;
+static unsigned int mtk_uart_transmit_ready(void)
+{
+	return (*(volatile uint32_t *)(mtk_uart_base + 0x14) & 0x20) != 0;
+}
+static void mtk_uart_transmit_data(uint8_t c)
+{
+	*(volatile uint32_t *)mtk_uart_base = c;
+}
+static unsigned int mtk_uart_receive_ready(void)
+{
+	return (*(volatile uint32_t *)(mtk_uart_base + 0x14) & 1) != 0;
+}
+static uint8_t mtk_uart_receive_data(void)
+{
+	return (uint8_t)*(volatile uint32_t *)mtk_uart_base;
+}
+static void mtk_uart_init(void)
+{
+	const char *p = "\r\nXNU_A04BR3_UART_MAPPED\r\n";
+	while (*p) {
+		unsigned int remaining = 0xffff;
+		while (!mtk_uart_transmit_ready() && --remaining) { }
+		if (!remaining) { return; }
+		mtk_uart_transmit_data((uint8_t)*p++);
+	}
+}
+SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) mtk_uart_serial_functions = {
+	.init = mtk_uart_init,
+	.transmit_ready = mtk_uart_transmit_ready,
+	.transmit_data = mtk_uart_transmit_data,
+	.receive_ready = mtk_uart_receive_ready,
+	.receive_data = mtk_uart_receive_data,
+	.device = SERIAL_MTK_UART
+};
+#endif
+
 /**
  * Output @str onto every registered serial interface by polling.
  *
@@ -776,6 +817,16 @@ serial_init(void)
 	}
 
 	PE_parse_boot_argn("disable-uart-irq", &disable_uart_irq, sizeof(disable_uart_irq));
+#if defined(A04BR3)
+	if (SecureDTFindEntry("name", "uart0", &entryP) == kSuccess &&
+	    SecureDTGetProperty(entryP, "reg", (void const **)&reg_prop, &prop_size) == kSuccess &&
+	    prop_size == 2 * sizeof(uintptr_t) && *reg_prop == 0x01005000 &&
+	    *(reg_prop + 1) == 0x1000 && soc_base == 0x10000000) {
+		mtk_uart_base = ml_io_map(soc_base + *reg_prop, *(reg_prop + 1));
+		if (mtk_uart_base) { register_serial_functions(&mtk_uart_serial_functions); }
+	}
+#endif
+
 
 #ifdef PI3_UART
 	if (SecureDTFindEntry("name", "gpio", &entryP) == kSuccess) {
