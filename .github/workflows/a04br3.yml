@@ -51,6 +51,17 @@ jobs:
         run: |
           set -euo pipefail
           python3 source/build-support/build.py --out "$PWD/out/kernel" --install-kdk 2>&1 | tee out/build.log
+      - name: Preserve build products and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a04br3-kernel-${{ github.sha }}
+          path: |
+            out/kernel/kernel.development.a04br3
+            out/kernel/build.json
+            out/build.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Keep the same environment for SSH repairs
         if: always() && inputs.keep_ssh
         run: |
