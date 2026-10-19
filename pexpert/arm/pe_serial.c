@@ -704,6 +704,8 @@ static uint8_t mtk_uart_receive_data(void)
 }
 static void mtk_uart_init(void)
 {
+	extern void a04br3_early_uart_handoff(vm_offset_t);
+	a04br3_early_uart_handoff(mtk_uart_base);
 	const char *p = "\r\nXNU_A04BR3_UART_MAPPED\r\n";
 	while (*p) {
 		unsigned int remaining = 0xffff;

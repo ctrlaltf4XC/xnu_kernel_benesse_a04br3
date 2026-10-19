@@ -1818,12 +1818,14 @@ init_ptpages(tt_entry_t *tt, vm_map_address_t start, vm_map_address_t end, bool 
 #define A04BR3_EARLY_UART_VA (LOW_GLOBAL_BASE_ADDRESS + ARM_TT_L2_SIZE)
 static boolean_t a04br3_uart_final;
 static boolean_t a04br3_uart_panicking;
+static vm_offset_t a04br3_uart_mapped;
 
 static void
 a04br3_vm_trace(const char *text, boolean_t final_mapping)
 {
 	volatile uint32_t *uart = (volatile uint32_t *)(uintptr_t)
-	    (final_mapping ? A04BR3_EARLY_UART_VA + 0x01005000 : 0x11005000);
+	    (final_mapping ? (a04br3_uart_mapped ? a04br3_uart_mapped :
+	    A04BR3_EARLY_UART_VA + 0x01005000) : 0x11005000);
 	while (*text) {
 		unsigned int remaining = 0xffff;
 		while (!(uart[5] & 0x20) && --remaining) { }
@@ -1852,6 +1854,29 @@ a04br3_early_panic(const char *fmt, va_list *args)
 	_doprnt(fmt, &copy, a04br3_panic_putc, 16);
 	va_end(copy);
 	a04br3_vm_trace("\r\n", a04br3_uart_final);
+}
+
+/* Once normal serial owns a VM-allocated mapping, release the temporary
+ * block before randomized zone/metadata claims can use the same VA. */
+void a04br3_early_uart_handoff(vm_offset_t uart);
+void
+a04br3_early_uart_handoff(vm_offset_t uart)
+{
+	if (!uart || !a04br3_uart_final) { return; }
+	boolean_t release_alias = (a04br3_uart_mapped == 0);
+	a04br3_uart_mapped = uart;
+	if (release_alias) {
+		const vm_map_address_t va = A04BR3_EARLY_UART_VA;
+		tt_entry_t l1 = cpu_tte[(va & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT];
+		tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
+		tt_entry_t *slot = &l2[(va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT];
+		assert((*slot & (ARM_TTE_VALID | ARM_TTE_TYPE_MASK)) ==
+		    (ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK));
+		*slot = ARM_TTE_EMPTY;
+		__asm__ volatile("dsb ishst" ::: "memory");
+		flush_mmu_tlb();
+		a04br3_vm_trace("XNU_UART_BOOTSTRAP_ALIAS_RELEASED\r\n", TRUE);
+	}
 }
 
 static void
