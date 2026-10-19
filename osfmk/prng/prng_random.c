@@ -145,6 +145,140 @@ static struct {
 		     .strictFIPS = 0,
 	     }};
 
+#if defined(A04BR3)
+/*
+ * The corecrypto kext normally installs the kernel PRNG. A04BR3 has no such
+ * kext: use the built-in HMAC-SHA256 DRBG, just as early_random does. A
+ * single mutex serializes generation and reseeding across all CPUs. This
+ * favors a small, auditable bring-up implementation over per-CPU scaling.
+ * This registers only the PRNG, not the unrelated g_crypto_funcs table.
+ */
+#include <kern/startup.h>
+
+static LCK_GRP_DECLARE(a04br3_prng_group, "a04br3-prng");
+static LCK_MTX_DECLARE(a04br3_prng_lock, &a04br3_prng_group);
+static struct cckprng_ctx a04br3_prng_ctx;
+static const struct ccdrbg_nisthmac_custom a04br3_prng_custom = {
+	.di = &ccsha256_ltc_di,
+	.strictFIPS = 0,
+};
+static cckprng_getentropy a04br3_getentropy;
+static void *a04br3_getentropy_arg;
+static unsigned a04br3_max_ngens;
+static bool a04br3_generators[MAX_CPUS];
+
+static struct ccdrbg_state *
+a04br3_prng_state(struct cckprng_ctx *ctx)
+{
+	return (struct ccdrbg_state *)ctx->drbg_state;
+}
+
+static void
+a04br3_prng_check(int status)
+{
+	if (status != CCDRBG_STATUS_OK) {
+		panic("A04BR3 HMAC DRBG error %d", status);
+	}
+}
+
+static void
+a04br3_prng_init_with_getentropy(struct cckprng_ctx *ctx, unsigned max_ngens,
+    size_t seed_nbytes, const void *seed, size_t nonce_nbytes, const void *nonce,
+    cckprng_getentropy getentropy, void *getentropy_arg)
+{
+	assert(max_ngens > 0 && max_ngens <= MAX_CPUS);
+	ccdrbg_factory_nisthmac(&ctx->drbg_info, &a04br3_prng_custom);
+	assert(ctx->drbg_info.size <= sizeof(ctx->drbg_state));
+	const char ps[] = "xnu a04br3 kernel random";
+	a04br3_prng_check(ccdrbg_init(&ctx->drbg_info, a04br3_prng_state(ctx),
+	    seed_nbytes, seed, nonce_nbytes, nonce, sizeof(ps) - 1, ps));
+	a04br3_getentropy = getentropy;
+	a04br3_getentropy_arg = getentropy_arg;
+	a04br3_max_ngens = max_ngens;
+}
+
+static void
+a04br3_prng_init(struct cckprng_ctx *ctx, size_t seed_nbytes, const void *seed,
+    size_t nonce_nbytes, const void *nonce, cckprng_getentropy getentropy,
+    void *getentropy_arg)
+{
+	a04br3_prng_init_with_getentropy(ctx, MAX_CPUS, seed_nbytes, seed,
+	    nonce_nbytes, nonce, getentropy, getentropy_arg);
+}
+
+static void
+a04br3_prng_initgen(__unused struct cckprng_ctx *ctx, unsigned gen_idx)
+{
+	lck_mtx_lock(&a04br3_prng_lock);
+	assert(gen_idx < a04br3_max_ngens);
+	assert(!a04br3_generators[gen_idx]);
+	a04br3_generators[gen_idx] = true;
+	lck_mtx_unlock(&a04br3_prng_lock);
+}
+
+static void
+a04br3_prng_reseed(struct cckprng_ctx *ctx, size_t nbytes, const void *seed)
+{
+	lck_mtx_lock(&a04br3_prng_lock);
+	a04br3_prng_check(ccdrbg_reseed(&ctx->drbg_info, a04br3_prng_state(ctx),
+	    nbytes, seed, 0, NULL));
+	lck_mtx_unlock(&a04br3_prng_lock);
+}
+
+static void
+a04br3_prng_refresh(struct cckprng_ctx *ctx)
+{
+	/* The entropy callback also uses try-lock; refresh must not wait. */
+	if (!lck_mtx_try_lock(&a04br3_prng_lock)) {
+		return;
+	}
+	uint8_t entropy[CCKPRNG_ENTROPY_SIZE];
+	size_t nbytes = sizeof(entropy);
+	int32_t nsamples = a04br3_getentropy(&nbytes, entropy, a04br3_getentropy_arg);
+	if (nsamples < 0) {
+		panic("A04BR3 PRNG entropy health test failed");
+	}
+	if (nsamples >= 256) {
+		assert(nbytes >= SEED_SIZE && nbytes <= sizeof(entropy));
+		a04br3_prng_check(ccdrbg_reseed(&ctx->drbg_info, a04br3_prng_state(ctx),
+		    nbytes, entropy, 0, NULL));
+	}
+	cc_clear(sizeof(entropy), entropy);
+	lck_mtx_unlock(&a04br3_prng_lock);
+}
+
+static void
+a04br3_prng_generate(struct cckprng_ctx *ctx, unsigned gen_idx,
+    size_t nbytes, void *out)
+{
+	assert(nbytes <= CCKPRNG_GENERATE_MAX_NBYTES);
+	lck_mtx_lock(&a04br3_prng_lock);
+	assert(gen_idx < a04br3_max_ngens && a04br3_generators[gen_idx]);
+	a04br3_prng_check(ccdrbg_generate(&ctx->drbg_info, a04br3_prng_state(ctx),
+	    nbytes, out, 0, NULL));
+	lck_mtx_unlock(&a04br3_prng_lock);
+}
+
+__startup_func
+static void
+a04br3_prng_startup(void)
+{
+	/* Ensure the boot seed exists before registration erases the early DRBG. */
+	(void)early_random();
+	const struct cckprng_funcs funcs = {
+		.init = a04br3_prng_init,
+		.initgen = a04br3_prng_initgen,
+		.reseed = a04br3_prng_reseed,
+		.refresh = a04br3_prng_refresh,
+		.generate = a04br3_prng_generate,
+		.init_with_getentropy = a04br3_prng_init_with_getentropy,
+	};
+	register_and_init_prng(&a04br3_prng_ctx, &funcs);
+	kprintf("A04BR3 PRNG: HMAC-SHA256 registered\n");
+}
+STARTUP(EARLY_BOOT, STARTUP_RANK_FIRST, a04br3_prng_startup);
+#endif /* A04BR3 */
+
 static void read_erandom(void * buf, size_t nbytes);
 
 /*
@@ -339,12 +473,22 @@ int
 write_random(void * buffer, u_int numbytes)
 {
 	uint8_t seed[SHA256_DIGEST_LENGTH];
+#if defined(A04BR3)
+	/* Hash without depending on the absent corecrypto kext's dispatch table. */
+	const struct ccdigest_info *di = &ccsha256_ltc_di;
+	ccdigest_di_decl(di, ctx);
+	ccdigest_init(di, ctx);
+	ccdigest_update(di, ctx, numbytes, buffer);
+	ccdigest_final(di, ctx, seed);
+	ccdigest_di_clear(di, ctx);
+#else
 	SHA256_CTX ctx;
 
 	/* hash the input to minimize the time we need to hold the lock */
 	SHA256_Init(&ctx);
 	SHA256_Update(&ctx, buffer, numbytes);
 	SHA256_Final(seed, &ctx);
+#endif
 
 	prng_funcs.reseed(prng_ctx, sizeof(seed), seed);
 	cc_clear(sizeof(seed), seed);
