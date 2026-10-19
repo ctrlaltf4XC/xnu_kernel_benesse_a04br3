@@ -1,6 +1,8 @@
 # XNU for Benesse TAB-A04-BR3
 
-This repository currently contains the unmodified Apple XNU source baseline, not a working MT8167 kernel port. Platform implementation and a complete kernel build remain pending.
+This repository contains the Apple XNU baseline plus the initial A04BR3 CPU target. A complete kernel build and kernel boot remain pending.
+
+`MACHINE_CONFIGS=A04BR3` selects plain arm64/Cortex-A35, a 16 KiB page target and 64-byte cache lines, without advertising Apple PAC, PAN, LSE or GICv3. `config/MASTER.arm64.a04br3` derives from the Apple macOS configuration and enables the open ARM assembly/pmap while disabling KPC/Apple PERFMON. The board still needs platform interrupt/timer/serial wiring and source-build dependencies; adding this target does not make the full kernel buildable yet.
 
 ## Source and credits
 
