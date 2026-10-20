@@ -702,6 +702,8 @@ bsd_init(void)
 	a04br3_hfs_register();
 	extern void a04br3_msdc_probe(void);
 	a04br3_msdc_probe();
+	extern void a04br3_display_init(void);
+	a04br3_display_init();
 #endif
 
 #if CONFIG_PROC_UUID_POLICY

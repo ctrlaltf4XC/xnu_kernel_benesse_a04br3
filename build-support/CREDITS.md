@@ -127,3 +127,10 @@ reference revision. It is gated by a04br3.full_root=1, acknowledges known
 user watchdog calls and PMU boot-stage properties, and never arms a timer.
 It is not an implementation of the MT8167 watchdog or an Apple PMU. Unknown
 selectors and oversized outputs are rejected.
+
+The opt-in AUO WXGA panel/display cold initialization copies and adapts
+mouseos/edk2-mtk DisplayInitDxe.c at 1982d888c765f5b12f6e0dce71f1ed8bc92ac50b
+(https://github.com/mouseos/edk2-mtk), retaining BSD-2-Clause-Patent.
+UEFI MMIO/delay/logging become bounded XNU I/O mappings and kernel helpers.
+The display-probe flag and validated boot Video metadata are required.
+This is MT8167 physical scanout support, not GPU or IOSurface emulation.
