@@ -237,7 +237,7 @@ static void MicroSecondDelay(unsigned usec) { delay(usec); }
 #define A04BR3_COLOR_CFG_READBACK    0x0000209CU
 #define A04BR3_OVL_LAYER_CON         0x000021FFU
 #define A04BR3_OVL_LAYER_PITCH       0x00FF0C80U
-#define A04BR3_OVL_ACTIVE_LAYERS     (BIT0 | BIT3)
+#define A04BR3_OVL_ACTIVE_LAYERS     0U /* background-only physical path test; no DMA */
 #define A04BR3_MUTEX_MODULES         0x0002F940U
 
 static __attribute__((noreturn))
@@ -922,7 +922,7 @@ ConfigureA04Br3Scanout (
 
   MmioWrite32 (OVL_ROI_SIZE, A04BR3_FRAME_SIZE_REG);
   MmioWrite32 (OVL_DATAPATH_CON, 0x60000001U);
-  MmioWrite32 (OVL_ROI_BGCLR, 0xFF000000U);
+  MmioWrite32 (OVL_ROI_BGCLR, 0xFFFF00FFU);
 
   MmioWrite32 (OVL_L0_CON, A04BR3_OVL_LAYER_CON);
   MmioWrite32 (OVL_L0_SRC_SIZE, A04BR3_FRAME_SIZE_REG);
@@ -1003,24 +1003,10 @@ void a04br3_display_init(void)
   InitializeDsiController ();
   PowerOnPanel ();
   ConfigureA04Br3Scanout ();
-  /* Redraw after console/panel initialization so boot graphics cannot have
-   * erased the shim marker. All three buffers remain outside managed RAM. */
-  /* Permanent MMIO uses the ARM 8 MiB io_submap. Scanout memory is
-   * larger, so use the kernel-map mapping path, matching video_console. */
-  vm_offset_t framebuffer = ml_io_map_unmappable(0xbe9c0000,
-      800UL * 1280 * 4 * 3, VM_WIMG_IO);
-  if (!framebuffer) panic("A04BR3 DISP: framebuffer mapping failed");
-  for (unsigned page = 0; page < 3; page++) {
-    volatile uint32_t *pixels = (volatile uint32_t *)(framebuffer + page * 800UL * 1280 * 4);
-    for (unsigned y = 0; y < 24; y++) {
-      for (unsigned x = 0; x < 800; x++) {
-        pixels[y * 800 + x] = x < 267 ? 0x00ff0000 : x < 534 ? 0x0000ff00 : 0x000000ff;
-      }
-    }
-  }
-  MemoryFence ();
-  printf("A04BR3 DISP: post-init RGB marker written to three pages\n");
-
+  /* No framebuffer DMA for this test: source layers are disabled before
+   * OVL_EN. A magenta background isolates panel/DSI/relay/OVL scanout from
+   * bootloader IOMMU and framebuffer-address assumptions. */
+  printf("A04BR3 DISP: hardware magenta background, framebuffer DMA disabled\n");
 
   if ((MmioRead32 (OVL_L0_ADDR) != 0xbe9c0000U) ||
       (MmioRead32 (OVL_SRC_CON) != A04BR3_OVL_ACTIVE_LAYERS) ||
