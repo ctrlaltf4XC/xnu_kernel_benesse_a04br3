@@ -140,3 +140,16 @@ SimpleFbDxe: indices 0 through PcdMipiFrameBufferLayers inclusive and
 alpha byte 0xff on Blt. The four-buffer reservation is 16,384,000 bytes
 inside the LK 16 MiB protected display area. This corrects the initial
 three-buffer/alpha-zero diagnostic adaptation.
+
+The experimental IOSurface/IOMobileFramebuffer subset copies and adapts
+ios-sweet 0046, throttled presentation from 0056, and cached lookup lifetime
+repair from 0068 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. Original
+source comments are retained. MT8167 physical scanout remains the local
+EDK2-derived driver; there is no imported Qualcomm display programming.
+A04BR3Display supplies 800x1280 provider metadata. CPU composition targets
+OVL layer0 only, forces alpha=0xff, and uses the same uncached physical
+mapping as the verified diagnostic. Surface wired memory is capped at
+512 MiB. The 160 logical density is provisional, not a panel measurement.
+Vsync is a software timer and presentation defaults to 10 Hz. These
+interfaces are gated by the explicit development display-probe flag;
+there is no GPU acceleration or claim of GUI boot before hardware testing.

@@ -16,3 +16,7 @@ iokit/Kernel/arm/A04BR3Entitlements.cpp                           optional iokit
 iokit/Kernel/arm/A04BR3KeyStore.cpp                                optional iokitcpp
 
 iokit/Kernel/arm/A04BR3Watchdog.cpp                               optional iokitcpp
+
+iokit/Kernel/arm/A04BR3Display.cpp                               optional iokitcpp
+iokit/Kernel/arm/A04BR3Surface.cpp                               optional iokitcpp
+iokit/Kernel/arm/A04BR3Framebuffer.cpp                               optional iokitcpp

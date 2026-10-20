@@ -238,7 +238,7 @@ static void MicroSecondDelay(unsigned usec) { delay(usec); }
 #define A04BR3_COLOR_CFG_READBACK    0x0000209CU
 #define A04BR3_OVL_LAYER_CON         0x000021FFU
 #define A04BR3_OVL_LAYER_PITCH       0x00FF0C80U
-#define A04BR3_OVL_ACTIVE_LAYERS     (BIT0 | BIT3)
+#define A04BR3_OVL_ACTIVE_LAYERS     BIT0 /* software composition uses layer0 only */
 #define A04BR3_MUTEX_MODULES         0x0002F940U
 
 static __attribute__((noreturn))
