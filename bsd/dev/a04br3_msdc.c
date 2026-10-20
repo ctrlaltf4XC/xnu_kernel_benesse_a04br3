@@ -119,6 +119,8 @@ static void disk_strategy(buf_t bp) {
     int error=0;caddr_t data=NULL;
     uint64_t block=buf_blkno(bp);
     buf_setresid(bp,count);
+    /* Raw user I/O uses disk_read/uiomove, never a direct user pointer. */
+    if (buf_flags(bp)&B_PHYS) { error=EFAULT;goto done; }
     if (!(buf_flags(bp)&B_READ)) { error=EROFS;goto done; }
     if ((count&511u) || block>disk_sectors || (uint64_t)(count/512)>disk_sectors-block) { error=EINVAL;goto done; }
     if (!count) goto done;
@@ -153,8 +155,30 @@ static int disk_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,__unused int fl
     }
 }
 static int disk_psize(__unused dev_t dev) { return (int)disk_sectors; }
-static int disk_read(dev_t dev,struct uio *uio,__unused int flags) {
-    return physio(disk_strategy,NULL,dev,B_READ,minphys,uio,512);
+static int read_disk_sector(uint32_t block,uint8_t sector[512]) {
+    lck_mtx_lock(&msdc_lock);
+    uint32_t cfg=rd(CFG),inten=rd(INTEN);
+    wr(INTEN,0);wr(CFG,cfg|(1u<<3));
+    int error=read_block(17,block,sector);
+    wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+    lck_mtx_unlock(&msdc_lock);
+    return error;
+}
+static int disk_read(__unused dev_t dev,struct uio *uio,__unused int flags) {
+    uint8_t sector[512];
+    uint64_t capacity=(uint64_t)disk_sectors*512;
+    if (uio_offset(uio)<0) return EINVAL;
+    while (uio_resid(uio)>0 && (uint64_t)uio_offset(uio)<capacity) {
+        uint64_t offset=(uint64_t)uio_offset(uio);
+        unsigned skip=(unsigned)(offset&511u);
+        int count=(int)MIN((uint64_t)uio_resid(uio),512u-skip);
+        int error=read_disk_sector((uint32_t)(offset/512),sector);
+        if (error) return error;
+        /* uio selects copyout for user buffers and preserves fault recovery. */
+        error=uiomove((caddr_t)sector+skip,count,uio);
+        if (error) return error;
+    }
+    return 0;
 }
 static int disk_write(__unused dev_t dev,__unused struct uio *uio,__unused int flags) { return EROFS; }
 static const struct bdevsw msdc_bdevsw = {
