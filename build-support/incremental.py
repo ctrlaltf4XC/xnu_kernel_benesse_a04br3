@@ -53,6 +53,9 @@ def sync_source(source, destination, previous):
             if dst.is_symlink():
                 dst.unlink()
             shutil.copy2(src, dst)
+            # Archives carry commit timestamps, which can predate cached objects.
+            # Only changed inputs need a fresh mtime for make dependency checks.
+            os.utime(dst, None)
     return current
 
 
@@ -91,6 +94,13 @@ def main():
     metadata.pop('kernel_sha256', None)
     metadata_path.write_text(json.dumps(metadata, indent=2) + '\n')
     metadata['copied_source_files'] = sync_source(ROOT, out / 'work/xnu', metadata['copied_source_files'])
+    if metadata.get('source_sync_version') != 2:
+        # One-time recovery for work trees produced by the old timestamp copier.
+        for name in metadata['copied_source_files']:
+            path = out / 'work/xnu' / name
+            if not path.is_symlink():
+                os.utime(path, None)
+    metadata['source_sync_version'] = 2
     metadata.update(source_commit=args.source_commit, incremental_base_commit=base)
     metadata_path.write_text(json.dumps(metadata, indent=2) + '\n')
     subprocess.run(['bash', str(SUPPORT / 'driver.sh'), str(out / 'work')], check=True)

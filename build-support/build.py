@@ -61,7 +61,7 @@ def main():
         shutil.copytree(SUPPORT / entry['source_path'], work / entry['name'], symlinks=True)
     metadata = dict(xcode=version, sdk=sdk, dependencies=dependencies,
                     source_commit=os.environ.get('GITHUB_SHA'), full_kernel_built=False,
-                    copied_source_files=source_files(ROOT),
+                    copied_source_files=source_files(ROOT), source_sync_version=2,
                     dependency_source_sha256=dependency_source_digest())
     (out / 'build.json').write_text(json.dumps(metadata, indent=2) + '\n')
     env = dict(os.environ, KDKROOT=str(kdk))

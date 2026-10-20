@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MIT
 import importlib.util
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -27,6 +28,21 @@ class SourceSyncTests(unittest.TestCase):
             self.assertEqual((work / 'changed.c').read_text(), 'new')
             self.assertFalse((work / 'deleted.c').exists())
             self.assertTrue((work / 'generated.o').exists())
+
+    def test_old_archive_mtime_invalidates_cached_object(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'source'; source.mkdir()
+            work = Path(directory) / 'work'; work.mkdir()
+            (source / 'crypto.c').write_text('fixed provider')
+            os.utime(source / 'crypto.c', (1, 1))
+            (work / 'crypto.c').write_text('old provider')
+            obj = work / 'crypto.o'; obj.write_text('old object')
+            os.utime(obj, (2, 2))
+            module.sync_source(source, work, ['crypto.c'])
+            self.assertGreater((work / 'crypto.c').stat().st_mtime_ns, obj.stat().st_mtime_ns)
+            before = (work / 'crypto.c').stat().st_mtime_ns
+            module.sync_source(source, work, ['crypto.c'])
+            self.assertEqual((work / 'crypto.c').stat().st_mtime_ns, before)
 
     def test_manifest_cannot_delete_outside_work(self):
         with tempfile.TemporaryDirectory() as directory:
