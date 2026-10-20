@@ -54,3 +54,7 @@ Root bring-up follows ios-sweet patches 0021, 0022, and 0024 at
 fdad0de8dc0e75c5ea84762adc03f7232dc91f19: Apple mockfs enabled,
 node allocation type corrected, virtual memdev I/O and 4KiB page units
 corrected, and absent IOStorageFamily classes handled on A04BR3 only.
+
+The same reference's patches 0023 and 0025 supply built-in SHA-256 for
+code-signing hashes and an AMFI interface reporting no entitlements.
+Page hashes remain validated; entitlement queries grant no permissions.
