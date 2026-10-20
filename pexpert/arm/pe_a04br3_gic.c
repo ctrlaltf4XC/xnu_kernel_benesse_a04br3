@@ -15,6 +15,7 @@
 #include <pexpert/device_tree.h>
 #include <pexpert/arm/protos.h>
 static vm_offset_t distributor, cpu_interface;
+static volatile uint32_t ipi_count, timer_count;
 static uint32_t read_reg(vm_offset_t base, unsigned offset)
 {
     return *(volatile uint32_t *)(base + offset);
@@ -68,7 +69,10 @@ void a04br3_gic_init(void)
 }
 uint32_t a04br3_gic_acknowledge(void)
 {
-    return read_reg(cpu_interface, 0x0c);
+    uint32_t iar = read_reg(cpu_interface, 0x0c);
+    if ((iar & 0x3ff) == A04BR3_IPI_SGI) { ipi_count++; }
+    if ((iar & 0x3ff) == A04BR3_VTIMER_INTID) { timer_count++; }
+    return iar;
 }
 void a04br3_gic_complete(uint32_t iar)
 {
@@ -76,6 +80,8 @@ void a04br3_gic_complete(uint32_t iar)
     write_reg(cpu_interface, 0x10, iar); /* Preserve IAR source CPU for SGIs. */
     __builtin_arm_isb(ISB_SY);
 }
+uint32_t a04br3_gic_ipi_count(void) { return ipi_count; }
+uint32_t a04br3_gic_timer_count(void) { return timer_count; }
 void a04br3_gic_signal_self(void)
 {
     __builtin_arm_dsb(DSB_ISHST);

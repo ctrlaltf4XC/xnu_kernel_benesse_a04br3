@@ -85,6 +85,10 @@ A04BR3CPU::start(IOService *provider)
 	if (result != KERN_SUCCESS || getCPUState() != kIOCPUStateRunning) {
 		panic("A04BR3 CPU: processor_start failed: %d", result);
 	}
+	/* Late platform stage, after IRQ self-test: never touch TOPRGU in shim. */
+	a04br3_watchdog_quiesce();
+	IOLog("A04BR3 CPU: timer IRQ count %u, self IPI count %u\n",
+	    a04br3_gic_timer_count(), a04br3_gic_ipi_count());
 	ml_cpu_init_completed();
 	cpusRunning();
 	registerService();
@@ -118,8 +122,9 @@ A04BR3CPU::initCPU(bool boot)
 	/* A real GIC interrupt clears SIGPdisabled in cpu_signal_handler. */
 	uint64_t deadline;
 	nanoseconds_to_deadline(NSEC_PER_SEC, &deadline);
+	uint32_t previous_ipis = a04br3_gic_ipi_count();
 	signalCPU(this);
-	while (!ml_cpu_signal_is_enabled()) {
+	while (a04br3_gic_ipi_count() == previous_ipis || !ml_cpu_signal_is_enabled()) {
 		if (mach_absolute_time() > deadline) {
 			panic("A04BR3 CPU: SGI1 self-test timed out");
 		}

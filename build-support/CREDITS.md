@@ -43,3 +43,5 @@ Absent Image4/AMFI trust-cache service handling adapts ios-sweet patch 0015 (sna
 A04BR3PlatformExpert adapts the device-tree platform-expert structure from ios-sweet patch 0016 (snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19), with Benesse compatible/model identity. GICv3 and Kryo CPU details are not imported.
 
 A04BR3CPU adapts ios-sweet patch 0018 boot-CPU registration (snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19). GICv3 SGI code is replaced with MT8167 GICv2 MMIO. Timer PPI 27 and GICD/GICC ranges come from the A04BR3 stock DTS and existing mouseos/edk2-mtk A04BR3 implementation. GICv2 handling is original board code; secure Group 0 remains under ATF.
+
+Late inherited-watchdog quiescence follows mouseos/edk2-mtk Platform/Benesse/A04BR3Pkg/Drivers/OsHandoffDxe/OsHandoffDxe.c: TOPRGU MODE key 0x22000000 and enable-bit clear, preserving other mode bits. It runs only after boot-CPU IRQ validation, not in the early shim.
