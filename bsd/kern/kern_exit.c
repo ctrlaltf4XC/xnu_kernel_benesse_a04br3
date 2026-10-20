@@ -1901,6 +1901,28 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
 		subcode = ut->uu_subcode;
 		etype = ut->uu_exception;
 
+#if defined(A04BR3)
+        /* Capture the actual exiting thread, not an earlier live sample.
+         * Limit UART overhead and never dereference user stack directly. */
+        static unsigned a04br3_crash_count;
+        if (p == current_proc() &&
+            (!strcmp(p->p_name, "SpringBoard") || !strcmp(p->p_name, "backboardd")) &&
+            os_atomic_inc_orig(&a04br3_crash_count, relaxed) < 16) {
+            extern uint64_t a04br3_crash_registers(const char *, int, int, uint64_t, uint64_t);
+            uint64_t fp = a04br3_crash_registers(p->p_name, proc_getpid(p),
+                WTERMSIG(rv), ((uint64_t)ut->uu_exception << 32) | (uint32_t)ut->uu_code,
+                ut->uu_subcode);
+            for (unsigned i = 0; i < 10 && fp && !(fp & 7); i++) {
+                uint64_t frame[2];
+                if (copyin((user_addr_t)fp, frame, sizeof(frame))) break;
+                printf("A04BR3_CRASH %s[%d] bt%u=0x%llx\n",
+                    p->p_name, proc_getpid(p), i, frame[1]);
+                if (frame[0] <= fp) break;
+                fp = frame[0];
+            }
+        }
+#endif
+
 		/* Defualt to EXC_CRASH if the exception is not an EXC_RESOURCE or EXC_GUARD */
 		if (etype != EXC_RESOURCE || etype != EXC_GUARD) {
 			etype = EXC_CRASH;

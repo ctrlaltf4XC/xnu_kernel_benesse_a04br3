@@ -43,4 +43,28 @@ a04br3_sample_task(const char *name, int pid, task_t task)
             name, pid, i, rows[i].pc, rows[i].lr, rows[i].sp);
     }
 }
+/* Adapted from ios-sweet 0043 console crash log. Return only the FP;
+ * BSD owns fault-recoverable copyin and the bounded user stack walk. */
+uint64_t a04br3_crash_registers(const char *, int, int, uint64_t, uint64_t);
+uint64_t
+a04br3_crash_registers(const char *name, int pid, int sig,
+    uint64_t code, uint64_t subcode)
+{
+    task_t task = current_task();
+    arm_saved_state_t *ss = find_user_regs(current_thread());
+    uint64_t slide = 0;
+    vm_shared_region_t sr = vm_shared_region_get(task);
+    if (sr != NULL) {
+        slide = sr->sr_slide;
+        vm_shared_region_deallocate(sr);
+    }
+    printf("A04BR3_CRASH %s[%d] sig=%d code=0x%llx sub=0x%llx slide=0x%llx mh=0x%llx\n",
+        name, pid, sig, code, subcode, slide, task->mach_header_vm_address);
+    if (ss == NULL || !is_saved_state64(ss)) return 0;
+    uint64_t fp = get_saved_state_fp(ss);
+    printf("A04BR3_CRASH %s[%d] pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx far=0x%llx\n",
+        name, pid, get_saved_state_pc(ss), get_saved_state_lr(ss),
+        get_saved_state_sp(ss), fp, (uint64_t)saved_state64(ss)->far);
+    return fp;
+}
 #endif

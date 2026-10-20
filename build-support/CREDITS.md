@@ -153,3 +153,8 @@ mapping as the verified diagnostic. Surface wired memory is capped at
 Vsync is a software timer and presentation defaults to 10 Hz. These
 interfaces are gated by the explicit development display-probe flag;
 there is no GPU acceleration or claim of GUI boot before hardware testing.
+
+Bounded console crash register/backtrace capture adapts ios-sweet patch
+0043 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. Mach register collection
+and BSD fault-recoverable stack walking are separated for XNU visibility.
+Only the first 16 SpringBoard/backboardd crashes are captured.
