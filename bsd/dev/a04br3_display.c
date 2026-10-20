@@ -999,6 +999,21 @@ void a04br3_display_init(void)
   InitializeDsiController ();
   PowerOnPanel ();
   ConfigureA04Br3Scanout ();
+  /* Redraw after console/panel initialization so boot graphics cannot have
+   * erased the shim marker. All three buffers remain outside managed RAM. */
+  vm_offset_t framebuffer = ml_io_map(0xbe9c0000, 800UL * 1280 * 4 * 3);
+  if (!framebuffer) panic("A04BR3 DISP: framebuffer mapping failed");
+  for (unsigned page = 0; page < 3; page++) {
+    volatile uint32_t *pixels = (volatile uint32_t *)(framebuffer + page * 800UL * 1280 * 4);
+    for (unsigned y = 0; y < 24; y++) {
+      for (unsigned x = 0; x < 800; x++) {
+        pixels[y * 800 + x] = x < 267 ? 0x00ff0000 : x < 534 ? 0x0000ff00 : 0x000000ff;
+      }
+    }
+  }
+  MemoryFence ();
+  printf("A04BR3 DISP: post-init RGB marker written to three pages\n");
+
 
   if ((MmioRead32 (OVL_L0_ADDR) != 0xbe9c0000U) ||
       (MmioRead32 (OVL_SRC_CON) != A04BR3_OVL_ACTIVE_LAYERS) ||
