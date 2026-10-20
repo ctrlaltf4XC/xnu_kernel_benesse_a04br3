@@ -10,6 +10,7 @@
 #include <pexpert/protos.h>
 #include <kern/debug.h>
 #include <machine/machine_routines.h>
+#include <machine/atomic.h>
 #include <arm64/proc_reg.h>
 #include <pexpert/device_tree.h>
 #include <pexpert/arm/protos.h>
