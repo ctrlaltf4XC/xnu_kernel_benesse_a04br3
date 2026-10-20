@@ -1855,6 +1855,33 @@ sleh_irq(arm_saved_state_t *state)
 #endif
 
 
+#if defined(A04BR3)
+	uint32_t iar = a04br3_gic_acknowledge();
+	uint32_t intid = iar & 0x3ff;
+	if (intid >= 1020) { return; }
+	if (intid == A04BR3_VTIMER_INTID) {
+		static boolean_t timer_reported;
+		if (!timer_reported) {
+			timer_reported = TRUE;
+			kprintf("A04BR3 GICv2: first virtual timer IRQ\n");
+		}
+		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_TIMER);
+		cdp->cpu_decrementer = -1;
+		INTERRUPT_MASKED_DEBUG_START(rtclock_intr, DBG_INTR_TYPE_TIMER);
+		rtclock_intr(TRUE);
+		INTERRUPT_MASKED_DEBUG_END();
+		a04br3_gic_complete(iar);
+	} else if (intid == A04BR3_IPI_SGI) {
+		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_IPI);
+		/* Deactivate before handling so a new self-IPI can be delivered. */
+		a04br3_gic_complete(iar);
+		cpu_signal_handler();
+	} else {
+		sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_OTHER);
+		a04br3_gic_complete(iar);
+		panic("A04BR3: unhandled GICv2 INTID %u", intid);
+	}
+#else
 	sleh_interrupt_handler_prologue(state, DBG_INTR_TYPE_OTHER);
 
 #if USE_APPLEARMSMP
@@ -1865,6 +1892,8 @@ sleh_irq(arm_saved_state_t *state)
 	    cdp->interrupt_refCon,
 	    cdp->interrupt_nub,
 	    cdp->interrupt_source);
+#endif
+
 #endif
 
 	entropy_collect();

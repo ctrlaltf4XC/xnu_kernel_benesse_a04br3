@@ -41,6 +41,12 @@ const char * gIOKernelConfigTables =
     "     'IONameMatch'     = 'benesse,a04br3';"
     "     'IOProbeScore'    = 10000:32;"
     "   },"
+    "   {"
+    "     'IOClass'         = A04BR3CPU;"
+    "     'IOProviderClass' = IOPlatformDevice;"
+    "     'IONameMatch'     = 'arm,cortex-a35';"
+    "     'IOProbeScore'    = 10000:32;"
+    "   },"
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"

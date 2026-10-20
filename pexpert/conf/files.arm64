@@ -5,3 +5,5 @@ pexpert/arm/pe_identify_machine.c      standard
 pexpert/arm/pe_init.c                  standard
 pexpert/arm/pe_kprintf.c               standard
 pexpert/arm/pe_serial.c                standard
+
+pexpert/arm/pe_a04br3_gic.c            standard

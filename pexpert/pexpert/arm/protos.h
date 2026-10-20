@@ -36,6 +36,12 @@ void uart_putc_options(char, bool);
 int uart_getc(void);
 
 void pe_init_fiq(void);
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+void a04br3_gic_init(void);
+uint32_t a04br3_gic_acknowledge(void);
+void a04br3_gic_complete(uint32_t iar);
+void a04br3_gic_signal_self(void);
+#endif
 
 #ifdef PRIVATE
 /**

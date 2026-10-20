@@ -173,5 +173,9 @@ pe_init_fiq()
 void
 pe_init_fiq()
 {
+#if defined(A04BR3)
+	extern void a04br3_gic_init(void);
+	a04br3_gic_init();
+#endif
 }
 #endif

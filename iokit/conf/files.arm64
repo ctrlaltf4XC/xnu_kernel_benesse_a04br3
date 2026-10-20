@@ -8,3 +8,5 @@ iokit/Kernel/arm/AppleARMSMP.cpp    					optional iokitcpp
 
 # A04BR3 device-tree platform (empty translation unit on other boards)
 iokit/Kernel/arm/A04BR3PlatformExpert.cpp                         optional iokitcpp
+
+iokit/Kernel/arm/A04BR3CPU.cpp                                    optional iokitcpp
