@@ -51,7 +51,7 @@ a04br3_sample_task(const char *name, int pid, task_t task)
          * running threads: these are approximate live samples, not crashes. */
         if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd") ||
             !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd") ||
-            !strcmp(name, "lsd") || strncmp(name, "datamigrat", 10) == 0 || strncmp(name, "migrationplugin", 15) == 0) {
+            !strcmp(name, "lsd") || strnstr(name, "datamigrat", 32) || strnstr(name, "migrationplugin", 32)) {
             uint64_t fp = rows[i].fp;
             for (unsigned depth = 0; depth < 16 && fp && !(fp & 7); depth++) {
                 uint64_t frame[2];
