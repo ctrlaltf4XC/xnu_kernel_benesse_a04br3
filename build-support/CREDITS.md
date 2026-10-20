@@ -73,3 +73,9 @@ The initial read-only MSDC0 probe adapts mouseos EDK2
 Mt8167Pkg/Drivers/EmmcBlockIoDxe/EmmcBlockIoDxe.c and A04BR3
 SdCardBlockIoDxe register definitions (BSD-2-Clause-Patent). It retains LK
 clock/timing/card state, sends CMD13/CMD8/CMD17, and restores host CFG/INTEN.
+
+MSDC source references: https://github.com/mouseos/edk2-mt8167 at
+f45890c754d5a4955971cb0b2ccbeed5f2a842ee and
+https://github.com/mouseos/edk2-mtk at
+1982d888c765f5b12f6e0dce71f1ed8bc92ac50b. Hardware addresses are MT8167
+specific; the reference phone's Qualcomm UFS driver is not used.
