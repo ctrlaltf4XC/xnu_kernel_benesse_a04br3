@@ -9,6 +9,8 @@
 #include <vm/vm_map.h>
 #include <kern/misc_protos.h>
 #include <libkern/libkern.h>
+#include <kern/kalloc.h>
+#include <mach/vm_region.h>
 void a04br3_sample_task(const char *, int, task_t);
 void
 a04br3_sample_task(const char *name, int pid, task_t task)
@@ -60,6 +62,56 @@ a04br3_sample_task(const char *name, int pid, task_t task)
         }
     }
 }
+/* ios-sweet 0051 adaptation: bounded first-abort heap text for the actual
+ * exception reason, which libc++abi does not put in os_reason. */
+static void
+a04br3_crash_strings(void)
+{
+    static unsigned scans;
+    if (scans++) return;
+    char *buf = kalloc_data(65536, Z_WAITOK);
+    if (!buf) return;
+    vm_map_t map = current_map();
+    vm_map_offset_t addr = 0;
+    uint64_t scanned = 0;
+    unsigned lines = 0;
+    while (lines < 256 && scanned < (64ULL << 20)) {
+        vm_map_size_t size = 0;
+        natural_t depth = 0;
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_V2_COUNT_64;
+        if (vm_map_region_recurse_64(map, &addr, &size, &depth,
+            (vm_region_submap_info_64_t)&info, &count) != KERN_SUCCESS) break;
+        vm_map_offset_t base = addr;
+        if (!size || addr + size <= addr) break;
+        addr += size;
+        if (info.is_submap ||
+            (info.protection & (VM_PROT_READ | VM_PROT_WRITE)) != (VM_PROT_READ | VM_PROT_WRITE) ||
+            info.user_tag < 1 || info.user_tag > 11) continue;
+        for (vm_map_offset_t off = 0; off < size && lines < 256 && scanned < (64ULL << 20); off += 65536) {
+            size_t len = MIN(size - off, 65536);
+            scanned += len; /* Bound attempts too, including unreadable pages. */
+            if (vm_map_read_user(map, base + off, buf, len) != KERN_SUCCESS) continue;
+            size_t start = 0;
+            unsigned spaces = 0;
+            for (size_t i = 0; i <= len && lines < 256; i++) {
+                if (i < len && (unsigned char)buf[i] >= 0x20 && (unsigned char)buf[i] < 0x7f) {
+                    spaces += buf[i] == ' '; continue;
+                }
+                if (i - start >= 24 && spaces >= 2) {
+                    char text[192];
+                    size_t n = MIN(i - start, sizeof(text) - 1);
+                    memcpy(text, buf + start, n);text[n] = 0;
+                    printf("A04BR3_REASON %s\n", text);lines++;
+                }
+                start = i + 1;spaces = 0;
+            }
+        }
+    }
+    printf("A04BR3_REASON done %llu KiB %u lines\n", scanned >> 10, lines);
+    kfree_data(buf, 65536);
+}
+
 /* Adapted from ios-sweet 0043 console crash log. Return only the FP;
  * BSD owns fault-recoverable copyin and the bounded user stack walk. */
 uint64_t a04br3_crash_registers(const char *, int, int, uint64_t, uint64_t);
@@ -82,6 +134,7 @@ a04br3_crash_registers(const char *name, int pid, int sig,
     printf("A04BR3_CRASH %s[%d] pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx far=0x%llx\n",
         name, pid, get_saved_state_pc(ss), get_saved_state_lr(ss),
         get_saved_state_sp(ss), fp, (uint64_t)saved_state64(ss)->far);
+    if (sig == 6 && !strcmp(name, "backboardd")) a04br3_crash_strings();
     return fp;
 }
 #endif

@@ -167,3 +167,6 @@ compatibility interface, not an Apple Sandbox implementation.
 Live window-server stack sampling adapts ios-sweet 0054/0055, capturing
 saved frame pointers under the task lock and reading bounded frames only
 after releasing it. Samples are approximate and limited to three rounds.
+
+First-backboardd-abort heap text capture adapts ios-sweet 0051, capped at
+64 MiB of read attempts and 256 short printable runs on this board.
