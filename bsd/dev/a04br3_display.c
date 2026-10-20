@@ -10,6 +10,8 @@
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <kern/clock.h>
+#include <vm/memory_types.h>
+#include <machine/machine_routines.h>
 #include <pexpert/pexpert.h>
 extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
 void a04br3_display_init(void);
@@ -1001,7 +1003,10 @@ void a04br3_display_init(void)
   ConfigureA04Br3Scanout ();
   /* Redraw after console/panel initialization so boot graphics cannot have
    * erased the shim marker. All three buffers remain outside managed RAM. */
-  vm_offset_t framebuffer = ml_io_map(0xbe9c0000, 800UL * 1280 * 4 * 3);
+  /* Permanent MMIO uses the ARM 8 MiB io_submap. Scanout memory is
+   * larger, so use the kernel-map mapping path, matching video_console. */
+  vm_offset_t framebuffer = ml_io_map_unmappable(0xbe9c0000,
+      800UL * 1280 * 4 * 3, VM_WIMG_IO);
   if (!framebuffer) panic("A04BR3 DISP: framebuffer mapping failed");
   for (unsigned page = 0; page < 3; page++) {
     volatile uint32_t *pixels = (volatile uint32_t *)(framebuffer + page * 800UL * 1280 * 4);
