@@ -44,6 +44,15 @@ CFLAGS+= -include meta_features.h -DDRIVER_PRIVATE \
         -Warray-bounds-pointer-arithmetic
 SFLAGS+= -include meta_features.h
 
+# This provider is built into A04BR3; other boards use their normal kext.
+ifeq ($(CURRENT_MACHINE_CONFIG),A04BR3)
+A04BR3_PTHREAD_ROOT = $(SRCROOT)/bsd/pthread/a04br3_libpthread
+A04BR3_PTHREAD_INC = -I$(A04BR3_PTHREAD_ROOT) -I$(A04BR3_PTHREAD_ROOT)/private -I$(A04BR3_PTHREAD_ROOT)/include
+a04br3_pthread_init.o_INCFLAGS = $(A04BR3_PTHREAD_INC)
+a04br3_pthread_support.o_INCFLAGS = $(A04BR3_PTHREAD_INC)
+a04br3_pthread_synch.o_INCFLAGS = $(A04BR3_PTHREAD_INC)
+endif
+
 #
 # Directories for mig generated files
 #
