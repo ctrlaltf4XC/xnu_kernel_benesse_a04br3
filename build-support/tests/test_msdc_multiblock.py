@@ -8,7 +8,7 @@ import unittest
 class MultiBlock(unittest.TestCase):
     def test_pio(self):
         source=(Path(__file__).resolve().parents[2]/'bsd/dev/a04br3_msdc.c').read_text()
-        body=source[source.index('static int read_blocks('):source.index('/* CMD24')]
+        body=source[source.index('static int read_blocks('):source.index('/* CMD23/CMD25')]
         harness=r"""
 #include <stdint.h>
 #include <string.h>

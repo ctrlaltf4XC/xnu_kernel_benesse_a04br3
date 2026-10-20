@@ -8,7 +8,7 @@ import unittest
 class WriteBounds(unittest.TestCase):
     def test_final_gate(self):
         source=(Path(__file__).resolve().parents[2]/'bsd/dev/a04br3_msdc.c').read_text()
-        gate=source[source.index('static int write_root_block('):source.index('static int flush_card(')]
+        gate=source[source.index('static int write_root_block('):source.index('static int write_root_blocks(')]
         harness=r'''
 #include <stdint.h>
 #include <errno.h>

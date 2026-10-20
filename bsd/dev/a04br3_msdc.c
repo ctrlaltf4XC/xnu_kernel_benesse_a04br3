@@ -55,7 +55,7 @@ static int command(unsigned opcode, uint32_t argument, int data, uint32_t *respo
     wr(INTR,rd(INTR)); wr(ARG,argument);
     wr(CMD,opcode|((opcode==6 || opcode==12 ? 7u : 1u)<<7)|
         (opcode==12 ? (1u<<14) : 0)|
-        (data ? ((data==3 ? 2u : 1u)<<11)|(512u<<16)|(data==2 ? (1u<<13) : 0) : 0));
+        (data ? ((data>=3 ? 2u : 1u)<<11)|(512u<<16)|(data==2 || data==4 ? (1u<<13) : 0) : 0));
     uint64_t end=deadline();
     do {
         uint32_t status=rd(INTR)&(CMD_DONE|CMD_ERR);
@@ -117,35 +117,53 @@ recover:
 static int read_block(unsigned opcode, uint32_t argument, uint8_t *buffer) {
     return read_blocks(opcode,argument,buffer,1);
 }
-/* CMD24 single-block PIO. The only caller applies userdata bounds. */
-static int write_block_raw(uint32_t block,const uint8_t buffer[512]) {
-    wr(BLOCKS,1);wr(FIFO,rd(FIFO)|(1u<<31));
-    int error=clear_wait(FIFO,1u<<31);uint32_t response;
+/* CMD23/CMD25 bounded multi-block writes. Single-sector callers retain
+ * CMD24. Fill each FIFO burst without a full-system barrier per word. */
+static int write_blocks_raw(uint32_t block,const uint8_t *buffer,unsigned blocks) {
+    if (!blocks || blocks>128) return EINVAL;
+    uint32_t response;
+    int error;
+    if (blocks>1) {
+        error=command(23,blocks,0,&response);
+        if (error) return error;
+    }
+    wr(BLOCKS,blocks);wr(FIFO,rd(FIFO)|(1u<<31));
+    error=clear_wait(FIFO,1u<<31);
     if (error) return error;
-    error=command(24,block,2,&response);
-    if (error) return error;
-    uint64_t end=deadline();unsigned offset=0;int done=0;
+    error=command(blocks>1 ? 25 : 24,block,blocks>1 ? 4 : 2,&response);
+    if (error) goto recover;
+    uint64_t end=deadline();unsigned offset=0,total=blocks*512;int done=0;
     do {
         uint32_t ints=rd(INTR)&(DATA_DONE|DATA_ERR);
         if (ints) {
             wr(INTR,ints);
-            if (ints&DATA_ERR) return EIO;
+            if (ints&DATA_ERR) { error=EIO;goto recover; }
             if (ints&DATA_DONE) done=1;
         }
-        while (offset<512 && ((rd(FIFO)>>16)&255u)<=124u) {
-            uint32_t word;memcpy(&word,buffer+offset,4);wr(TX,word);offset+=4;
+        unsigned used=(rd(FIFO)>>16)&255u;
+        unsigned available=used<=128 ? 128-used : 0;
+        while (available>=4 && offset<total) {
+            uint32_t word;memcpy(&word,buffer+offset,4);
+            *(volatile uint32_t *)(msdc+TX)=word;
+            offset+=4;available-=4;
         }
-        if (done && offset==512) {
-            /* Wait for the card to leave its programming state. */
+        __asm__ volatile("dsb sy" ::: "memory");
+        if (done && offset==total) {
             do {
                 error=command(13,1u<<16,0,&response);
                 if (error) return error;
                 if ((response&(1u<<8)) && ((response>>9)&15u)==4) return 0;
             } while (mach_absolute_time()<end);
-            return ETIMEDOUT;
+            error=ETIMEDOUT;goto recover;
         }
     } while (mach_absolute_time()<end);
-    return ETIMEDOUT;
+    error=ETIMEDOUT;
+recover:
+    if (blocks>1) (void)command(12,0,0,&response);
+    return error;
+}
+static int write_block_raw(uint32_t block,const uint8_t buffer[512]) {
+    return write_blocks_raw(block,buffer,1);
 }
 static uint32_t le32(const uint8_t *p) {
     return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
@@ -170,6 +188,14 @@ static int write_root_block(uint64_t block,const uint8_t sector[512]) {
         block>=(uint64_t)disk_sectors-root_first) return EINVAL;
     return write_block_raw(root_first+(uint32_t)block,sector);
 }
+static int write_root_blocks(uint64_t block,const uint8_t *data,unsigned blocks) {
+    if (!write_enabled) return EROFS;
+    if (!blocks || blocks>128 || block>=root_sectors || root_first>=disk_sectors ||
+        block>=(uint64_t)disk_sectors-root_first ||
+        blocks>(uint64_t)root_sectors-block ||
+        blocks>(uint64_t)disk_sectors-root_first-block) return EINVAL;
+    return write_blocks_raw(root_first+(uint32_t)block,data,blocks);
+}
 static int flush_card(void) {
     uint32_t response;
     if (!write_enabled || !cache_enabled) return 0;
@@ -184,6 +210,7 @@ static int flush_card(void) {
     return ETIMEDOUT;
 }
 static uint64_t read_bytes,read_ticks,read_requests;
+static uint64_t write_bytes,write_ticks,write_requests;
 static LCK_GRP_DECLARE(msdc_group,"a04br3_msdc");
 static LCK_MTX_DECLARE(msdc_lock,&msdc_group);
 static int disk_open(__unused dev_t dev,int flags,__unused int type,__unused struct proc *p) {
@@ -228,8 +255,25 @@ static void disk_strategy(buf_t bp) {
                 completed+=blocks*512; continue;
             }
         } else {
-            memcpy(sector,data+completed,512);
-            error=write_root_block(block+completed/512,sector);
+            unsigned blocks=MIN((count-completed)/512,128u);
+            uint64_t started=mach_absolute_time();
+            if (blocks==1) {
+                memcpy(sector,data+completed,512);
+                error=write_root_block(block+completed/512,sector);
+            } else {
+                error=write_root_blocks(block+completed/512,(uint8_t *)data+completed,blocks);
+            }
+            write_ticks+=mach_absolute_time()-started;write_requests++;
+            if (!error) {
+                uint64_t previous=write_bytes;
+                write_bytes+=blocks*512;
+                if (!previous || (previous>>24)!=(write_bytes>>24)) {
+                    uint64_t ns;absolutetime_to_nanoseconds(write_ticks,&ns);
+                    printf("A04BR3 MSDC: write=%llu KiB service=%llu ms requests=%llu batch=%u blocks\n",
+                        write_bytes/1024,ns/1000000,write_requests,blocks);
+                }
+                completed+=blocks*512;continue;
+            }
         }
         if (error) break;
         completed+=512;

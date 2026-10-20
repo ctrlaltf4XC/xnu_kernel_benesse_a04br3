@@ -32,6 +32,7 @@
  * first swap) switches the console to serial, which also hides panics.
  */
 #include "A04BR3Surface.h"
+#include "A04BR3DisplayCopy.h"
 
 #if defined(A04BR3)
 #include <IOKit/IOService.h>
@@ -95,6 +96,8 @@ public:
 	bool          fConsolePaused;
 	uint8_t       fPending[A04BR3_FB_SWAP_REC_SIZE];     /* latest swap, not yet shown */
 	bool          fDirty;
+	bool          fDiff;
+	uint32_t      fVsyncUS;
 	uint32_t      fFlushTicks;    /* vsync ticks between panel copies */
 
 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
@@ -105,6 +108,10 @@ public:
 };
 
 OSDefineMetaClassAndStructors(AppleCLCD, IOMobileFramebuffer);
+/* One physically validated 800x1280 display; normal cached kernel BSS. */
+static uint32_t a04br3_display_shadow[800 * 1280];
+static uint64_t a04br3_present_frames, a04br3_present_pixels, a04br3_present_stores;
+
 
 class IOMobileFramebufferUserClient : public IOUserClient {
 	OSDeclareDefaultStructors(IOMobileFramebufferUserClient);
@@ -148,7 +155,10 @@ AppleCLCD::start(IOService *provider)
 		IOLog("A04BR3 FB: no boot framebuffer\n");
 		return false;
 	}
-	fLock = IOLockAlloc();
+	unsigned diff = 0;
+    PE_parse_boot_argn("a04br3fb_diff", &diff, sizeof(diff));
+    fDiff = diff == 1;
+    fLock = IOLockAlloc();
 	fClients = OSArray::withCapacity(4);
 	fSurface = a04br3_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, A04BR3_FB_FORMAT_BGRA);
 	fPixels = fSurface != NULL ? fSurface->kernelAddress() : 0;
@@ -166,8 +176,14 @@ AppleCLCD::start(IOService *provider)
 	}
 	uint32_t hz = 10;
 	PE_parse_boot_argn("a04br3fb_hz", &hz, sizeof(hz));
-	fFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;
-	fVsync->setTimeoutUS(A04BR3_FB_VSYNC_US);
+	unsigned vsyncHz = 60;
+    PE_parse_boot_argn("a04br3fb_vsync_hz", &vsyncHz, sizeof(vsyncHz));
+    if (vsyncHz < 10 || vsyncHz > 60) vsyncHz = 60;
+    fVsyncUS = (1000000U + vsyncHz / 2) / vsyncHz;
+    fFlushTicks = (hz == 0 || hz >= vsyncHz) ? 1 : vsyncHz / hz;
+    IOLog("A04BR3 FB PERF: vsync=%u Hz copy<=%u Hz changed-pixels=%u\n",
+        vsyncHz, vsyncHz / fFlushTicks, (unsigned)fDiff);
+	fVsync->setTimeoutUS(fVsyncUS);
 
 	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
 	setProperty("external", false);
@@ -210,7 +226,7 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
 		fb->present(rec);
 		IOFreeData(rec, A04BR3_FB_SWAP_REC_SIZE);
 	}
-	sender->setTimeoutUS(A04BR3_FB_VSYNC_US);
+	sender->setTimeoutUS(fb->fVsyncUS);
 }
 
 void
@@ -286,6 +302,7 @@ AppleCLCD::present(const uint8_t *rec)
 			    s ? s->pixelFormat : 0, s ? s->bytesPerRow : 0, sx, sy, get32(a, 8),
 			    get32(a, 12), dx, dy, w, h);
 		}
+        if (s == fSurface) fDiff = false;
 		if (s == NULL || s == fSurface) {
 			OSSafeReleaseNULL(s);
 			continue;
@@ -326,12 +343,22 @@ AppleCLCD::present(const uint8_t *rec)
                     (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4);
                 const uint32_t *in = (const uint32_t *)(src + s->offset +
                     (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4);
-                for (int32_t x = 0; x < w; x++) out[x] = in[x] | 0xff000000U;
+                if (fDiff) {
+                    uint32_t *shadow = a04br3_display_shadow + (dy + y) * 800 + dx;
+                    a04br3_present_stores += a04br3_copy_changed_pixels(out, shadow, in, (unsigned)w);
+                } else {
+                    for (int32_t x = 0; x < w; x++) out[x] = in[x] | 0xff000000U;
+                    a04br3_present_stores += (unsigned)w;
+                }
+                a04br3_present_pixels += (unsigned)w;
 			}
 			__asm__ volatile("dsb sy" ::: "memory");
 		}
 		s->release();
 	}
+    if ((++a04br3_present_frames % 1000) == 0)
+        IOLog("A04BR3 FB PERF: frames=%llu considered=%llu stored=%llu pixels\n",
+            a04br3_present_frames, a04br3_present_pixels, a04br3_present_stores);
 }
 
 bool

@@ -183,3 +183,11 @@ It does not advertise or implement general HFS RENAME_SWAP semantics.
 Development KeyStore selectors 35 (extended state) and 101 (assert consume)
 follow ios-sweet 0055. Extended state uses the existing unlocked development
 DER response. No SEP, hardware keys or real data protection is supplied.
+
+The performance profile uses new A04BR3 code: bounded CMD23/CMD25 PIO
+writes (same userdata limits and card-ready/flush requirements), FIFO bursts
+with one barrier per burst, and optional cached changed-pixel comparison.
+MT8167 command/FIFO layout was checked against the device's published Linux
+mtk-sd driver sources; no DMA or clock retuning is implied. Display metadata
+remains 800x1280. The optional low-load timer profile is selected by device
+source arguments and does not claim measured runtime speedup before testing.
