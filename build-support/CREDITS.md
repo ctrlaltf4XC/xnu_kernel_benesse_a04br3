@@ -64,3 +64,7 @@ Built-in HFS copies Apple hfs-627.100.6 at
 original notices and APPLE_LICENSE retained). Integration follows ios-sweet
 0026 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. The source is committed;
 the declared SDK supplies TargetConditionals.h through the build driver.
+
+The HFS volume UUID path uses MD5. Its legacy provider follows ios-sweet
+0027 and includes BearSSL md5/dec32le/enc32le at the already pinned commit,
+with the same preserved MIT license. It is not used for security decisions.

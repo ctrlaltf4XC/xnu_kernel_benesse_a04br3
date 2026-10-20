@@ -7,7 +7,10 @@
     "src/inner.h",
     "src/config.h",
     "src/symcipher/aes_ct*.c (ct, enc, dec, cbcenc, cbcdec only)",
-    "LICENSE.txt"
+    "LICENSE.txt",
+    "src/hash/md5.c",
+    "src/codec/dec32le.c",
+    "src/codec/enc32le.c"
   ],
   "adaptation": "Kernel limits header path; built-in wrappers derive from ios-sweet0020."
 }
