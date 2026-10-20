@@ -78,7 +78,8 @@ a04br3_sample_task(const char *name, int pid, task_t task)
          * running threads: these are approximate live samples, not crashes. */
         if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd") ||
             !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd") ||
-            !strcmp(name, "lsd") || strnstr(name, "datamigrat", 32) || strnstr(name, "migrationplugin", 32)) {
+            !strcmp(name, "lsd") || !strcmp(name,"installd") ||
+            !strcmp(name,"installcoordinationd") || !strcmp(name,"appstored") || strnstr(name, "datamigrat", 32) || strnstr(name, "migrationplugin", 32)) {
             uint64_t fp = rows[i].fp;
             for (unsigned depth = 0; depth < 16 && fp && !(fp & 7); depth++) {
                 uint64_t frame[2];
@@ -96,8 +97,9 @@ a04br3_sample_task(const char *name, int pid, task_t task)
 static void
 a04br3_crash_strings(const char *name)
 {
-    static unsigned scans[2];
-    unsigned bucket = !strcmp(name, "backboardd") ? 0 : 1;
+    static unsigned scans[4];
+    unsigned bucket = !strcmp(name, "backboardd") ? 0 : !strcmp(name,"lsd") ? 1 :
+        !strcmp(name,"installd") ? 2 : 3;
     if (scans[bucket]++) return;
     char *buf = kalloc_data(65536, Z_WAITOK);
     if (!buf) return;
@@ -167,7 +169,8 @@ a04br3_crash_registers(const char *name, int pid, int sig,
     printf("A04BR3_CRASH %s[%d] x0=0x%llx x1=0x%llx x2=0x%llx x3=0x%llx\n",
         name, pid, saved_state64(ss)->x[0], saved_state64(ss)->x[1],
         saved_state64(ss)->x[2], saved_state64(ss)->x[3]);
-    if (sig == 6 && (!strcmp(name, "backboardd") || !strcmp(name, "lsd"))) a04br3_crash_strings(name);
+    if (sig == 6 && (!strcmp(name, "backboardd") || !strcmp(name, "lsd") ||
+        !strcmp(name,"installd") || !strcmp(name,"installcoordinationd"))) a04br3_crash_strings(name);
     return fp;
 }
 #endif
