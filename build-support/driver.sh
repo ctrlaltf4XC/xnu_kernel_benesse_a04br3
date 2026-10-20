@@ -294,19 +294,19 @@ build_xnu() {
         fi
 }
 
-stage_pthread_sdk_header() {
-    local pthread_root="$WORK_DIR/xnu/bsd/pthread/a04br3_libpthread"
-    if [ -d "$pthread_root" ]; then
-        local sdk_header="$(xcrun --sdk macosx --show-sdk-path)/usr/include/TargetConditionals.h"
-        test -f "$sdk_header"
-        if ! cmp -s "$sdk_header" "$pthread_root/TargetConditionals.h"; then
-            cp "$sdk_header" "$pthread_root/TargetConditionals.h"
+stage_provider_sdk_headers() {
+    local sdk_header="$(xcrun --sdk macosx --show-sdk-path)/usr/include/TargetConditionals.h"
+    test -f "$sdk_header"
+    local provider
+    for provider in "$WORK_DIR/xnu/bsd/pthread/a04br3_libpthread" "$WORK_DIR/xnu/bsd/a04br3_hfs"; do
+        if [ -d "$provider" ] && ! cmp -s "$sdk_header" "$provider/TargetConditionals.h"; then
+            cp "$sdk_header" "$provider/TargetConditionals.h"
         fi
-    fi
+    done
 }
 
 setup_xcode_toolchain
-stage_pthread_sdk_header
+stage_provider_sdk_headers
 build_bootstrap_cmds
 build_dtrace
 build_availabilityversions

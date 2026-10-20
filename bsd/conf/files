@@ -382,6 +382,49 @@ bsd/kern/kern_credential.c		standard
 bsd/kern/kern_crossarch.c		standard
 bsd/kern/kern_cs.c			standard
 bsd/kern/a04br3_amfi.c			standard
+
+# Apple OSS hfs-627.100.6, staged by xnu/patches/0026-stage-hfs.sh
+bsd/a04br3_hfs/core/BTree.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeAllocate.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeMiscOps.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeNodeOps.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeNodeReserve.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeScanner.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeTreeOps.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/BTreeWrapper.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/CatalogUtilities.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/FileExtentMapping.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/FileIDsServices.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/MacOSStubs.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/UnicodeWrappers.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/VolumeAllocation.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_attrlist.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_btreeio.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_catalog.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_chash.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_cnode.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_cprotect.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_endian.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_extents.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_fsinfo.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_hotfiles.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_journal.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_link.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_lookup.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_notification.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_quota.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_readwrite.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_resize.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_search.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_vfsops.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_vfsutils.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_vnops.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/hfs_xattr.c		optional a04br3_hfs
+bsd/a04br3_hfs/core/rangelist.c		optional a04br3_hfs
+bsd/a04br3_hfs/hfs_encodings/hfs_encodinghint.c		optional a04br3_hfs
+bsd/a04br3_hfs/hfs_encodings/hfs_encodings.c		optional a04br3_hfs
+bsd/a04br3_hfs/a04br3_hfs_iokit.c		optional a04br3_hfs
+
 bsd/kern/kern_csr.c			optional config_csr
 bsd/kern/kern_debug.c			standard
 bsd/kern/kern_symfile.c			standard

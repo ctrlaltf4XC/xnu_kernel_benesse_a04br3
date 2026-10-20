@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/apple-oss-distributions/hfs",
+  "commit": "31d5ec238dfab485e78a9a30b8b92d13e8914f03",
+  "tag": "hfs-627.100.6",
+  "copied_sources": [
+    "core",
+    "hfs_encodings"
+  ],
+  "adaptations": [
+    "Guard AppleKeyStore interfaces without content protection",
+    "Built-in registration and KPI compatibility derived from ios-sweet0026"
+  ]
+}

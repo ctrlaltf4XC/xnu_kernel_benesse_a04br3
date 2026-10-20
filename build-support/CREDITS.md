@@ -58,3 +58,9 @@ corrected, and absent IOStorageFamily classes handled on A04BR3 only.
 The same reference's patches 0023 and 0025 supply built-in SHA-256 for
 code-signing hashes and an AMFI interface reporting no entitlements.
 Page hashes remain validated; entitlement queries grant no permissions.
+
+Built-in HFS copies Apple hfs-627.100.6 at
+31d5ec238dfab485e78a9a30b8b92d13e8914f03 (core and hfs_encodings,
+original notices and APPLE_LICENSE retained). Integration follows ios-sweet
+0026 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. The source is committed;
+the declared SDK supplies TargetConditionals.h through the build driver.

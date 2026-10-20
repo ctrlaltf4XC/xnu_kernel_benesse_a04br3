@@ -691,6 +691,12 @@ bsd_init(void)
 	bsd_init_kprintf("calling vfsinit\n");
 	vfsinit();
 
+#if A04BR3_HFS
+	/* HFS is built in on A04BR3: register it like its kext would, before mounting root. */
+	extern void a04br3_hfs_register(void);
+	a04br3_hfs_register();
+#endif
+
 #if CONFIG_PROC_UUID_POLICY
 	/* Initial proc_uuid_policy subsystem */
 	bsd_init_kprintf("calling proc_uuid_policy_init()\n");
