@@ -110,3 +110,9 @@ reference revision above. It requires a04br3.dev_keystore=1, provides an
 always-unlocked software test handle and rejects unsupported selectors.
 It implements no SEP, passcode protection, encryption or cryptographic key
 wrapping and must not be described as data protection.
+
+Board bindfs enablement and default-off user core dumps follow ios-sweet
+patches 0037 and 0039 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19.
+The native Apple bindfs source is already present; the board configuration
+now includes it for launchd firmware directory mounts. kern.coredump can
+still explicitly enable user core files.

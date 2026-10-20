@@ -116,7 +116,10 @@ kern_return_t thread_getstatus(thread_t act, int flavor,
     thread_state_t tstate, mach_msg_type_number_t *count);
 void task_act_iterate_wth_args(task_t, void (*)(thread_t, void *), void *);
 
-#ifdef SECURE_KERNEL
+/* Board diagnostics retain UART crash evidence. Native iOS processes map
+ * a large shared region; automatic cores exhaust the eMMC root and delay
+ * boot failure reporting. kern.coredump remains available to opt in. */
+#if defined(SECURE_KERNEL) || defined(A04BR3)
 __XNU_PRIVATE_EXTERN int do_coredump = 0;       /* default: don't dump cores */
 #else
 __XNU_PRIVATE_EXTERN int do_coredump = 1;       /* default: dump cores */
