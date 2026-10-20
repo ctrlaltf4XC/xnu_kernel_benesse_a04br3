@@ -428,3 +428,13 @@ See the README in that directory for their usage, or use the built-in LLDB help 
 
     (lldb) help showcurrentstacks
 
+
+Development FairPlay service isolation (`a04br3.fp=1`, `a04br3.fp=2` to restore)
+uses the native launchd `disabled.plist` override before PID 1 starts. It requires
+the full writable HFS root and explicit root preparation. The experiment disables
+only `com.apple.fairplayd.H2`; it does not implement FairPlay, forge hardware data,
+validate protected content, or mark migration complete. The override persists
+when the argument is omitted. Existing override dictionaries are never replaced:
+only this helper's exact root-owned, single-link file may be reused or removed.
+Errors are printed and leave the native service policy unchanged. The expected
+client failure path and actual boot outcome still require hardware verification.

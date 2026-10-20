@@ -6,7 +6,7 @@ import subprocess,tempfile,unittest
 class RootPrepare(unittest.TestCase):
     def test_existing_and_creation(self):
         s=(Path(__file__).resolve().parents[2]/'bsd/dev/a04br3_root_prepare.c').read_text()
-        helper=s[s.index('static int\nprepare_directory'):s.index('\nvoid\na04br3_root_prepare')]
+        helper=s[s.index('static int\nprepare_directory'):s.index('\n/* Native launchd override')]
         harness=r"""
 #include <string.h>
 #include <stdio.h>
