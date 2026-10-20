@@ -13,6 +13,7 @@
 #include <vm/memory_types.h>
 #include <machine/machine_routines.h>
 #include <pexpert/pexpert.h>
+#include "a04br3_display_pixels.h"
 extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
 /* BSD translation units do not expose MACH_KERNEL_PRIVATE declarations. */
 extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, uint32_t);
@@ -237,7 +238,7 @@ static void MicroSecondDelay(unsigned usec) { delay(usec); }
 #define A04BR3_COLOR_CFG_READBACK    0x0000209CU
 #define A04BR3_OVL_LAYER_CON         0x000021FFU
 #define A04BR3_OVL_LAYER_PITCH       0x00FF0C80U
-#define A04BR3_OVL_ACTIVE_LAYERS     0U /* background-only physical path test; no DMA */
+#define A04BR3_OVL_ACTIVE_LAYERS     (BIT0 | BIT3)
 #define A04BR3_MUTEX_MODULES         0x0002F940U
 
 static __attribute__((noreturn))
@@ -922,7 +923,7 @@ ConfigureA04Br3Scanout (
 
   MmioWrite32 (OVL_ROI_SIZE, A04BR3_FRAME_SIZE_REG);
   MmioWrite32 (OVL_DATAPATH_CON, 0x60000001U);
-  MmioWrite32 (OVL_ROI_BGCLR, 0xFFFF00FFU);
+  MmioWrite32 (OVL_ROI_BGCLR, 0xFF000000U);
 
   MmioWrite32 (OVL_L0_CON, A04BR3_OVL_LAYER_CON);
   MmioWrite32 (OVL_L0_SRC_SIZE, A04BR3_FRAME_SIZE_REG);
@@ -1003,10 +1004,15 @@ void a04br3_display_init(void)
   InitializeDsiController ();
   PowerOnPanel ();
   ConfigureA04Br3Scanout ();
-  /* No framebuffer DMA for this test: source layers are disabled before
-   * OVL_EN. A magenta background isolates panel/DSI/relay/OVL scanout from
-   * bootloader IOMMU and framebuffer-address assumptions. */
-  printf("A04BR3 DISP: hardware magenta background, framebuffer DMA disabled\n");
+  /* SimpleFbDxe clears indices 0..PcdMipiFrameBufferLayers (inclusive).
+   * PCD value 3 therefore means four buffers, not three. Force alpha 0xff
+   * as its working Blt path does, including the background and RGB marker. */
+  vm_offset_t framebuffer = ml_io_map_unmappable(0xbe9c0000,
+      A04BR3_DISPLAY_BYTES, VM_WIMG_IO);
+  if (!framebuffer) panic("A04BR3 DISP: framebuffer mapping failed");
+  a04br3_display_paint((volatile uint32_t *)framebuffer);
+  MemoryFence ();
+  printf("A04BR3 DISP: four buffers cleared; opaque RGB marker alpha=ff\n");
 
   if ((MmioRead32 (OVL_L0_ADDR) != 0xbe9c0000U) ||
       (MmioRead32 (OVL_SRC_CON) != A04BR3_OVL_ACTIVE_LAYERS) ||

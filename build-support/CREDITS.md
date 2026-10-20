@@ -134,3 +134,9 @@ mouseos/edk2-mtk DisplayInitDxe.c at 1982d888c765f5b12f6e0dce71f1ed8bc92ac50b
 UEFI MMIO/delay/logging become bounded XNU I/O mappings and kernel helpers.
 The display-probe flag and validated boot Video metadata are required.
 This is MT8167 physical scanout support, not GPU or IOSurface emulation.
+
+Framebuffer clearing/opaque alpha follow the same edk2-mtk revision
+SimpleFbDxe: indices 0 through PcdMipiFrameBufferLayers inclusive and
+alpha byte 0xff on Blt. The four-buffer reservation is 16,384,000 bytes
+inside the LK 16 MiB protected display area. This corrects the initial
+three-buffer/alpha-zero diagnostic adaptation.
