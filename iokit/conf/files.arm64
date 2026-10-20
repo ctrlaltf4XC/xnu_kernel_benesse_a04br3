@@ -14,3 +14,5 @@ iokit/Kernel/arm/A04BR3CPU.cpp                                    optional iokit
 iokit/Kernel/arm/A04BR3Entitlements.cpp                           optional iokitcpp
 
 iokit/Kernel/arm/A04BR3KeyStore.cpp                                optional iokitcpp
+
+iokit/Kernel/arm/A04BR3Watchdog.cpp                               optional iokitcpp

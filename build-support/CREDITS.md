@@ -121,3 +121,9 @@ Bounded native-process register snapshots draw on ios-sweet 0054 at the
 reference revision above, rewritten to copy at most 16 register records
 per task, without user memory reads or printing while holding task locks.
 Three snapshots at 120-second intervals are enabled only for full-root bring-up.
+
+Development IOWatchdog is adapted from ios-sweet 0040 and 0045 at the
+reference revision. It is gated by a04br3.full_root=1, acknowledges known
+user watchdog calls and PMU boot-stage properties, and never arms a timer.
+It is not an implementation of the MT8167 watchdog or an Apple PMU. Unknown
+selectors and oversized outputs are rejected.
