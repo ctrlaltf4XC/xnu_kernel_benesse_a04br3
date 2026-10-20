@@ -936,7 +936,7 @@ bsd_init(void)
                 /* This development HFS root supplies no sealed-volume API.
                  * Do not reinterpret a real authentication failure as success. */
                 if (allow_unsealed == 1 && (autherr == ENOTTY || autherr == ENOTSUP) &&
-                    strcmp(vfs_name(vnode_mount(rootvnode)), "hfs") == 0) {
+                    strcmp(vfs_statfs(vnode_mount(rootvnode))->f_fstypename, "hfs") == 0) {
                     printf("A04BR3: explicit unsealed HFS root (rootauth unsupported: %d)\n", autherr);
                 } else
 #endif
