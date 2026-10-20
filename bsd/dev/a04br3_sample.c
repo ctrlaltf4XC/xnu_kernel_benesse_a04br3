@@ -2,7 +2,7 @@
  * Bounded bring-up snapshots inspired by ios-sweet patch 0054.
  * No user memory reads or console output while holding task locks.
  */
-#if defined(A04BR3)
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
