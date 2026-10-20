@@ -6,7 +6,7 @@
 #include <kern/thread.h>
 #include <arm/thread.h>
 #include <vm/vm_shared_region.h>
-#include <kern/printf.h>
+#include <kern/misc_protos.h>
 void a04br3_sample_task(const char *, int, task_t);
 void
 a04br3_sample_task(const char *name, int pid, task_t task)
