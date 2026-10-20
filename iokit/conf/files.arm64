@@ -12,3 +12,5 @@ iokit/Kernel/arm/A04BR3PlatformExpert.cpp                         optional iokit
 iokit/Kernel/arm/A04BR3CPU.cpp                                    optional iokitcpp
 
 iokit/Kernel/arm/A04BR3Entitlements.cpp                           optional iokitcpp
+
+iokit/Kernel/arm/A04BR3KeyStore.cpp                                optional iokitcpp

@@ -47,6 +47,13 @@ const char * gIOKernelConfigTables =
     "     'IONameMatch'     = 'arm,cortex-a35';"
     "     'IOProbeScore'    = 10000:32;"
     "   },"
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+    "   {"
+    "     'IOClass'         = AppleKeyStore;"
+    "     'IOProviderClass' = IOResources;"
+    "     'IOMatchCategory' = AppleKeyStore;"
+    "   },"
+#endif
 #endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"

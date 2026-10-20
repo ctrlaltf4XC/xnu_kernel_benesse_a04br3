@@ -104,3 +104,9 @@ are limited to GPT userdata, with CMD13 programming completion and optional
 EXT_CSD FLUSH_CACHE. Whole-disk and raw character writes remain denied.
 After a writable boot, an old generated HFS image is no longer a valid
 delta baseline. Restore a complete generated image for the next root change.
+
+Development-only AppleKeyStore IOService follows ios-sweet 0038 at the
+reference revision above. It requires a04br3.dev_keystore=1, provides an
+always-unlocked software test handle and rejects unsupported selectors.
+It implements no SEP, passcode protection, encryption or cryptographic key
+wrapping and must not be described as data protection.
