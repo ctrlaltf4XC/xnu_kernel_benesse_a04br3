@@ -163,3 +163,7 @@ The opt-in development Sandbox MAC syscall stand-in adapts ios-sweet
 patch 0050 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. It registers only
 with platform_root=1, root_rw=1 and emmc_rw=1. It is a permissive development
 compatibility interface, not an Apple Sandbox implementation.
+
+Live window-server stack sampling adapts ios-sweet 0054/0055, capturing
+saved frame pointers under the task lock and reading bounded frames only
+after releasing it. Samples are approximate and limited to three rounds.
