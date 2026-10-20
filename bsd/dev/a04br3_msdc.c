@@ -50,11 +50,12 @@ static int clear_wait(unsigned reg, uint32_t mask) {
     return ETIMEDOUT;
 }
 static int command(unsigned opcode, uint32_t argument, int data, uint32_t *response) {
-    int e=clear_wait(STS, opcode==13 ? 2 : 1);
+    int e=clear_wait(STS, opcode==13 || opcode==12 ? 2 : 1);
     if (e) return e;
     wr(INTR,rd(INTR)); wr(ARG,argument);
-    wr(CMD,opcode|((opcode==6 ? 7u : 1u)<<7)|
-        (data ? ((1u<<11)|(512u<<16)|(data==2 ? (1u<<13) : 0)) : 0));
+    wr(CMD,opcode|((opcode==6 || opcode==12 ? 7u : 1u)<<7)|
+        (opcode==12 ? (1u<<14) : 0)|
+        (data ? ((data==3 ? 2u : 1u)<<11)|(512u<<16)|(data==2 ? (1u<<13) : 0) : 0));
     uint64_t end=deadline();
     do {
         uint32_t status=rd(INTR)&(CMD_DONE|CMD_ERR);
@@ -69,32 +70,52 @@ static int command(unsigned opcode, uint32_t argument, int data, uint32_t *respo
     } while (mach_absolute_time()<end);
     return ETIMEDOUT;
 }
-static int read_block(unsigned opcode, uint32_t argument, uint8_t *buffer) {
-    wr(BLOCKS,1); wr(FIFO,rd(FIFO)|(1u<<31));
-    int e=clear_wait(FIFO,1u<<31); uint32_t response;
+/* CMD23 limits CMD18 to the requested block count: no AutoCMD timing
+ * dependency and no open-ended stream. MT8167 SDC_CMD dtype=2 is multi.
+ * Maximum 64KiB matches DKIOCGETMAXBLOCKCOUNTREAD. PIO remains inherited.
+ */
+static int read_blocks(unsigned opcode, uint32_t argument, uint8_t *buffer,
+    unsigned blocks) {
+    if (!blocks || blocks>128) return EINVAL;
+    uint32_t response;
+    int e;
+    if (blocks>1) {
+        e=command(23,blocks,0,&response);
+        if (e) return e;
+        opcode=18;
+    }
+    wr(BLOCKS,blocks); wr(FIFO,rd(FIFO)|(1u<<31));
+    e=clear_wait(FIFO,1u<<31);
     if (e) return e;
-    e=command(opcode,argument,1,&response);
-    if (e) return e;
-    uint64_t end=deadline(); unsigned offset=0; int done=0;
+    e=command(opcode,argument,blocks>1 ? 3 : 1,&response);
+    if (e) goto recover;
+    uint64_t end=deadline(); unsigned offset=0, total=blocks*512; int done=0;
     do {
         uint32_t ints=rd(INTR)&(DATA_DONE|DATA_ERR);
         if (ints) {
             wr(INTR,ints);
-            if (ints&DATA_ERR) return EIO;
+            if (ints&DATA_ERR) { e=EIO; goto recover; }
             if (ints&DATA_DONE) done=1;
         }
         unsigned available=rd(FIFO)&255u;
-        while (available && offset<512) {
-            if (available>=4 && 512-offset>=4) {
+        while (available && offset<total) {
+            if (available>=4 && total-offset>=4) {
                 uint32_t word=rd(RX);
                 memcpy(buffer+offset,&word,4);offset+=4;available-=4;
             } else {
                 buffer[offset++]=*(volatile uint8_t *)(msdc+RX);available--;
             }
         }
-        if (done && offset==512) return 0;
+        if (done && offset==total) return 0;
     } while (mach_absolute_time()<end);
-    return ETIMEDOUT;
+    e=ETIMEDOUT;
+recover:
+    /* Preserve original failure; stop an interrupted multi-block transfer. */
+    if (blocks>1) (void)command(12,0,0,&response);
+    return e;
+}
+static int read_block(unsigned opcode, uint32_t argument, uint8_t *buffer) {
+    return read_blocks(opcode,argument,buffer,1);
 }
 /* CMD24 single-block PIO. The only caller applies userdata bounds. */
 static int write_block_raw(uint32_t block,const uint8_t buffer[512]) {
@@ -162,6 +183,7 @@ static int flush_card(void) {
     } while (mach_absolute_time()<end);
     return ETIMEDOUT;
 }
+static uint64_t read_bytes,read_ticks,read_requests;
 static LCK_GRP_DECLARE(msdc_group,"a04br3_msdc");
 static LCK_MTX_DECLARE(msdc_lock,&msdc_group);
 static int disk_open(__unused dev_t dev,int flags,__unused int type,__unused struct proc *p) {
@@ -188,8 +210,23 @@ static void disk_strategy(buf_t bp) {
     wr(INTEN,0);wr(CFG,cfg|(1u<<3));
     while (completed<count) {
         if (reading) {
-            error=read_block(17,first+(uint32_t)block+completed/512,sector);
-            if (!error) memcpy(data+completed,sector,512);
+            unsigned blocks=MIN((count-completed)/512,128u);
+            uint64_t started=mach_absolute_time();
+            error=read_blocks(17,first+(uint32_t)block+completed/512,
+                (uint8_t *)data+completed,blocks);
+            read_ticks+=mach_absolute_time()-started;
+            read_requests++;
+            if (!error) {
+                uint64_t previous=read_bytes;
+                read_bytes+=blocks*512;
+                if (!previous || (previous>>24)!=(read_bytes>>24)) {
+                    uint64_t ns;
+                    absolutetime_to_nanoseconds(read_ticks,&ns);
+                    printf("A04BR3 MSDC: read=%llu KiB service=%llu ms requests=%llu batch=%u blocks\n",
+                        read_bytes/1024,ns/1000000,read_requests,blocks);
+                }
+                completed+=blocks*512; continue;
+            }
         } else {
             memcpy(sector,data+completed,512);
             error=write_root_block(block+completed/512,sector);
