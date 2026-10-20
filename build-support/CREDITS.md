@@ -39,3 +39,5 @@ Early panic formatting follows ios-sweet patch 0010 (`va_copy` and `_doprnt` bef
 Allocator SplitMix64 RNG and built-in HMAC-SHA256 kernel PRNG registration are adapted from dipa-studio/ios-sweet patches 0013 and 0014 (snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19), scoped to A04BR3. SplitMix64 is used only for non-cryptographic allocator choices; the kernel PRNG uses the built-in HMAC-SHA256 DRBG seeded from the bootloader entropy path. Sebastiano Vigna's public-domain SplitMix64 reference is credited in vm_kern.c.
 
 Absent Image4/AMFI trust-cache service handling adapts ios-sweet patch 0015 (snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19), scoped to A04BR3. Missing services return unavailable/not-found; no trust-cache match or load success is synthesized.
+
+A04BR3PlatformExpert adapts the device-tree platform-expert structure from ios-sweet patch 0016 (snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19), with Benesse compatible/model identity. GICv3 and Kryo CPU details are not imported.

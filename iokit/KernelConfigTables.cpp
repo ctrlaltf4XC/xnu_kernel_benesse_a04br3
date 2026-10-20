@@ -34,6 +34,14 @@
 
 const char * gIOKernelConfigTables =
     "("
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+    "   {"
+    "     'IOClass'         = A04BR3PlatformExpert;"
+    "     'IOProviderClass' = IOPlatformExpertDevice;"
+    "     'IONameMatch'     = 'benesse,a04br3';"
+    "     'IOProbeScore'    = 10000:32;"
+    "   },"
+#endif
     "   {"
     "     'IOClass'         = IOPanicPlatform;"
     "     'IOProviderClass' = IOPlatformExpertDevice;"
