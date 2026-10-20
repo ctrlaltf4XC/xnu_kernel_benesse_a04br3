@@ -3542,6 +3542,14 @@ kmem_add_extra_claims(void)
 		total_claims += kmem_claims[i].kc_size;
 	}
 	assert((total_claims & PAGE_MASK) == 0);
+#if defined(A04BR3)
+	printf("A04BR3_KMEM_BUDGET free=0x%llx claims=0x%llx RAM=0x%llx\n",
+	    (unsigned long long)largest_free_size,
+	    (unsigned long long)total_claims, (unsigned long long)sane_size);
+	if (total_claims >= largest_free_size) {
+		panic("A04BR3: static kmem claims exhaust kernel VA");
+	}
+#endif
 	largest_free_size -= total_claims;
 
 	/*

@@ -811,7 +811,11 @@ vm_compressor_set_size(void)
 	compressor_pool_max_size = C_SEG_MAX_LIMIT;
 	compressor_pool_max_size *= c_seg_bufsize;
 
-#if XNU_TARGET_OS_OSX
+/* The board uses a compact 39-bit heap (under 48 GiB). Desktop
+	 * sizing reserves 16 times RAM: at 1504 MiB that consumes 23.5 GiB
+	 * beside the 24 GiB zone range, before IOKit and metadata. Use the
+	 * existing embedded policy below, including its physical-RAM cap. */
+#if XNU_TARGET_OS_OSX && !defined(A04BR3)
 
 	if (vm_compression_limit == 0) {
 		if (max_mem <= (4ULL * 1024ULL * 1024ULL * 1024ULL)) {
