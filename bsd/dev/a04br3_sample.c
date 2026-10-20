@@ -26,7 +26,7 @@ sample_proc(proc_t p, __unused void *arg)
         strcmp(name, "SpringBoard") && strcmp(name, "logd") &&
         strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
         strcmp(name, "containermanager") && strcmp(name, "containermanagerd") &&
-        strcmp(name, "lsd") && !strstr(name, "datamigrat") && !strstr(name, "migrationplugin")) {
+        strcmp(name, "lsd") && strncmp(name, "datamigrat", 10) != 0 && strncmp(name, "migrationplugin", 15) != 0) {
         return PROC_RETURNED;
     }
     task_t task = proc_task(p);
