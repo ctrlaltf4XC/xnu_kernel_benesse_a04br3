@@ -22,6 +22,8 @@
 #include <arm/machine_routines.h>
 #include "a04br3_msdc_dma.h"
 extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+/* Same BSD-side declaration as memdev.c. */
+extern ppnum_t pmap_find_phys(pmap_t map, addr64_t va);
 
 #define CFG 0x00
 #define INTR 0x0c
@@ -332,23 +334,6 @@ static void disk_strategy(buf_t bp) {
         if (error) break;
         completed+=512;
     }
-    unsigned use_dma=0;
-    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
-        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
-            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
-        int de=kr==KERN_SUCCESS?0:ENOMEM;
-        if(!de){
-            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
-            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
-            uint8_t reference[2048],result[2048];
-            de=read_blocks(17,0x40,reference,4);
-            if(!de)de=dma_read(0x40,result,4);
-            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
-            if(!de)dma_enabled=1;
-        }
-        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
-            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
-    }
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
     lck_mtx_unlock(&msdc_lock);
     buf_unmap(bp);buf_setresid(bp,count-completed);
@@ -371,24 +356,7 @@ static int disk_ioctl(dev_t dev,u_long cmd,caddr_t data,__unused int flag,__unus
         uint32_t cfg=rd(CFG),inten=rd(INTEN);
         wr(INTEN,0);wr(CFG,cfg|(1u<<3));
         int error=flush_card();
-        unsigned use_dma=0;
-    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
-        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
-            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
-        int de=kr==KERN_SUCCESS?0:ENOMEM;
-        if(!de){
-            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
-            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
-            uint8_t reference[2048],result[2048];
-            de=read_blocks(17,0x40,reference,4);
-            if(!de)de=dma_read(0x40,result,4);
-            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
-            if(!de)dma_enabled=1;
-        }
-        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
-            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
-    }
-    wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+        wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
         lck_mtx_unlock(&msdc_lock);return error;
     }
     case DKIOCGETMAXSEGMENTCOUNTREAD:
@@ -402,23 +370,6 @@ static int read_disk_sector(uint32_t block,uint8_t sector[512]) {
     uint32_t cfg=rd(CFG),inten=rd(INTEN);
     wr(INTEN,0);wr(CFG,cfg|(1u<<3));
     int error=read_block(17,block,sector);
-    unsigned use_dma=0;
-    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
-        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
-            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
-        int de=kr==KERN_SUCCESS?0:ENOMEM;
-        if(!de){
-            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
-            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
-            uint8_t reference[2048],result[2048];
-            de=read_blocks(17,0x40,reference,4);
-            if(!de)de=dma_read(0x40,result,4);
-            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
-            if(!de)dma_enabled=1;
-        }
-        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
-            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
-    }
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
     lck_mtx_unlock(&msdc_lock);
     return error;
