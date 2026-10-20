@@ -9,8 +9,6 @@
 #define NO_MONITOR                1
 #define NO_ECORE                  1
 #define ARM_ARCH_TIMER            1
-#define A04BR3_VTIMER_INTID        27
-#define A04BR3_IPI_SGI             1
 #define __ARM_ARCH__              8
 #define __ARM_VMSA__              8
 #define __ARM_VFP__               4

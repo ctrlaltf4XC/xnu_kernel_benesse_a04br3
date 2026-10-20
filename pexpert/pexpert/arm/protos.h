@@ -37,6 +37,8 @@ int uart_getc(void);
 
 void pe_init_fiq(void);
 #if defined(ARM64_BOARD_CONFIG_A04BR3)
+#define A04BR3_VTIMER_INTID 27
+#define A04BR3_IPI_SGI 1
 void a04br3_gic_init(void);
 uint32_t a04br3_gic_acknowledge(void);
 void a04br3_gic_complete(uint32_t iar);
