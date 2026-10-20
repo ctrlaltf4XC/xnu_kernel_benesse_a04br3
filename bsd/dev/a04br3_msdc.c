@@ -7,6 +7,12 @@
 #if defined(ARM64_BOARD_CONFIG_A04BR3)
 #include <sys/systm.h>
 #include <sys/errno.h>
+#include <sys/buf.h>
+#include <sys/conf.h>
+#include <sys/disk.h>
+#include <sys/uio.h>
+#include <kern/locks.h>
+#include <miscfs/devfs/devfs.h>
 #include <kern/clock.h>
 #include <mach/mach_time.h>
 #include <pexpert/pexpert.h>
@@ -100,6 +106,77 @@ static uint32_t header_crc(const uint8_t *p, unsigned size) {
     }
     return ~crc;
 }
+static uint32_t disk_sectors;
+static LCK_GRP_DECLARE(msdc_group,"a04br3_msdc");
+static LCK_MTX_DECLARE(msdc_lock,&msdc_group);
+static int disk_open(__unused dev_t dev,int flags,__unused int type,__unused struct proc *p) {
+    if (!disk_sectors) return ENXIO;
+    return flags&FWRITE ? EROFS : 0;
+}
+static int disk_close(__unused dev_t dev,__unused int flags,__unused int type,__unused struct proc *p) { return 0; }
+static void disk_strategy(buf_t bp) {
+    uint32_t count=buf_count(bp), completed=0;
+    int error=0;caddr_t data=NULL;
+    uint64_t block=buf_blkno(bp);
+    buf_setresid(bp,count);
+    if (!(buf_flags(bp)&B_READ)) { error=EROFS;goto done; }
+    if ((count&511u) || block>disk_sectors || (uint64_t)(count/512)>disk_sectors-block) { error=EINVAL;goto done; }
+    if (!count) goto done;
+    if (buf_map(bp,&data)) { error=EIO;goto done; }
+    lck_mtx_lock(&msdc_lock);
+    uint32_t cfg=rd(CFG),inten=rd(INTEN);uint8_t sector[512];
+    wr(INTEN,0);wr(CFG,cfg|(1u<<3));
+    while (completed<count) {
+        error=read_block(17,(uint32_t)block+completed/512,sector);
+        if (error) break;
+        memcpy(data+completed,sector,512);completed+=512;
+    }
+    wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+    lck_mtx_unlock(&msdc_lock);
+    buf_unmap(bp);buf_setresid(bp,count-completed);
+done:
+    if (error) buf_seterror(bp,error);
+    buf_biodone(bp);
+}
+static int disk_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,__unused int flag,__unused struct proc *p) {
+    switch (cmd) {
+    case DKIOCGETBLOCKSIZE:
+    case DKIOCGETPHYSICALBLOCKSIZE: *(uint32_t *)data=512;return 0;
+    case DKIOCSETBLOCKSIZE: return *(uint32_t *)data==512 ? 0 : EINVAL;
+    case DKIOCGETBLOCKCOUNT: *(uint64_t *)data=disk_sectors;return 0;
+    case DKIOCISWRITABLE: *(uint32_t *)data=0;return 0;
+    case DKIOCGETMAXBLOCKCOUNTREAD: *(uint64_t *)data=128;return 0;
+    case DKIOCGETMAXBLOCKCOUNTWRITE: *(uint64_t *)data=0;return 0;
+    case DKIOCGETMAXSEGMENTCOUNTREAD:
+    case DKIOCGETMAXSEGMENTCOUNTWRITE: *(uint64_t *)data=1;return 0;
+    default:return ENOTTY;
+    }
+}
+static int disk_psize(__unused dev_t dev) { return (int)disk_sectors; }
+static int disk_read(dev_t dev,struct uio *uio,__unused int flags) {
+    return physio(disk_strategy,NULL,dev,B_READ,minphys,uio,512);
+}
+static int disk_write(__unused dev_t dev,__unused struct uio *uio,__unused int flags) { return EROFS; }
+static const struct bdevsw msdc_bdevsw = {
+    .d_open=disk_open,.d_close=disk_close,.d_strategy=disk_strategy,
+    .d_ioctl=disk_ioctl,.d_dump=eno_dump,.d_psize=disk_psize,.d_type=D_DISK
+};
+static const struct cdevsw msdc_cdevsw = {
+    .d_open=disk_open,.d_close=disk_close,.d_read=disk_read,.d_write=disk_write,
+    .d_ioctl=disk_ioctl,.d_stop=eno_stop,.d_reset=eno_reset,.d_select=eno_select,
+    .d_mmap=eno_mmap,.d_strategy=eno_strat,.d_reserved_1=eno_getc,.d_reserved_2=eno_putc,.d_type=D_DISK
+};
+static int register_disk(uint32_t sectors) {
+    int bmajor=bdevsw_add(-1,&msdc_bdevsw);
+    if (bmajor<0) return ENXIO;
+    int cmajor=cdevsw_add_with_bdev(-1,&msdc_cdevsw,bmajor);
+    if (cmajor<0) return ENXIO;
+    disk_sectors=sectors;
+    if (!devfs_make_node(makedev(bmajor,0),DEVFS_BLOCK,UID_ROOT,GID_OPERATOR,0440,"emmc0") ||
+        !devfs_make_node(makedev(cmajor,0),DEVFS_CHAR,UID_ROOT,GID_OPERATOR,0440,"remmc0")) return ENXIO;
+    printf("A04BR3 MSDC0: registered /dev/emmc0 and /dev/remmc0 read-only\n");
+    return 0;
+}
 void a04br3_msdc_probe(void);
 void a04br3_msdc_probe(void) {
     unsigned enabled=0;
@@ -133,6 +210,7 @@ void a04br3_msdc_probe(void) {
     }
     if (!error && !found) error=ENOENT;
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+    if (!error) error=register_disk(sectors);
     printf("A04BR3 MSDC0: read-only probe %s error=%d R1=0x%08x\n",
         error ? "FAILED" : "PASS",error,response);
 }
