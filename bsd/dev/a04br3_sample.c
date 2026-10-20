@@ -14,6 +14,7 @@
 extern task_t proc_task(proc_t);
 extern void a04br3_sample_task(const char *, int, task_t);
 extern int hz;
+extern int serial_getc(void);
 void a04br3_sample_start(void);
 
 static int
@@ -38,13 +39,23 @@ static void
 sample_thread(__unused void *arg, __unused wait_result_t wr)
 {
     static int chan;
-    /* Long intervals, finite output: this is a diagnostic, not a monitor. */
-    (void)tsleep(&chan, PZERO, "a04sample", 120 * hz);
-    for (unsigned i = 0; i < 12; i++) {
-        printf("A04BR3_SAMPLE begin %u\n", i);
-        proc_iterate(PROC_ALLPROCLIST, sample_proc, NULL, NULL, NULL);
-        printf("A04BR3_SAMPLE end %u\n", i);
-        if (i < 11) (void)tsleep(&chan, PZERO, "a04sample", 600 * hz);
+    unsigned uart = 0, elapsed = 0, next = 120, rounds = 0, manual = 0, last = 0;
+    PE_parse_boot_argn("a04br3.sample_uart", &uart, sizeof(uart));
+    if (uart == 1) printf("A04BR3_SAMPLE UART: Ctrl-T requests a snapshot (10s rate limit, 16 requests)\n");
+    for (;;) {
+        (void)tsleep(&chan, PZERO, "a04sample", hz);
+        elapsed++;
+        bool scheduled = rounds < 12 && elapsed >= next;
+        bool requested = uart == 1 && serial_getc() == 20 && manual < 16 && elapsed - last >= 10;
+        if (scheduled || requested) {
+            unsigned sequence = scheduled ? rounds++ : 1000 + manual++;
+            printf("A04BR3_SAMPLE begin %u elapsed=%u s\n", sequence, elapsed);
+            proc_iterate(PROC_ALLPROCLIST, sample_proc, NULL, NULL, NULL);
+            printf("A04BR3_SAMPLE end %u\n", sequence);
+            if (scheduled) next += 600;
+            if (requested) last = elapsed;
+        }
+        if (rounds == 12 && (uart != 1 || manual == 16)) break;
     }
 }
 
