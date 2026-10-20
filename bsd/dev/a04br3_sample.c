@@ -35,7 +35,8 @@ sample_proc(proc_t p, __unused void *arg)
         strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
         strcmp(name, "containermanager") && strcmp(name, "containermanagerd") &&
         strcmp(name, "lsd") && strcmp(name, "installd") &&
-        strcmp(name, "installcoordinationd") && strcmp(name, "appstored") && !strnstr(name, "datamigrat", 32) && !strnstr(name, "migrationplugin", 32)) {
+        strcmp(name, "installcoordinationd") && strcmp(name, "appstored") &&
+        strcmp(name, "locationd") && !strnstr(name, "datamigrat", 32) && !strnstr(name, "migrationplugin", 32)) {
         return PROC_RETURNED;
     }
     task_t task = proc_task(p);
