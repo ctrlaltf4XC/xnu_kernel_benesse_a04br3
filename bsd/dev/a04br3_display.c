@@ -14,6 +14,8 @@
 #include <machine/machine_routines.h>
 #include <pexpert/pexpert.h>
 extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+/* BSD translation units do not expose MACH_KERNEL_PRIVATE declarations. */
+extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, uint32_t);
 void a04br3_display_init(void);
 static vm_offset_t display_system, display_mm;
 static uintptr_t display_address(uintptr_t address)
