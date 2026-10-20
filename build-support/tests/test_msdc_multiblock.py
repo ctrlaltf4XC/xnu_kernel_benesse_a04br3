@@ -21,6 +21,8 @@ class MultiBlock(unittest.TestCase):
 #define DATA_DONE (1u<<12)
 #define DATA_ERR ((1u<<14)|(1u<<15))
 static uintptr_t msdc;
+static int dma_enabled;
+static int dma_read(uint32_t a,uint8_t *b,unsigned n) {(void)a;(void)b;(void)n;return EIO;}
 static unsigned count,position,calls,ops[8],args[8],modes[8],fault;
 static uint64_t tick;
 static uint64_t deadline(void) { return tick+10000; }

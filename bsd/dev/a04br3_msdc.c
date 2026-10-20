@@ -17,6 +17,10 @@
 #include <mach/mach_time.h>
 #include <pexpert/pexpert.h>
 #include <libkern/libkern.h>
+#include <vm/vm_kern.h>
+#include <vm/pmap.h>
+#include <arm/machine_routines.h>
+#include "a04br3_msdc_dma.h"
 extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
 
 #define CFG 0x00
@@ -70,6 +74,55 @@ static int command(unsigned opcode, uint32_t argument, int data, uint32_t *respo
     } while (mach_absolute_time()<end);
     return ETIMEDOUT;
 }
+/* Optional descriptor read DMA; PIO writes and inherited timing stay intact.
+ * Controller ownership is serialized by msdc_lock after probe registration. */
+static vm_offset_t dma_area;
+static uint64_t dma_pa;
+static int dma_enabled;
+static void dma_cache_sync(vm_offset_t address,unsigned bytes)
+{
+    unsigned line=4u<<((__builtin_arm_rsr64("CTR_EL0")>>16)&15u);
+    vm_offset_t end=address+bytes;
+    for(vm_offset_t p=address&~((vm_offset_t)line-1);p<end;p+=line)
+        __asm__ volatile("dc civac, %0"::"r"(p):"memory");
+    __asm__ volatile("dsb sy":::"memory");
+}
+static int dma_read(uint32_t argument,uint8_t *buffer,unsigned blocks)
+{
+    if(!dma_area || !blocks || blocks>128)return EINVAL;
+    uint32_t response=0;unsigned bytes=blocks*512;int e=0;
+    struct a04br3_dma_gpd *gpd=(void *)dma_area;
+    struct a04br3_dma_bd *bd=(void *)(dma_area+64);
+    vm_offset_t bounce=dma_area+PAGE_SIZE;
+    if(a04br3_dma_descriptors(gpd,bd,dma_pa,dma_pa+64,dma_pa+PAGE_SIZE,bytes))return EINVAL;
+    dma_cache_sync(dma_area,PAGE_SIZE);dma_cache_sync(bounce,bytes);
+    if(blocks>1 && (e=command(23,blocks,0,&response)))return e;
+    wr(BLOCKS,blocks);wr(FIFO,rd(FIFO)|(1u<<31));
+    if((e=clear_wait(FIFO,1u<<31)))return e;
+    wr(CFG,rd(CFG)&~(1u<<3));
+    e=command(blocks>1?18:17,argument,blocks>1?3:1,&response);
+    if(e)goto stop;
+    wr(0x8c,0);wr(0x90,(uint32_t)dma_pa);wr(0xa8,0);
+    wr(0x9c,rd(0x9c)|2u);
+    wr(0x98,(rd(0x98)&~((1u<<0)|(1u<<1)|(1u<<10)|(7u<<12)))|(1u<<8)|(6u<<12));
+    wr(0x98,rd(0x98)|1u);
+    uint64_t end=deadline();
+    for(;;){
+        uint32_t ints=rd(INTR)&(DATA_DONE|DATA_ERR|(7u<<17));
+        if(ints){wr(INTR,ints);if(ints&(DATA_ERR|(7u<<17))){e=EIO;break;}
+            if(ints&DATA_DONE)break;}
+        if(mach_absolute_time()>=end){e=ETIMEDOUT;break;}
+    }
+stop:
+    /* Never recycle a buffer while hardware may still write to it. */
+    wr(0x98,rd(0x98)|2u);
+    if(clear_wait(0x9c,1u))panic("A04BR3 MSDC DMA: engine failed to stop");
+    wr(0x9c,rd(0x9c)&~2u);wr(CFG,rd(CFG)|(1u<<3));
+    if(e){if(blocks>1)(void)command(12,0,0,&response);return e;}
+    e=clear_wait(STS,1u);if(e)return e;
+    dma_cache_sync(bounce,bytes);memcpy(buffer,(void *)bounce,bytes);
+    return 0;
+}
 /* CMD23 limits CMD18 to the requested block count: no AutoCMD timing
  * dependency and no open-ended stream. MT8167 SDC_CMD dtype=2 is multi.
  * Maximum 64KiB matches DKIOCGETMAXBLOCKCOUNTREAD. PIO remains inherited.
@@ -77,6 +130,7 @@ static int command(unsigned opcode, uint32_t argument, int data, uint32_t *respo
 static int read_blocks(unsigned opcode, uint32_t argument, uint8_t *buffer,
     unsigned blocks) {
     if (!blocks || blocks>128) return EINVAL;
+    if (dma_enabled && (opcode==17 || opcode==18)) return dma_read(argument,buffer,blocks);
     uint32_t response;
     int e;
     if (blocks>1) {
@@ -278,6 +332,23 @@ static void disk_strategy(buf_t bp) {
         if (error) break;
         completed+=512;
     }
+    unsigned use_dma=0;
+    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
+        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
+            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
+        int de=kr==KERN_SUCCESS?0:ENOMEM;
+        if(!de){
+            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
+            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
+            uint8_t reference[2048],result[2048];
+            de=read_blocks(17,0x40,reference,4);
+            if(!de)de=dma_read(0x40,result,4);
+            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
+            if(!de)dma_enabled=1;
+        }
+        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
+            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
+    }
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
     lck_mtx_unlock(&msdc_lock);
     buf_unmap(bp);buf_setresid(bp,count-completed);
@@ -300,7 +371,24 @@ static int disk_ioctl(dev_t dev,u_long cmd,caddr_t data,__unused int flag,__unus
         uint32_t cfg=rd(CFG),inten=rd(INTEN);
         wr(INTEN,0);wr(CFG,cfg|(1u<<3));
         int error=flush_card();
-        wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+        unsigned use_dma=0;
+    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
+        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
+            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
+        int de=kr==KERN_SUCCESS?0:ENOMEM;
+        if(!de){
+            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
+            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
+            uint8_t reference[2048],result[2048];
+            de=read_blocks(17,0x40,reference,4);
+            if(!de)de=dma_read(0x40,result,4);
+            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
+            if(!de)dma_enabled=1;
+        }
+        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
+            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
+    }
+    wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
         lck_mtx_unlock(&msdc_lock);return error;
     }
     case DKIOCGETMAXSEGMENTCOUNTREAD:
@@ -314,6 +402,23 @@ static int read_disk_sector(uint32_t block,uint8_t sector[512]) {
     uint32_t cfg=rd(CFG),inten=rd(INTEN);
     wr(INTEN,0);wr(CFG,cfg|(1u<<3));
     int error=read_block(17,block,sector);
+    unsigned use_dma=0;
+    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
+        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
+            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
+        int de=kr==KERN_SUCCESS?0:ENOMEM;
+        if(!de){
+            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
+            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
+            uint8_t reference[2048],result[2048];
+            de=read_blocks(17,0x40,reference,4);
+            if(!de)de=dma_read(0x40,result,4);
+            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
+            if(!de)dma_enabled=1;
+        }
+        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
+            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
+    }
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
     lck_mtx_unlock(&msdc_lock);
     return error;
@@ -431,6 +536,23 @@ void a04br3_msdc_probe(void) {
         found=!error;break;
     }
     if (!error && !found) error=ENOENT;
+    unsigned use_dma=0;
+    if(!error && PE_parse_boot_argn("a04br3.msdc_dma",&use_dma,sizeof(use_dma)) && use_dma==1){
+        kern_return_t kr=kmem_alloc_contig(kernel_map,&dma_area,PAGE_SIZE+65536,
+            PAGE_MASK,(ppnum_t)(0xffffffffULL>>PAGE_SHIFT),0,KMA_ZERO,VM_KERN_MEMORY_BSD);
+        int de=kr==KERN_SUCCESS?0:ENOMEM;
+        if(!de){
+            dma_pa=(uint64_t)pmap_find_phys(kernel_pmap,(addr64_t)dma_area)<<PAGE_SHIFT;
+            if(!dma_pa)panic("A04BR3 MSDC DMA: unmapped allocation");
+            uint8_t reference[2048],result[2048];
+            de=read_blocks(17,0x40,reference,4);
+            if(!de)de=dma_read(0x40,result,4);
+            if(!de && memcmp(reference,result,sizeof(reference)))de=EIO;
+            if(!de)dma_enabled=1;
+        }
+        printf("A04BR3 MSDC DMA: PIO comparison %s error=%d PA=0x%llx\n",
+            dma_enabled?"PASS":"FAILED, retaining PIO",de,dma_pa);
+    }
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
     if (!error) {
         unsigned enabled=0;
