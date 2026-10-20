@@ -20,7 +20,8 @@ class RawReaderTests(unittest.TestCase):
 #define caddr_t char *
 #define MIN(a,b) ((a)<(b)?(a):(b))
 struct uio { int64_t off,resid; unsigned moved; int fault; unsigned char data[4096]; };
-static uint32_t disk_sectors=4;
+static uint32_t disk_sectors=4,root_first=1,root_sectors=2;
+#define minor(d) (d)
 static int fail_block=-1;
 #define uio_offset(u) ((u)->off)
 #define uio_resid(u) ((u)->resid)
@@ -51,6 +52,8 @@ int main(void) {
     u=(struct uio){.off=-1,.resid=1}; assert(disk_read(0,&u,0)==EINVAL);
     u=(struct uio){.off=512,.resid=512,.fault=1};
     assert(disk_read(0,&u,0)==EFAULT && u.moved==0);
+    u=(struct uio){.off=1016,.resid=16};
+    assert(disk_read(1,&u,0)==0 && u.moved==8 && u.resid==8);
     fail_block=1;u=(struct uio){.off=512,.resid=512};
     assert(disk_read(0,&u,0)==EIO && u.moved==0);
     return 0;
