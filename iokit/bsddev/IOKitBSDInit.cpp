@@ -766,6 +766,18 @@ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
 		}
 	}
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+    if (strcmp(rdBootVar,"emmcroot0")==0) {
+        extern int a04br3_emmc_rootdev(dev_t *dev);
+        OSSafeReleaseNULL(matching);
+        int error=a04br3_emmc_rootdev(root);
+        if (error) panic("A04BR3 eMMC root unavailable: %d",error);
+        strlcpy(rootName,"emmcroot0",rootNameSize);
+        IOLog("BSD root: %s, major %d, minor %d\n",rootName,major(*root),minor(*root));
+        *oflags=0;goto iofrootx;
+    }
+#endif
+
 //
 //	Now check if we are trying to root on a memory device
 //

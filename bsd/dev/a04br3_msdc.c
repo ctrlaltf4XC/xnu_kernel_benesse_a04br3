@@ -107,10 +107,12 @@ static uint32_t header_crc(const uint8_t *p, unsigned size) {
     return ~crc;
 }
 static uint32_t disk_sectors;
+static uint32_t root_first,root_sectors;
+static dev_t root_device;
 static LCK_GRP_DECLARE(msdc_group,"a04br3_msdc");
 static LCK_MTX_DECLARE(msdc_lock,&msdc_group);
 static int disk_open(__unused dev_t dev,int flags,__unused int type,__unused struct proc *p) {
-    if (!disk_sectors) return ENXIO;
+    if (!disk_sectors || minor(dev)>1 || (minor(dev)==1 && !root_sectors)) return ENXIO;
     return flags&FWRITE ? EROFS : 0;
 }
 static int disk_close(__unused dev_t dev,__unused int flags,__unused int type,__unused struct proc *p) { return 0; }
@@ -118,18 +120,20 @@ static void disk_strategy(buf_t bp) {
     uint32_t count=buf_count(bp), completed=0;
     int error=0;caddr_t data=NULL;
     uint64_t block=buf_blkno(bp);
+    uint32_t sectors=minor(buf_device(bp)) ? root_sectors : disk_sectors;
+    uint32_t first=minor(buf_device(bp)) ? root_first : 0;
     buf_setresid(bp,count);
     /* Raw user I/O uses disk_read/uiomove, never a direct user pointer. */
     if (buf_flags(bp)&B_PHYS) { error=EFAULT;goto done; }
     if (!(buf_flags(bp)&B_READ)) { error=EROFS;goto done; }
-    if ((count&511u) || block>disk_sectors || (uint64_t)(count/512)>disk_sectors-block) { error=EINVAL;goto done; }
+    if ((count&511u) || block>sectors || (uint64_t)(count/512)>sectors-block) { error=EINVAL;goto done; }
     if (!count) goto done;
     if (buf_map(bp,&data)) { error=EIO;goto done; }
     lck_mtx_lock(&msdc_lock);
     uint32_t cfg=rd(CFG),inten=rd(INTEN);uint8_t sector[512];
     wr(INTEN,0);wr(CFG,cfg|(1u<<3));
     while (completed<count) {
-        error=read_block(17,(uint32_t)block+completed/512,sector);
+        error=read_block(17,first+(uint32_t)block+completed/512,sector);
         if (error) break;
         memcpy(data+completed,sector,512);completed+=512;
     }
@@ -140,12 +144,12 @@ done:
     if (error) buf_seterror(bp,error);
     buf_biodone(bp);
 }
-static int disk_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,__unused int flag,__unused struct proc *p) {
+static int disk_ioctl(dev_t dev,u_long cmd,caddr_t data,__unused int flag,__unused struct proc *p) {
     switch (cmd) {
     case DKIOCGETBLOCKSIZE:
     case DKIOCGETPHYSICALBLOCKSIZE: *(uint32_t *)data=512;return 0;
     case DKIOCSETBLOCKSIZE: return *(uint32_t *)data==512 ? 0 : EINVAL;
-    case DKIOCGETBLOCKCOUNT: *(uint64_t *)data=disk_sectors;return 0;
+    case DKIOCGETBLOCKCOUNT: *(uint64_t *)data=minor(dev) ? root_sectors : disk_sectors;return 0;
     case DKIOCISWRITABLE: *(uint32_t *)data=0;return 0;
     case DKIOCGETMAXBLOCKCOUNTREAD: *(uint64_t *)data=128;return 0;
     case DKIOCGETMAXBLOCKCOUNTWRITE: *(uint64_t *)data=0;return 0;
@@ -154,7 +158,7 @@ static int disk_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,__unused int fl
     default:return ENOTTY;
     }
 }
-static int disk_psize(__unused dev_t dev) { return (int)disk_sectors; }
+static int disk_psize(dev_t dev) { return (int)(minor(dev) ? root_sectors : disk_sectors); }
 static int read_disk_sector(uint32_t block,uint8_t sector[512]) {
     lck_mtx_lock(&msdc_lock);
     uint32_t cfg=rd(CFG),inten=rd(INTEN);
@@ -164,15 +168,16 @@ static int read_disk_sector(uint32_t block,uint8_t sector[512]) {
     lck_mtx_unlock(&msdc_lock);
     return error;
 }
-static int disk_read(__unused dev_t dev,struct uio *uio,__unused int flags) {
+static int disk_read(dev_t dev,struct uio *uio,__unused int flags) {
     uint8_t sector[512];
-    uint64_t capacity=(uint64_t)disk_sectors*512;
+    uint32_t first=minor(dev) ? root_first : 0;
+    uint64_t capacity=(uint64_t)(minor(dev) ? root_sectors : disk_sectors)*512;
     if (uio_offset(uio)<0) return EINVAL;
     while (uio_resid(uio)>0 && (uint64_t)uio_offset(uio)<capacity) {
         uint64_t offset=(uint64_t)uio_offset(uio);
         unsigned skip=(unsigned)(offset&511u);
         int count=(int)MIN((uint64_t)uio_resid(uio),512u-skip);
-        int error=read_disk_sector((uint32_t)(offset/512),sector);
+        int error=read_disk_sector(first+(uint32_t)(offset/512),sector);
         if (error) return error;
         /* uio selects copyout for user buffers and preserves fault recovery. */
         error=uiomove((caddr_t)sector+skip,count,uio);
@@ -198,8 +203,48 @@ static int register_disk(uint32_t sectors) {
     disk_sectors=sectors;
     if (!devfs_make_node(makedev(bmajor,0),DEVFS_BLOCK,UID_ROOT,GID_OPERATOR,0440,"emmc0") ||
         !devfs_make_node(makedev(cmajor,0),DEVFS_CHAR,UID_ROOT,GID_OPERATOR,0440,"remmc0")) return ENXIO;
+    if (root_sectors) {
+        root_device=makedev(bmajor,1);
+        if (!devfs_make_node(root_device,DEVFS_BLOCK,UID_ROOT,GID_OPERATOR,0440,"emmcroot0") ||
+            !devfs_make_node(makedev(cmajor,1),DEVFS_CHAR,UID_ROOT,GID_OPERATOR,0440,"remmcroot0")) return ENXIO;
+    }
     printf("A04BR3 MSDC0: registered /dev/emmc0 and /dev/remmc0 read-only\n");
     return 0;
+}
+static int find_root_partition(const uint8_t header[512],uint32_t sectors) {
+    static uint8_t entries[128*128];
+    uint64_t lba=le64(header+72);
+    uint32_t count=le32(header+80),size=le32(header+84),expected=le32(header+88);
+    uint64_t first_usable=le64(header+40),last_usable=le64(header+48);
+    if (!count || count>128 || size!=128 || lba>=sectors || (count*size+511)/512>sectors-lba) return EINVAL;
+    unsigned bytes=count*size;
+    for (unsigned at=0;at<bytes;at+=512) {
+        uint8_t block[512];int error=read_block(17,(uint32_t)lba+at/512,block);
+        if (error) return error;
+        memcpy(entries+at,block,MIN(512u,bytes-at));
+    }
+    uint32_t crc=~0u;
+    for (unsigned i=0;i<bytes;i++) {
+        crc^=entries[i];
+        for (unsigned j=0;j<8;j++) crc=(crc>>1)^(0xedb88320u & (0u-(crc&1u)));
+    }
+    if (~crc!=expected) return EINVAL;
+    static const char wanted[]="userdata";
+    for (unsigned i=0;i<count;i++) {
+        const uint8_t *e=entries+i*size;unsigned n=0;
+        while (n<sizeof(wanted)-1 && e[56+n*2]==wanted[n] && !e[57+n*2]) n++;
+        if (n!=sizeof(wanted)-1 || e[56+n*2] || e[57+n*2]) continue;
+        uint64_t first=le64(e+32),last=le64(e+40);
+        if (root_sectors || first<first_usable || last>last_usable || first>last || last>=sectors) return EINVAL;
+        root_first=(uint32_t)first;root_sectors=(uint32_t)(last-first+1);
+    }
+    printf("A04BR3 MSDC0: GPT entries CRC verified; userdata first=%u sectors=%u\n",root_first,root_sectors);
+    return root_sectors ? 0 : ENOENT;
+}
+int a04br3_emmc_rootdev(dev_t *dev);
+int a04br3_emmc_rootdev(dev_t *dev) {
+    if (!root_sectors || !root_device) return ENXIO;
+    *dev=root_device;return 0;
 }
 void a04br3_msdc_probe(void);
 void a04br3_msdc_probe(void) {
@@ -230,7 +275,8 @@ void a04br3_msdc_probe(void) {
             le32(sector+16)!=header_crc(sector,size)) { error=EINVAL;break; }
         printf("A04BR3 MSDC0: GPT header CRC verified at LBA=%u entries_LBA=%llu count=%u size=%u\n",
             locations[i],le64(sector+72),le32(sector+80),le32(sector+84));
-        found=1;break;
+        error=find_root_partition(sector,sectors);
+        found=!error;break;
     }
     if (!error && !found) error=ENOENT;
     wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
