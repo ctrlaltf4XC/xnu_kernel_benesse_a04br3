@@ -930,7 +930,19 @@ bsd_init(void)
 			/* enforce sealedness */
 			int autherr = VNOP_IOCTL(rootvnode, FSIOC_KERNEL_ROOTAUTH, NULL, 0, vfs_context_kernel());
 			if (autherr) {
-				panic("rootvp not authenticated after mounting");
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+                unsigned allow_unsealed = 0;
+                PE_parse_boot_argn("a04br3.unsealed_root", &allow_unsealed, sizeof(allow_unsealed));
+                /* This development HFS root supplies no sealed-volume API.
+                 * Do not reinterpret a real authentication failure as success. */
+                if (allow_unsealed == 1 && (autherr == ENOTTY || autherr == ENOTSUP) &&
+                    strcmp(vfs_name(vnode_mount(rootvnode)), "hfs") == 0) {
+                    printf("A04BR3: explicit unsealed HFS root (rootauth unsupported: %d)\n", autherr);
+                } else
+#endif
+                {
+                    panic("rootvp not authenticated after mounting");
+                }
 			}
 		}
 	}

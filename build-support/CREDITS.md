@@ -79,3 +79,8 @@ f45890c754d5a4955971cb0b2ccbeed5f2a842ee and
 https://github.com/mouseos/edk2-mtk at
 1982d888c765f5b12f6e0dce71f1ed8bc92ac50b. Hardware addresses are MT8167
 specific; the reference phone's Qualcomm UFS driver is not used.
+
+Unsealed HFS root bring-up follows the problem documented by ios-sweet
+0029. A04BR3 requires the explicit a04br3.unsealed_root=1 boot argument and
+only permits an HFS root reporting an unsupported root-authentication ioctl;
+other authentication errors still fail. This is an unsigned development port.
