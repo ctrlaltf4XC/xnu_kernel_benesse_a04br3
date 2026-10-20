@@ -279,6 +279,46 @@ LEXT(LowExceptionVectorBase)
 LEXT(bootstrap_instructions)
 
 #endif /* defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) */
+#if defined(A04BR3)
+	.align 2
+	.globl EXT(a04br3_secondary_entry)
+LEXT(a04br3_secondary_entry)
+	msr		DAIFSet, #0xf
+	mrs		x1, CurrentEL
+	cmp		x1, #0x4
+	b.eq	La04br3_secondary_el1
+	cmp		x1, #0x8
+	b.ne	La04br3_secondary_bad_el
+	adrp	x1, EXT(LowExceptionVectorBase)@page
+	add		x1, x1, EXT(LowExceptionVectorBase)@pageoff
+	msr		VBAR_EL2, x1
+	/* No stage 2, AArch64 EL1, no EL2 interrupt or FP/debug traps. */
+	mov		x1, #(1 << 31)
+	msr		HCR_EL2, x1
+	msr		VTTBR_EL2, xzr
+	msr		CPTR_EL2, xzr
+	msr		MDCR_EL2, xzr
+	mov		x1, #3
+	msr		CNTHCTL_EL2, x1
+	msr		CNTVOFF_EL2, xzr
+	/* Known Armv8 SCTLR RES1 bits, M/C/I off, little endian. */
+	MOV64	x1, 0x30d00800
+	msr		SCTLR_EL1, x1
+	isb
+	adrp	x1, La04br3_secondary_el1@page
+	add		x1, x1, La04br3_secondary_el1@pageoff
+	msr		ELR_EL2, x1
+	mov		x1, #0x3c5			// DAIF masked, AArch64 EL1h
+	msr		SPSR_EL2, x1
+	eret
+La04br3_secondary_bad_el:
+	b		.
+La04br3_secondary_el1:
+	/* x0 is deliberately unused; reset_vector selects CPU data by MPIDR. */
+	msr		SPSel, #1
+	b		EXT(LowResetVectorBase)
+#endif /* A04BR3 */
+
 	.align 2
 	.globl EXT(resume_idle_cpu)
 LEXT(resume_idle_cpu)
@@ -745,6 +785,11 @@ common_start:
 	 */
 	tlbi	vmalle1
 	ic		iallu
+#endif
+
+#if defined(A04BR3)
+	dsb sy
+	isb
 #endif
 
 	/* If x21 is not 0, then this is either the start_cpu path or

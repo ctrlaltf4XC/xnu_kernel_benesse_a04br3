@@ -16,6 +16,7 @@
 #include <pexpert/arm/protos.h>
 static vm_offset_t distributor, cpu_interface;
 static volatile uint32_t ipi_count, timer_count;
+static uint32_t cpu_targets[MAX_CPUS];
 static uint32_t read_reg(vm_offset_t base, unsigned offset)
 {
     return *(volatile uint32_t *)(base + offset);
@@ -48,6 +49,13 @@ void a04br3_gic_init(void)
         kprintf("A04BR3 GICv2: mapped, timer INTID %u, self SGI %u\n",
             A04BR3_VTIMER_INTID, A04BR3_IPI_SGI);
     }
+    /* Read the banked GICv2 CPU target bit; do not assume logical IDs map
+     * to distributor target bits. Publish before enabling secondary IPIs. */
+    unsigned logical = cpu_number();
+    uint32_t target = read_reg(distributor, 0x800) & 0xff;
+    if (logical >= MAX_CPUS || !target || (target & (target - 1)))
+        panic("A04BR3 GICv2: invalid CPU target mask");
+    __atomic_store_n(&cpu_targets[logical], target, __ATOMIC_RELEASE);
     /* Banked SGI/PPI state for the boot CPU. Keep secure routing unchanged. */
     write_reg(distributor, 0x180, UINT32_MAX);
     write_reg(distributor, 0x280, 1u << A04BR3_VTIMER_INTID);
@@ -70,8 +78,8 @@ void a04br3_gic_init(void)
 uint32_t a04br3_gic_acknowledge(void)
 {
     uint32_t iar = read_reg(cpu_interface, 0x0c);
-    if ((iar & 0x3ff) == A04BR3_IPI_SGI) { ipi_count++; }
-    if ((iar & 0x3ff) == A04BR3_VTIMER_INTID) { timer_count++; }
+    if ((iar & 0x3ff) == A04BR3_IPI_SGI) { __atomic_add_fetch(&ipi_count, 1, __ATOMIC_RELAXED); }
+    if ((iar & 0x3ff) == A04BR3_VTIMER_INTID) { __atomic_add_fetch(&timer_count, 1, __ATOMIC_RELAXED); }
     return iar;
 }
 void a04br3_gic_complete(uint32_t iar)
@@ -82,6 +90,15 @@ void a04br3_gic_complete(uint32_t iar)
 }
 uint32_t a04br3_gic_ipi_count(void) { return ipi_count; }
 uint32_t a04br3_gic_timer_count(void) { return timer_count; }
+void a04br3_gic_signal_cpu(unsigned logical)
+{
+    if (logical >= MAX_CPUS) panic("A04BR3 GICv2: bad IPI CPU");
+    uint32_t target = __atomic_load_n(&cpu_targets[logical], __ATOMIC_ACQUIRE);
+    if (!target) panic("A04BR3 GICv2: CPU target not initialized");
+    __builtin_arm_dsb(DSB_ISHST);
+    write_reg(distributor, 0xf00, (target << 16) | A04BR3_IPI_SGI);
+    __builtin_arm_isb(ISB_SY);
+}
 void a04br3_gic_signal_self(void)
 {
     __builtin_arm_dsb(DSB_ISHST);

@@ -43,6 +43,7 @@ void a04br3_gic_init(void);
 uint32_t a04br3_gic_acknowledge(void);
 void a04br3_gic_complete(uint32_t iar);
 void a04br3_gic_signal_self(void);
+void a04br3_gic_signal_cpu(unsigned logical);
 uint32_t a04br3_gic_ipi_count(void);
 uint32_t a04br3_gic_timer_count(void);
 void a04br3_watchdog_quiesce(void);

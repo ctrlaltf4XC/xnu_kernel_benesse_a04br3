@@ -953,6 +953,10 @@ ml_parse_cpu_topology(void)
 	int64_t cluster_max_cpu_phys_id[MAX_CPU_CLUSTER_PHY_ID + 1];
 	const boolean_t cpus_boot_arg_present = PE_parse_boot_argn("cpus", &cpu_boot_arg, sizeof(cpu_boot_arg));
 	const boolean_t cpumask_boot_arg_present = PE_parse_boot_argn("cpumask", &cpumask_boot_arg, sizeof(cpumask_boot_arg));
+#if defined(A04BR3)
+    if (!cpus_boot_arg_present || !cpu_boot_arg) cpu_boot_arg = 1;
+    if (cpu_boot_arg > 4) cpu_boot_arg = 4;
+#endif
 
 	// The cpus=N and cpumask=N boot args cannot be used simultaneously. Flag this
 	// so that we trigger a panic later in the boot process, once serial is enabled.

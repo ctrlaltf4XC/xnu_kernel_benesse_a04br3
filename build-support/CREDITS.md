@@ -191,3 +191,5 @@ MT8167 command/FIFO layout was checked against the device's published Linux
 mtk-sd driver sources; no DMA or clock retuning is implied. Display metadata
 remains 800x1280. The optional low-load timer profile is selected by device
 source arguments and does not claim measured runtime speedup before testing.
+
+Opt-in A04BR3 SMP startup, physical reset input cache publication and bounded CPU-online sequencing adapt the design of dipa-studio/ios-sweet patch 0065 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. MT8167 uses Aff0 0..3 and GICv2 banked target masks; its trampoline deliberately omits GICv3 system registers. The hardware topology is checked against MediaTek MT8167/MT8516 Linux DTS and the existing board port.

@@ -1,7 +1,7 @@
 /*
- * Single-CPU bring-up for a04br3 using XNU's legacy IOCPU interface.
+ * Opt-in Cortex-A35 SMP using XNU IOCPU, PSCI and MT8167 GICv2.
  * The MT8167 GICv2 routes the architected timer and SGI1 via sleh_irq.
- * Secondary CPU startup and system suspend require separate platform work.
+ * Startup sequencing follows ios-sweet 0065; suspend remains unsupported.
  */
 #include <pexpert/arm64/board_config.h>
 
@@ -14,14 +14,35 @@
 #include <machine/atomic.h>
 #include <kern/clock.h>
 #include <kern/processor.h>
+#include <kern/thread.h>
+#include <pexpert/pexpert.h>
+extern "C" void a04br3_secondary_entry(void);
+extern "C" boolean_t a04br3_cpu_signal_is_enabled(unsigned int);
+class A04BR3CPU;
+static A04BR3CPU *registered_cpus[MAX_CPUS];
+static unsigned registered_count;
+
+static int32_t psci_cpu_on(uint64_t target, uint64_t entry, uint64_t context)
+{
+    register uint64_t x0 __asm__("x0") = 0xc4000003ULL;
+    register uint64_t x1 __asm__("x1") = target;
+    register uint64_t x2 __asm__("x2") = entry;
+    register uint64_t x3 __asm__("x3") = context;
+    __asm__ volatile("smc #0" : "+r"(x0), "+r"(x1), "+r"(x2), "+r"(x3) : :
+        "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
+        "x14", "x15", "x16", "x17", "cc", "memory");
+    return (int32_t)x0;
+}
 #include <mach/mach_time.h>
 #include <pexpert/arm/protos.h>
 
 class A04BR3CPU : public IOCPU {
 	OSDeclareDefaultStructors(A04BR3CPU);
 	const OSSymbol *cpuName = NULL;
+    unsigned initialized = 0;
 
 public:
+    static void startAll(void *, wait_result_t);
 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
 	void free(void) APPLE_KEXT_OVERRIDE;
 	void initCPU(bool boot) APPLE_KEXT_OVERRIDE;
@@ -38,18 +59,19 @@ bool
 A04BR3CPU::start(IOService *provider)
 {
 	const ml_topology_info_t *topology = ml_get_topology_info();
-	const ml_topology_cpu_t *cpu = topology->boot_cpu;
+	const ml_topology_cpu_t *cpu;
 	OSNumber *logical = OSDynamicCast(OSNumber, provider->getProperty("logical-cpu-id"));
 	OSData *reg = OSDynamicCast(OSData, provider->getProperty("reg"));
 
 	if (logical == NULL || reg == NULL || reg->getLength() != sizeof(uint32_t) ||
-	    logical->unsigned32BitValue() != cpu->cpu_id ||
-	    *(const uint32_t *)reg->getBytesNoCopy() != cpu->phys_id) {
+	    logical->unsigned32BitValue() >= topology->num_cpus) {
 		return false;
 	}
-	if (topology->num_cpus != 1) {
-		panic("A04BR3 CPU: only single-CPU bring-up is supported");
-	}
+    cpu = &topology->cpus[logical->unsigned32BitValue()];
+    if (topology->num_cpus > 4 || cpu->phys_id != cpu->cpu_id ||
+        *(const uint32_t *)reg->getBytesNoCopy() != cpu->phys_id) {
+        panic("A04BR3 CPU: invalid flat A35 topology");
+    }
 	IOLog("A04BR3 CPU: starting boot CPU registration\n");
 	if (!IOCPU::start(provider)) {
 		return false;
@@ -79,26 +101,51 @@ A04BR3CPU::start(IOService *provider)
 		panic("A04BR3 CPU: PMI routing is not implemented");
 	}
 
-	/* Re-enter the boot CPU through cpu_machine_init -> PE_cpu_machine_init. */
-	IOLog("A04BR3 CPU: processor registered; starting boot CPU\n");
-	result = processor_start(machProcessor);
-	if (result != KERN_SUCCESS || getCPUState() != kIOCPUStateRunning) {
-		panic("A04BR3 CPU: processor_start failed: %d", result);
-	}
-	/* Late platform stage, after IRQ self-test: never touch TOPRGU in shim. */
-	a04br3_watchdog_quiesce();
-	IOLog("A04BR3 CPU: timer IRQ count %u, self IPI count %u\n",
-	    a04br3_gic_timer_count(), a04br3_gic_ipi_count());
-	ml_cpu_init_completed();
-	cpusRunning();
-	registerService();
-	IOService::publishResource(gIOAllCPUInitializedKey, kOSBooleanTrue);
+    registerService();
+    __atomic_store_n(&registered_cpus[cpu->cpu_id], this, __ATOMIC_RELEASE);
+    __atomic_add_fetch(&registered_count, 1, __ATOMIC_ACQ_REL);
+    if (cpu == topology->boot_cpu) {
+        thread_t thread;
+        result = kernel_thread_start(&A04BR3CPU::startAll, NULL, &thread);
+        if (result != KERN_SUCCESS) panic("A04BR3 CPU: startup thread %d", result);
+        thread_deallocate(thread);
+    }
+    return true;
+}
 
-	/* Announce completion only after registration, startup and SGI validation. */
-	ml_set_max_cpus(topology->max_cpu_id + 1);
-	IOLog("A04BR3 CPU: boot CPU %u registered, SGI1 verified, initialization complete\n",
-	    getCPUNumber());
-	return true;
+void
+A04BR3CPU::startAll(void *arg __unused, wait_result_t result __unused)
+{
+    const ml_topology_info_t *topology = ml_get_topology_info();
+    uint64_t deadline;
+    nanoseconds_to_deadline(10 * NSEC_PER_SEC, &deadline);
+    while (__atomic_load_n(&registered_count, __ATOMIC_ACQUIRE) != topology->num_cpus) {
+        if (mach_absolute_time() > deadline) panic("A04BR3 CPU: registration timeout");
+        IOSleep(1);
+    }
+    if (topology->boot_cpu->cpu_id != 0 || topology->boot_cpu->phys_id != 0)
+        panic("A04BR3 CPU: boot CPU must be zero");
+    for (unsigned i = 0; i < topology->num_cpus; i++) {
+        A04BR3CPU *cpu = __atomic_load_n(&registered_cpus[i], __ATOMIC_ACQUIRE);
+        kern_return_t kr = processor_start(cpu->machProcessor);
+        if (kr != KERN_SUCCESS) panic("A04BR3 CPU: start %u returned %d", i, kr);
+        nanoseconds_to_deadline(5 * NSEC_PER_SEC, &deadline);
+        while (!__atomic_load_n(&cpu->initialized, __ATOMIC_ACQUIRE) ||
+            !a04br3_cpu_signal_is_enabled(i)) {
+            if (mach_absolute_time() > deadline)
+                panic("A04BR3 CPU: CPU %u reset/MMU/GIC startup timeout", i);
+            IOSleep(1);
+        }
+        IOLog("A04BR3 CPU: CPU %u online, SGI1 verified\n", i);
+    }
+    /* MSI/storage remain serialized by their existing controller locks. */
+    a04br3_watchdog_quiesce();
+    ml_cpu_init_completed();
+    __atomic_load_n(&registered_cpus[0], __ATOMIC_ACQUIRE)->cpusRunning();
+    IOService::publishResource(gIOAllCPUInitializedKey, kOSBooleanTrue);
+    ml_set_max_cpus(topology->max_cpu_id + 1);
+    IOLog("A04BR3 CPU: %u/%u CPUs initialized\n", topology->num_cpus, topology->num_cpus);
+    thread_terminate(current_thread());
 }
 
 void
@@ -115,38 +162,34 @@ A04BR3CPU::initCPU(bool boot)
 		panic("A04BR3 CPU: resume is not implemented");
 	}
 	assert(cpu_number() == (int)getCPUNumber());
-	assert(ml_get_interrupts_enabled());
-	ml_broadcast_cpu_event(CPU_BOOTED, getCPUNumber());
-
-	IOLog("A04BR3 CPU: validating GICv2 self SGI\n");
-	/* A real GIC interrupt clears SIGPdisabled in cpu_signal_handler. */
-	uint64_t deadline;
-	nanoseconds_to_deadline(NSEC_PER_SEC, &deadline);
-	uint32_t previous_ipis = a04br3_gic_ipi_count();
-	signalCPU(this);
-	while (a04br3_gic_ipi_count() == previous_ipis || !ml_cpu_signal_is_enabled()) {
-		if (mach_absolute_time() > deadline) {
-			panic("A04BR3 CPU: SGI1 self-test timed out");
-		}
-		__asm__ volatile("yield");
-	}
-	setCPUState(kIOCPUStateRunning);
+    ml_broadcast_cpu_event(CPU_BOOTED, getCPUNumber());
+    /* Secondary init runs with IRQs masked: wait for delivery in startAll. */
+    signalCPU(this);
+    setCPUState(kIOCPUStateRunning);
+    __atomic_store_n(&initialized, 1, __ATOMIC_RELEASE);
 }
 
 void
 A04BR3CPU::signalCPU(IOCPU *target)
 {
-	/* Only the boot CPU is registered by this driver. */
-	if (target != this || cpu_number() != (int)getCPUNumber()) {
-		panic("A04BR3 CPU: secondary CPU signalling is not implemented");
-	}
-	a04br3_gic_signal_self();
+    unsigned logical = target->getCPUNumber();
+    if (logical >= ml_get_topology_info()->num_cpus)
+        panic("A04BR3 CPU: invalid IPI target %u", logical);
+    a04br3_gic_signal_cpu(logical);
 }
 
 kern_return_t
-A04BR3CPU::startCPU(vm_offset_t start_paddr __unused, vm_offset_t arg_paddr __unused)
+A04BR3CPU::startCPU(vm_offset_t start_paddr, vm_offset_t arg_paddr)
 {
-	return KERN_NOT_SUPPORTED;
+    unsigned logical = getCPUNumber();
+    if (start_paddr || arg_paddr || logical == 0 || initialized)
+        panic("A04BR3 CPU: unsupported restart %u", logical);
+    vm_offset_t entry = ml_static_vtop((vm_offset_t)&a04br3_secondary_entry);
+    __builtin_arm_dsb(DSB_SY);
+    int32_t rc = psci_cpu_on(ml_get_topology_info()->cpus[logical].phys_id, entry, logical);
+    IOLog("A04BR3 CPU: CPU_ON %u entry=0x%llx result=%d\n", logical, (uint64_t)entry, rc);
+    if (rc) panic("A04BR3 CPU: CPU_ON %u failed %d", logical, rc);
+    return KERN_SUCCESS;
 }
 
 void
