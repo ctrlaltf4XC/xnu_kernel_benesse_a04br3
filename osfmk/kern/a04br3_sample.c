@@ -11,6 +11,32 @@
 #include <string.h>
 #include <kern/kalloc.h>
 #include <mach/vm_region.h>
+/* dyld_image_info is three native-width user pointers/words on arm64.
+ * This is an approximate bounded snapshot, not a task stop or trusted map. */
+static void a04br3_sample_images(const char *name,int pid,task_t task)
+{
+    struct { uint32_t version,count;uint64_t array; } info;
+    vm_map_t map=get_task_map(task);
+    uint64_t at=task_get_all_image_info_addr(task);
+    if(!at || vm_map_read_user(map,at,&info,sizeof(info))!=KERN_SUCCESS ||
+        !info.version || !info.array || info.count>4096)return;
+    unsigned limit=info.count<1024?info.count:1024, printed=0;
+    for(unsigned offset=0;offset<limit && printed<32;offset+=16){
+        struct {uint64_t base,path,modified;} images[16];
+        unsigned n=limit-offset<16?limit-offset:16;
+        if(vm_map_read_user(map,info.array+(uint64_t)offset*sizeof(images[0]),
+            images,n*sizeof(images[0]))!=KERN_SUCCESS)break;
+        for(unsigned i=0;i<n && printed<32;i++){
+            if(images[i].base<0x100000000ULL || images[i].base>=0x180000000ULL || !images[i].path)continue;
+            char path[192];bzero(path,sizeof(path));
+            unsigned bytes=PAGE_SIZE-(images[i].path&PAGE_MASK);
+            if(bytes>sizeof(path)-1)bytes=sizeof(path)-1;
+            if(vm_map_read_user(map,images[i].path,path,bytes)!=KERN_SUCCESS)continue;
+            printf("A04BR3_IMAGE %s[%d] base=0x%llx path=%s\n",name,pid,images[i].base,path);
+            printed++;
+        }
+    }
+}
 void a04br3_sample_task(const char *, int, task_t);
 void
 a04br3_sample_task(const char *name, int pid, task_t task)
@@ -41,6 +67,7 @@ a04br3_sample_task(const char *name, int pid, task_t task)
         count++;
     }
     task_unlock(task);
+    if(strnstr(name,"migrationplugin",32))a04br3_sample_images(name,pid,task);
     printf("A04BR3_SAMPLE %s[%d] threads=%d mh=0x%llx slide=0x%llx\n",
         name, pid, total, header, slide);
     for (unsigned i = 0; i < count; i++) {
