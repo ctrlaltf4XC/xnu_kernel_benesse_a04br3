@@ -116,3 +116,8 @@ patches 0037 and 0039 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19.
 The native Apple bindfs source is already present; the board configuration
 now includes it for launchd firmware directory mounts. kern.coredump can
 still explicitly enable user core files.
+
+Bounded native-process register snapshots draw on ios-sweet 0054 at the
+reference revision above, rewritten to copy at most 16 register records
+per task, without user memory reads or printing while holding task locks.
+Three snapshots at 120-second intervals are enabled only for full-root bring-up.

@@ -315,6 +315,7 @@ int a04br3_emmc_rootdev(dev_t *dev) {
     if (!root_sectors || !root_device) return ENXIO;
     *dev=root_device;return 0;
 }
+extern void a04br3_sample_start(void);
 void a04br3_msdc_probe(void);
 void a04br3_msdc_probe(void) {
     unsigned enabled=0;
@@ -354,6 +355,7 @@ void a04br3_msdc_probe(void) {
         unsigned enabled=0;
         write_enabled=PE_parse_boot_argn("a04br3.emmc_rw",&enabled,sizeof(enabled)) && enabled==1;
         error=register_disk(sectors);
+        if (!error) a04br3_sample_start();
     }
     printf("A04BR3 MSDC0: read-only probe %s error=%d R1=0x%08x\n",
         error ? "FAILED" : "PASS",error,response);

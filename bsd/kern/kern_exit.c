@@ -1775,6 +1775,7 @@ proc_crash_coredump(proc_t p)
 static void
 proc_handle_critical_exit(proc_t p, int rv)
 {
+
 	if (!proc_should_trigger_panic(p, rv)) {
 		// No panic, bail out
 		return;
@@ -1844,6 +1845,22 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
 	struct rusage_superset *rup;
 	int kr = 0;
 	int create_corpse = FALSE;
+
+#if defined(A04BR3)
+	/* Native launchd logs move off UART after early boot. Retain bounded
+	 * abnormal-exit evidence even for services that do not panic PID 1. */
+	static unsigned a04br3_exit_count;
+	if ((WTERMSIG(rv) || WEXITSTATUS(rv)) &&
+	    os_atomic_inc_orig(&a04br3_exit_count, relaxed) < 128) {
+		os_reason_t reason = p->p_exit_reason;
+		printf("A04BR3_EXIT %s[%d] signal=%d status=%d namespace=%u code=0x%llx reason=%s\n",
+		    p->p_name, proc_getpid(p), WTERMSIG(rv), WEXITSTATUS(rv),
+		    reason ? reason->osr_namespace : 0,
+		    reason ? reason->osr_code : 0ULL,
+		    reason && exit_reason_get_string_desc(reason) ?
+		    exit_reason_get_string_desc(reason) : "none");
+	}
+#endif
 
 	if (p->p_crash_behavior != 0 || p == initproc) {
 		proc_handle_critical_exit(p, rv);
