@@ -202,10 +202,21 @@ OSErr hfs_MountHFSPlusVolume(struct hfsmount *hfsmp, HFSPlusVolumeHeader *vhp,
 	/* don't mount a writable volume if its dirty, it must be cleaned by fsck_hfs */
 	if ((hfsmp->hfs_flags & HFS_READ_ONLY) == 0 && hfsmp->jnl == NULL &&
 	    (SWAP_BE32(vhp->attributes) & kHFSVolumeUnmountedMask) == 0) {
-		if (HFS_MOUNT_DEBUG) {
-			printf("hfs_mounthfsplus: cannot mount dirty non-journaled volumes\n");
-		}
-		return (EINVAL);
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+        unsigned rootrw=0,emmc_rw=0;
+        bool development_root=(vfs_flags(hfsmp->hfs_mp)&MNT_ROOTFS) &&
+            PE_parse_boot_argn("a04br3.root_rw",&rootrw,sizeof(rootrw)) && rootrw==1 &&
+            PE_parse_boot_argn("a04br3.emmc_rw",&emmc_rw,sizeof(emmc_rw)) && emmc_rw==1;
+        if (development_root) {
+            printf("A04BR3 HFS: explicit development dirty non-journaled root mount\n");
+        } else
+#endif
+        {
+            if (HFS_MOUNT_DEBUG) {
+                printf("hfs_mounthfsplus: cannot mount dirty non-journaled volumes\n");
+            }
+            return EINVAL;
+        }
 	}
 
 	/* Make sure we can live with the physical block size. */

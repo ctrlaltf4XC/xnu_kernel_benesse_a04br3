@@ -77,6 +77,9 @@
  * External virtual filesystem routines
  */
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#include <pexpert/pexpert.h>
+#endif
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc_internal.h>
@@ -1257,6 +1260,15 @@ vfs_mountroot(void)
 
 		mp = vfs_rootmountalloc_internal(vfsp, "root_device");
 		mp->mnt_devvp = rootvp;
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+        unsigned rootrw=0,emmc_rw=0;
+        if (!strcmp(vfsp->vfc_name,"hfs") &&
+            PE_parse_boot_argn("a04br3.root_rw",&rootrw,sizeof(rootrw)) && rootrw==1 &&
+            PE_parse_boot_argn("a04br3.emmc_rw",&emmc_rw,sizeof(emmc_rw)) && emmc_rw==1) {
+            mp->mnt_flag &= ~MNT_RDONLY;
+            printf("A04BR3: explicit writable HFS root enabled\n");
+        }
+#endif
 
 		if (vfsp->vfc_mountroot) {
 			error = (*vfsp->vfc_mountroot)(mp, rootvp, ctx);

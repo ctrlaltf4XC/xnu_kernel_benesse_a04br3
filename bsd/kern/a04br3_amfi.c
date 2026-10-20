@@ -49,6 +49,8 @@ extern void osobject_release(void *object);
 static TUNABLE(uint32_t, a04br3_amfi_debug, "a04br3_amfi_debug", 0);
 /* Explicit development trust substitute; never enabled by default. */
 static TUNABLE(uint32_t, a04br3_platform_root, "a04br3.platform_root", 0);
+static TUNABLE(uint32_t, a04br3_root_rw, "a04br3.root_rw", 0);
+static TUNABLE(uint32_t, a04br3_emmc_rw, "a04br3.emmc_rw", 0);
 
 /* The entitlements object of a process's main binary, or NULL. */
 static void *
@@ -264,7 +266,8 @@ a04br3_amfi_vnode_check_signature(struct vnode *vp, __unused struct label *label
 	/* XNU has validated this signature before invoking the policy. */
 	*cs_flags |= CS_SIGNED;
 	if (a04br3_platform_root == 1 && mp != NULL &&
-	    (vfs_flags(mp) & MNT_ROOTFS) && (vfs_flags(mp) & MNT_RDONLY)) {
+	    (vfs_flags(mp) & MNT_ROOTFS) && ((vfs_flags(mp) & MNT_RDONLY) ||
+        (a04br3_root_rw==1 && a04br3_emmc_rw==1))) {
 		*cs_flags |= CS_PLATFORM_BINARY;
 	}
 	if (cs_blob != cs_blob->csb_ro_addr && cs_blob->csb_entitlements == NULL) {

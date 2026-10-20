@@ -94,3 +94,13 @@ ios-sweet 0035/0036 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. XML must
 match the code directory; DER-only signatures grant no entitlements.
 A04BR3 additionally requires a04br3.platform_root=1 and a read-only root
 for development platform status; this is not production signature trust.
+
+Writable HFS root development mode follows ios-sweet 0031 (same reference
+revision above), gated by both a04br3.root_rw=1 and a04br3.emmc_rw=1.
+MT8167 PIO write command/register fields were cross-checked against the
+local MT8167 Linux driver (eb47f42e1f84fe5716ef239620725f82718a620a,
+drivers/mmc/host/mtk-sd.c); no Linux driver code is copied. CMD24 writes
+are limited to GPT userdata, with CMD13 programming completion and optional
+EXT_CSD FLUSH_CACHE. Whole-disk and raw character writes remain denied.
+After a writable boot, an old generated HFS image is no longer a valid
+delta baseline. Restore a complete generated image for the next root change.
