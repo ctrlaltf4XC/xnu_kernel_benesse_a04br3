@@ -9,6 +9,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+from incremental import source_files, dependency_source_digest
 
 SUPPORT = Path(__file__).resolve().parent
 ROOT = SUPPORT.parent
@@ -25,7 +26,7 @@ def main():
     parser.add_argument('--install-kdk', action='store_true')
     args = parser.parse_args()
     if platform.system() != 'Darwin':
-        parser.error('macOS/Xcode required; use the private GitHub workflow')
+        parser.error('macOS/Xcode required; use the GitHub workflow')
     out = args.out.resolve()
     if out.exists() and any(out.iterdir()):
         parser.error('output directory must be empty for a clean source build')
@@ -59,7 +60,9 @@ def main():
     for entry in dependencies['projects']:
         shutil.copytree(SUPPORT / entry['source_path'], work / entry['name'], symlinks=True)
     metadata = dict(xcode=version, sdk=sdk, dependencies=dependencies,
-                    source_commit=os.environ.get('GITHUB_SHA'), full_kernel_built=False)
+                    source_commit=os.environ.get('GITHUB_SHA'), full_kernel_built=False,
+                    copied_source_files=source_files(ROOT),
+                    dependency_source_sha256=dependency_source_digest())
     (out / 'build.json').write_text(json.dumps(metadata, indent=2) + '\n')
     env = dict(os.environ, KDKROOT=str(kdk))
     run(['bash', SUPPORT / 'driver.sh', work], env=env)

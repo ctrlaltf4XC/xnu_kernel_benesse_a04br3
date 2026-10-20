@@ -1,22 +1,44 @@
 # A04BR3 build runner debugging
 
-The manual Actions workflow copies this repository's selected revision without Git history, starts Upterm 0.38.0 with `debug.pub` as its allowed client key, and builds using Xcode 15.4 and the declared KDK. Upterm is an external terminal relay (https://github.com/owenthereal/upterm); it is a debugging dependency, not a kernel dependency.
+All kernel and dependency fixes belong in this source repository before a build.
+The device repository locks the selected kernel and bootshim commits. No source
+correction is stored only inside an Actions runner. A runner can be discarded:
+the clean builder reconstructs it from this repository and its declared SDK/KDK.
 
-The `a04br3/ssh` commit status contains the SSH command. Use the private key corresponding to `debug.pub`; no private key is included in the repository. For another maintainer, replace the public key with their own before dispatching. Never upload a private key.
+The workflow copies source without Git history and builds with Xcode 15.4.
+The `a04br3/ssh` commit status publishes the Upterm connection command. Only the
+client key corresponding to `debug.pub` is accepted. Never upload a private key.
+SSH retention is opt-in, bounded to 60 minutes after the build; the whole job
+has a 360-minute limit. Keep the same runner through hardware tests and repairs
+within that bound. A disconnected guest shell must not end the hosting command.
+The workflow uploads the kernel, build.json and build log before retaining SSH.
 
-The runner retains the workspace after a failed build. From its working directory, inspect `out/build.log`. To retry incrementally after changing the copied sources under `out/kernel/work/xnu`, run:
+## Incremental source rebuild
+
+Commit and push a correction locally first. Copy that exact source archive into
+a new directory on the same runner (without `.git`), then invoke its builder:
 
 ```sh
-bash source/build-support/driver.sh "$PWD/out/kernel/work" > out/retry.log 2>&1
+GITHUB_SHA=COMMIT gh api repos/mouseos/xnu_kernel_benesse_a04br3/tarball/COMMIT > out/repair-source.tar.gz
+mkdir out/repair-source
+tar -xzf out/repair-source.tar.gz --strip-components=1 -C out/repair-source
+python3 out/repair-source/build-support/incremental.py \
+  --source-commit COMMIT --out "$PWD/out/kernel" > out/repair.log 2>&1
 ```
 
-Record every source correction in this repository and rerun a clean build before claiming reproducibility. An incremental build alone is diagnostic evidence. Existing exported headers under `out/kernel/work/fakeroot` may need regeneration when a header or its export list changes.
+Use a new archive directory for each correction. The script copies changed
+source files, removes source files deleted since the previous manifest, keeps
+unchanged timestamps, and invokes the checked-in driver. Dependency sources
+must still match the prior build declaration. No SDK reinstallation or dependency
+rebuild is needed when only kernel source changes. The driver separately tracks
+the Cortex-A35 firehose build signature so incompatible archives are rebuilt.
+Older work directories without a source manifest require one clean build.
 
-The expected installed kernel is `out/kernel/work/fakeroot/System/Library/Kernels/kernel.development.a04br3`. The clean Python builder produces the kernel copy and `build.json` only after the driver succeeds and that file exists. Do not infer success from an SSH connection or header generation.
+The builder marks metadata incomplete before syncing/building and publishes a
+new kernel and successful metadata only after the driver succeeds. Generated
+objects are disposable; never make source edits only in `out/kernel/work/xnu`.
+An incremental result is distinct from a clean-build reproduction check.
 
-End the retained runner with `touch /tmp/a04br3-debug-done`. The job also has a 120-minute limit. Transfer needed logs and outputs before ending it. The current diagnostic workflow avoids artifact upload because account artifact storage was full; that does not affect compilation.
-
-A failed automated build is reported as a failed job after the retained session
-ends, even if manual repair later succeeds. Validate the final source revision
-with a fresh source archive and output directory on the same runner before
-claiming a clean build. This reuses the installed Xcode/KDK, not failed objects.
+End a retained runner with `touch /tmp/a04br3-debug-done`. Confirm the job has
+actually completed. Cancellation, a live runner, a live SSH host, and an active
+compiler are different states; an SSH failure alone proves no retention deadline.
