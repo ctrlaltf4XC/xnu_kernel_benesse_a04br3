@@ -68,3 +68,8 @@ the declared SDK supplies TargetConditionals.h through the build driver.
 The HFS volume UUID path uses MD5. Its legacy provider follows ios-sweet
 0027 and includes BearSSL md5/dec32le/enc32le at the already pinned commit,
 with the same preserved MIT license. It is not used for security decisions.
+
+The initial read-only MSDC0 probe adapts mouseos EDK2
+Mt8167Pkg/Drivers/EmmcBlockIoDxe/EmmcBlockIoDxe.c and A04BR3
+SdCardBlockIoDxe register definitions (BSD-2-Clause-Patent). It retains LK
+clock/timing/card state, sends CMD13/CMD8/CMD17, and restores host CFG/INTEN.

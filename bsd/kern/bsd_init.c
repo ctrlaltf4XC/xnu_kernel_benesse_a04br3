@@ -695,6 +695,8 @@ bsd_init(void)
 	/* HFS is built in on A04BR3: register it like its kext would, before mounting root. */
 	extern void a04br3_hfs_register(void);
 	a04br3_hfs_register();
+	extern void a04br3_msdc_probe(void);
+	a04br3_msdc_probe();
 #endif
 
 #if CONFIG_PROC_UUID_POLICY
