@@ -8,7 +8,7 @@
 #include <vm/vm_shared_region.h>
 #include <vm/vm_map.h>
 #include <kern/misc_protos.h>
-#include <libkern/libkern.h>
+#include <string.h>
 #include <kern/kalloc.h>
 #include <mach/vm_region.h>
 void a04br3_sample_task(const char *, int, task_t);
@@ -89,7 +89,7 @@ a04br3_crash_strings(void)
             (info.protection & (VM_PROT_READ | VM_PROT_WRITE)) != (VM_PROT_READ | VM_PROT_WRITE) ||
             info.user_tag < 1 || info.user_tag > 11) continue;
         for (vm_map_offset_t off = 0; off < size && lines < 256 && scanned < (64ULL << 20); off += 65536) {
-            size_t len = MIN(size - off, 65536);
+            size_t len = size - off < 65536 ? (size_t)(size - off) : 65536;
             scanned += len; /* Bound attempts too, including unreadable pages. */
             if (vm_map_read_user(map, base + off, buf, len) != KERN_SUCCESS) continue;
             size_t start = 0;
@@ -100,7 +100,7 @@ a04br3_crash_strings(void)
                 }
                 if (i - start >= 24 && spaces >= 2) {
                     char text[192];
-                    size_t n = MIN(i - start, sizeof(text) - 1);
+                    size_t n = i - start < sizeof(text) - 1 ? i - start : sizeof(text) - 1;
                     memcpy(text, buf + start, n);text[n] = 0;
                     printf("A04BR3_REASON %s\n", text);lines++;
                 }
