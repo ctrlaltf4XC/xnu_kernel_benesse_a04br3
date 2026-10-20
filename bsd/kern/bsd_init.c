@@ -691,6 +691,11 @@ bsd_init(void)
 	bsd_init_kprintf("calling vfsinit\n");
 	vfsinit();
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+	extern void a04br3_amfi_policy_register(void);
+	a04br3_amfi_policy_register();
+#endif
+
 #if A04BR3_HFS
 	/* HFS is built in on A04BR3: register it like its kext would, before mounting root. */
 	extern void a04br3_hfs_register(void);

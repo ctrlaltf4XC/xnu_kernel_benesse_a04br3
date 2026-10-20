@@ -88,3 +88,9 @@ other authentication errors still fail. This is an unsigned development port.
 Portable kernel SHA-1 and SHA-384/512 adapters follow ios-sweet patches
 0032/0033 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. BearSSL hash and
 big-endian codec sources use the existing pinned revision and MIT license.
+
+XML entitlement parsing and development platform-binary policy adapt
+ios-sweet 0035/0036 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. XML must
+match the code directory; DER-only signatures grant no entitlements.
+A04BR3 additionally requires a04br3.platform_root=1 and a read-only root
+for development platform status; this is not production signature trust.
