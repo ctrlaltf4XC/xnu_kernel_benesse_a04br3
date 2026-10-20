@@ -124,6 +124,7 @@ osfmk/kern/debug.c			standard
 osfmk/kern/ecc_logging.c			optional config_ecc_logging
 osfmk/kern/energy_perf.c		standard
 osfmk/kern/exception.c		standard
+osfmk/kern/a04br3_sample.c		standard
 osfmk/kern/extmod_statistics.c		standard
 osfmk/kern/host.c			standard
 osfmk/kern/host_notify.c		standard
