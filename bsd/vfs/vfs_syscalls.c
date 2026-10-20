@@ -9676,6 +9676,21 @@ out1:
 	return error;
 }
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+/* Called only by gated full writable HFS root preparation before launchd.
+ * Fixed paths, existing rename transaction, no replacement or symlink walks. */
+int a04br3_audio_bundle_move(unsigned restore);
+int a04br3_audio_bundle_move(unsigned restore)
+{
+    const char *active = "/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin";
+    const char *disabled = "/Library/Audio/Plug-Ins/HAL.disabled/VirtualAudio.plugin";
+    return renameat_internal(vfs_context_kernel(), AT_FDCWD,
+        CAST_USER_ADDR_T(restore ? disabled : active), AT_FDCWD,
+        CAST_USER_ADDR_T(restore ? active : disabled), UIO_SYSSPACE,
+        RENAME_EXCL | RENAME_NOFOLLOW_ANY);
+}
+#endif
+
 int
 rename(__unused proc_t p, struct rename_args *uap, __unused int32_t *retval)
 {

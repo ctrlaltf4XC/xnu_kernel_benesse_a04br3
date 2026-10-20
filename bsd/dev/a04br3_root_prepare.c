@@ -58,6 +58,30 @@ prepare_directory(const char *path, int *created)
     return error;
 }
 
+static int prepare_audio(unsigned restore)
+{
+    const char *active = "/Library/Audio/Plug-Ins/HAL/VirtualAudio.plugin";
+    const char *disabled = "/Library/Audio/Plug-Ins/HAL.disabled/VirtualAudio.plugin";
+    vfs_context_t ctx = vfs_context_kernel();
+    int created = 0;
+    int error = prepare_directory(restore ? "/Library/Audio/Plug-Ins/HAL" :
+        "/Library/Audio/Plug-Ins/HAL.disabled", &created);
+    if(error)return error;
+    vnode_t vp = NULLVP;
+    error = vnode_lookup(restore ? disabled : active, VNODE_LOOKUP_NOFOLLOW, &vp, ctx);
+    if(error == ENOENT) {
+        error = vnode_lookup(restore ? active : disabled, VNODE_LOOKUP_NOFOLLOW, &vp, ctx);
+        if(error)return error;
+        error = vnode_isdir(vp) && vnode_mount(vp)==vnode_mount(rootvnode) ? 0 : ENOTDIR;
+        vnode_put(vp);return error;
+    }
+    if(error)return error;
+    error = vnode_isdir(vp) && vnode_mount(vp)==vnode_mount(rootvnode) ? 0 : ENOTDIR;
+    vnode_put(vp);if(error)return error;
+    extern int a04br3_audio_bundle_move(unsigned restore);
+    return a04br3_audio_bundle_move(restore);
+}
+
 void
 a04br3_root_prepare(void)
 {
@@ -86,5 +110,13 @@ a04br3_root_prepare(void)
         printf("A04BR3 ROOT: %s %s error=%d\n", paths[i], created ? "created" : "existing", error);
         if (error) panic("A04BR3 root prepare failed: %s error=%d", paths[i], error);
     }
+    unsigned audio = 0;
+    PE_parse_boot_argn("a04br3.no_va", &audio, sizeof(audio));
+    if(audio==1 || audio==2) {
+        int error=prepare_audio(audio==2);
+        printf("A04BR3 ROOT: VirtualAudio %s error=%d\n",audio==2?"restored":"disabled",error);
+        if(error)panic("A04BR3 VirtualAudio disposition failed %d",error);
+    }
+
 }
 #endif

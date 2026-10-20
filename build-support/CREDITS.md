@@ -201,3 +201,9 @@ Platform/Benesse/A04BR3Pkg/Drivers/SdCardBlockIoDxe/SdCardBlockIoDxe.c.
 XNU owns one private contiguous bounce allocation, translates through pmap,
 and performs explicit cache maintenance. PIO/DMA comparison gates enablement.
 Controller timing, voltage and writes remain unchanged.
+
+VirtualAudio isolation follows the reversible HAL.disabled directory layout
+documented by dipa-studio/ios-sweet NOTES.md at fdad0de8dc0e75c5ea84762adc03f7232dc91f19.
+The optional A04BR3 root-preparation move uses XNU renameat_internal with kernel
+paths, no-follow and exclusive destination flags, before donor launchd starts.
+It does not modify Apple executable bytes or assert a completed migration.
