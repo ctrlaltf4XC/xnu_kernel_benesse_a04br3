@@ -52,6 +52,9 @@
 #include <machine/limits.h>
 
 #include <pexpert/arm/protos.h>
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#include <arm/machine_cpu.h>
+#endif
 #include <pexpert/arm64/apple_arm64_regs.h>
 #include <pexpert/arm64/board_config.h>
 

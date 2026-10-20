@@ -6,7 +6,9 @@
 #include <pexpert/arm64/board_config.h>
 #if defined(A04BR3)
 #include <stdint.h>
-#include <kern/misc_protos.h>
+#include <pexpert/pexpert.h>
+#include <pexpert/protos.h>
+#include <kern/debug.h>
 #include <machine/machine_routines.h>
 #include <arm64/proc_reg.h>
 #include <pexpert/device_tree.h>
