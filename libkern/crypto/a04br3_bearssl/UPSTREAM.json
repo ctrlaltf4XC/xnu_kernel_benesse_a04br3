@@ -10,7 +10,13 @@
     "LICENSE.txt",
     "src/hash/md5.c",
     "src/codec/dec32le.c",
-    "src/codec/enc32le.c"
+    "src/codec/enc32le.c",
+    "src/hash/sha1.c",
+    "src/hash/sha2big.c",
+    "src/codec/dec32be.c",
+    "src/codec/enc32be.c",
+    "src/codec/dec64be.c",
+    "src/codec/enc64be.c"
   ],
   "adaptation": "Kernel limits header path; built-in wrappers derive from ios-sweet0020."
 }

@@ -145,3 +145,10 @@ libkern/libclosure/runtime.cpp      optional config_blocks
 libkern/libclosure/libclosuredata.c optional config_blocks
 
 libkern/compression/compression.c	standard
+
+libkern/crypto/a04br3_sha1.c	optional crypto
+libkern/crypto/a04br3_sha2big.c	optional crypto
+libkern/crypto/a04br3_dec32be.c	optional crypto
+libkern/crypto/a04br3_enc32be.c	optional crypto
+libkern/crypto/a04br3_dec64be.c	optional crypto
+libkern/crypto/a04br3_enc64be.c	optional crypto

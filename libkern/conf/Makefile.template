@@ -44,6 +44,24 @@ a04br3_md5.o_CFLAGS_ADD += -mgeneral-regs-only
 a04br3_dec32le.o_CFLAGS_ADD += -mgeneral-regs-only
 a04br3_enc32le.o_CFLAGS_ADD += -mgeneral-regs-only
 corecrypto_md5.o_CFLAGS_ADD += -mgeneral-regs-only
+# Portable SHA providers; adapted from ios-sweet 0032/0033.
+a04br3_sha1.o_INCFLAGS = $(A04BR3_AES_INC)
+a04br3_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
+a04br3_sha2big.o_INCFLAGS = $(A04BR3_AES_INC)
+a04br3_sha2big.o_CFLAGS_ADD += -mgeneral-regs-only
+a04br3_dec32be.o_INCFLAGS = $(A04BR3_AES_INC)
+a04br3_dec32be.o_CFLAGS_ADD += -mgeneral-regs-only
+a04br3_enc32be.o_INCFLAGS = $(A04BR3_AES_INC)
+a04br3_enc32be.o_CFLAGS_ADD += -mgeneral-regs-only
+a04br3_dec64be.o_INCFLAGS = $(A04BR3_AES_INC)
+a04br3_dec64be.o_CFLAGS_ADD += -mgeneral-regs-only
+a04br3_enc64be.o_INCFLAGS = $(A04BR3_AES_INC)
+a04br3_enc64be.o_CFLAGS_ADD += -mgeneral-regs-only
+corecrypto_sha1.o_INCFLAGS = $(A04BR3_AES_INC)
+corecrypto_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
+corecrypto_sha2.o_INCFLAGS = $(A04BR3_AES_INC)
+corecrypto_sha2.o_CFLAGS_ADD += -mgeneral-regs-only
+
 endif
 
 # Runtime support functions don't interact well with LTO (9294679)

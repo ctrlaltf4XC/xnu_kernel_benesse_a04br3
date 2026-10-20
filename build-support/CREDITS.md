@@ -84,3 +84,7 @@ Unsealed HFS root bring-up follows the problem documented by ios-sweet
 0029. A04BR3 requires the explicit a04br3.unsealed_root=1 boot argument and
 only permits an HFS root reporting an unsupported root-authentication ioctl;
 other authentication errors still fail. This is an unsigned development port.
+
+Portable kernel SHA-1 and SHA-384/512 adapters follow ios-sweet patches
+0032/0033 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. BearSSL hash and
+big-endian codec sources use the existing pinned revision and MIT license.
