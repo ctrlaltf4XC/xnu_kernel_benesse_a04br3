@@ -23,7 +23,8 @@ sample_proc(proc_t p, __unused void *arg)
     proc_name(proc_pid(p), name, sizeof(name));
     if (strcmp(name, "launchd") && strcmp(name, "backboardd") &&
         strcmp(name, "SpringBoard") && strcmp(name, "logd") &&
-        strcmp(name, "notifyd") && strcmp(name, "UserEventAgent")) {
+        strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
+        strcmp(name, "containermanager") && strcmp(name, "containermanagerd")) {
         return PROC_RETURNED;
     }
     task_t task = proc_task(p);

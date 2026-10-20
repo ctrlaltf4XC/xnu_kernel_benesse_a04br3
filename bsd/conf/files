@@ -107,6 +107,7 @@ bsd/dev/memdev.c			standard
 bsd/dev/a04br3_display.c			standard
 bsd/dev/a04br3_msdc.c		standard
 bsd/dev/a04br3_sample.c			standard
+bsd/dev/a04br3_root_prepare.c		standard
 bsd/dev/mem.c				standard
 bsd/dev/munge.c 			optional config_requires_u32_munging
 bsd/dev/unix_startup.c			standard

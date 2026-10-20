@@ -49,7 +49,8 @@ a04br3_sample_task(const char *name, int pid, task_t task)
         /* Only window-server processes need remote user-stack reads. Never
          * fault user memory while holding the task lock. Saved FP/PC can race
          * running threads: these are approximate live samples, not crashes. */
-        if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd")) {
+        if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd") ||
+            !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd")) {
             uint64_t fp = rows[i].fp;
             for (unsigned depth = 0; depth < 16 && fp && !(fp & 7); depth++) {
                 uint64_t frame[2];

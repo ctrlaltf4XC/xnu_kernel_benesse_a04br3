@@ -170,3 +170,7 @@ after releasing it. Samples are approximate and limited to three rounds.
 
 First-backboardd-abort heap text capture adapts ios-sweet 0051, capped at
 64 MiB of read attempts and 256 short printable runs on this board.
+
+Container restore scaffolding follows the ios-sweet v9 bring-up notes.
+The A04BR3-only omission of config_ext_resolver follows ios-sweet 0057: native
+iOS has no macOS memberd resolver; built-in UID/GID GUID mapping is used.

@@ -1043,6 +1043,11 @@ bsd_init(void)
 #endif /* CONFIG_IMAGEBOOT */
 #endif /* CONFIG_BASESYSTEMROOT */
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+    extern void a04br3_root_prepare(void);
+    a04br3_root_prepare();
+#endif
+
 	/* Initialize signal state for process 0. */
 	bsd_init_kprintf("calling siginit\n");
 	siginit(kernproc);
