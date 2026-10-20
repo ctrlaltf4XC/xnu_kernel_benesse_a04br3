@@ -74,6 +74,18 @@ jobs:
           while [ ! -f /tmp/a04br3-debug-done ] && [ "$SECONDS" -lt "$deadline" ]; do sleep 60; done
           kill "$host_watch_pid" 2>/dev/null || true
           upterm session stop a04br3 || true
+      - name: Preserve latest products after SSH repairs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: a04br3-kernel-retained-${{ github.sha }}
+          path: |
+            out/kernel/kernel.development.a04br3
+            out/kernel/build.json
+            out/display-build.log
+            out/build.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Report the automated build result
         if: always()
         env:
