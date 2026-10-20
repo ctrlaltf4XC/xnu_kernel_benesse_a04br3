@@ -158,3 +158,8 @@ Bounded console crash register/backtrace capture adapts ios-sweet patch
 0043 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. Mach register collection
 and BSD fault-recoverable stack walking are separated for XNU visibility.
 Only the first 16 SpringBoard/backboardd crashes are captured.
+
+The opt-in development Sandbox MAC syscall stand-in adapts ios-sweet
+patch 0050 at fdad0de8dc0e75c5ea84762adc03f7232dc91f19. It registers only
+with platform_root=1, root_rw=1 and emmc_rw=1. It is a permissive development
+compatibility interface, not an Apple Sandbox implementation.

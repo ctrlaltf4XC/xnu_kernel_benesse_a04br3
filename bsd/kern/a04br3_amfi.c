@@ -276,6 +276,35 @@ a04br3_amfi_vnode_check_signature(struct vnode *vp, __unused struct label *label
 	return 0;
 }
 
+/* Development-only stand-in adapted from ios-sweet patch 0050.
+ * No Apple Sandbox kext is present. Avoid ENOPOLICY for native checks;
+ * operations requiring output data fail rather than fabricate a token/path.
+ */
+static uint64_t a04br3_sandbox_seen;
+static int
+a04br3_sandbox_syscall(struct proc *p, int call, __unused user_addr_t arg)
+{
+    if (call >= 0 && call < 64 && !(a04br3_sandbox_seen & (1ULL << call))) {
+        a04br3_sandbox_seen |= 1ULL << call;
+        char name[32];
+        proc_name(proc_pid(p), name, sizeof(name));
+        printf("A04BR3 Sandbox: %s op %d\n", name, call);
+    }
+    switch (call) {
+    case 4: case 5: case 6: case 0x43: return ENOENT;
+    default: return 0;
+    }
+}
+static const struct mac_policy_ops a04br3_sandbox_mac_ops = {
+    .mpo_policy_syscall = a04br3_sandbox_syscall,
+};
+static struct mac_policy_conf a04br3_sandbox_mac_conf = {
+    .mpc_name = "Sandbox",
+    .mpc_fullname = "A04BR3 development permissive sandbox stand-in",
+    .mpc_ops = &a04br3_sandbox_mac_ops,
+};
+static mac_policy_handle_t a04br3_sandbox_mac_handle;
+
 static const struct mac_policy_ops a04br3_amfi_mac_ops = {
 	.mpo_vnode_check_signature = a04br3_amfi_vnode_check_signature,
 };
@@ -297,5 +326,10 @@ a04br3_amfi_policy_register(void)
 	int error = mac_policy_register(&a04br3_amfi_mac_conf, &a04br3_amfi_mac_handle, NULL);
 	printf("A04BR3 AMFI: platform binary policy %s (%d)\n",
 	    error ? "NOT registered" : "registered", error);
+    if (a04br3_platform_root == 1 && a04br3_root_rw == 1 && a04br3_emmc_rw == 1) {
+        error = mac_policy_register(&a04br3_sandbox_mac_conf, &a04br3_sandbox_mac_handle, NULL);
+        printf("A04BR3 Sandbox: development permissive policy %s (%d)\n",
+            error ? "NOT registered" : "registered", error);
+    }
 }
 #endif /* ARM64_BOARD_CONFIG_A04BR3 */
