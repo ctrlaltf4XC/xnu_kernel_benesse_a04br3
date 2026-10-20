@@ -174,3 +174,8 @@ First-backboardd-abort heap text capture adapts ios-sweet 0051, capped at
 Container restore scaffolding follows the ios-sweet v9 bring-up notes.
 The A04BR3-only omission of config_ext_resolver follows ios-sweet 0057: native
 iOS has no macOS memberd resolver; built-in UID/GID GUID mapping is used.
+
+The development keybag atomic data replacement follows ios-sweet 0052 but
+is restricted to usermanagerd persona.kb/usersession.kb replacements under
+keybags, equal modes, root ownership, single links and the same directory.
+It does not advertise or implement general HFS RENAME_SWAP semantics.

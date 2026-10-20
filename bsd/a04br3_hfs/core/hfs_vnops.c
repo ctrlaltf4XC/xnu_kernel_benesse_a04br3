@@ -51,6 +51,10 @@
 #include <sys/namei.h>
 #include <string.h>
 #include <sys/fsevents.h>
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#include <pexpert/pexpert.h>
+#include <sys/proc.h>
+#endif
 
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/fifofs/fifo.h>
@@ -4498,9 +4502,57 @@ int hfs_vnop_rename (struct vnop_rename_args *args) {
  * been locked.  By taking the rsrc fork vnodes up front we ensure that they 
  * cannot be recycled, and that the situation mentioned above cannot happen.
  */
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+/* ios-sweet 0052 uses exchangedata as a general RENAME_SWAP fallback.
+ * Restrict this adaptation to root-owned, singly-linked, same-directory
+ * development keybag replacements by usermanagerd. HFS exchangedata retains
+ * namespace metadata/IDs and is NOT general rename-swap semantics. The
+ * developer keybag path needs an atomic data replacement, not ID movement.
+ */
+static int
+a04br3_keybag_swap(struct vnop_renamex_args *ap)
+{
+    unsigned prepare = 0, full = 0, rw = 0, emmc = 0;
+    PE_parse_boot_argn("a04br3.prepare_root", &prepare, sizeof(prepare));
+    PE_parse_boot_argn("a04br3.full_root", &full, sizeof(full));
+    PE_parse_boot_argn("a04br3.root_rw", &rw, sizeof(rw));
+    PE_parse_boot_argn("a04br3.emmc_rw", &emmc, sizeof(emmc));
+    if (prepare != 1 || full != 1 || rw != 1 || emmc != 1) return ENOTSUP;
+    if (!ap->a_tvp || ap->a_fdvp != ap->a_tdvp ||
+        !vnode_isreg(ap->a_fvp) || !vnode_isreg(ap->a_tvp)) return ENOTSUP;
+    const struct componentname *target = ap->a_tcnp;
+    if (!((target->cn_namelen == 10 && !memcmp(target->cn_nameptr, "persona.kb", 10)) ||
+          (target->cn_namelen == 14 && !memcmp(target->cn_nameptr, "usersession.kb", 14)))) return ENOTSUP;
+    struct cnode *parent = VTOC(ap->a_tdvp);
+    if (parent->c_desc.cd_namelen != 7 ||
+        memcmp(parent->c_desc.cd_nameptr, "keybags", 7)) return ENOTSUP;
+    char name[32];
+    proc_name(proc_pid(vfs_context_proc(ap->a_context)), name, sizeof(name));
+    if (strcmp(name, "usermanagerd")) return ENOTSUP;
+    struct cnode *from = VTOC(ap->a_fvp), *to = VTOC(ap->a_tvp);
+    if (from->c_uid || to->c_uid || from->c_gid || to->c_gid ||
+        from->c_linkcount != 1 || to->c_linkcount != 1 ||
+        from->c_mode != to->c_mode) {
+        printf("A04BR3 HFS: keybag swap refused unequal ownership/mode/link count\n");
+        return ENOTSUP;
+    }
+    struct vnop_exchange_args exchange = {
+        .a_desc = &vnop_exchange_desc, .a_fvp = ap->a_fvp,
+        .a_tvp = ap->a_tvp, .a_options = 0, .a_context = ap->a_context,
+    };
+    int error = hfs_vnop_exchange(&exchange);
+    printf("A04BR3 HFS: development keybag atomic exchange %.*s error=%d\n",
+        target->cn_namelen, target->cn_nameptr, error);
+    return error;
+}
+#endif
+
 int
 hfs_vnop_renamex(struct vnop_renamex_args *ap)
 {
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+    if (ap->a_flags == VFS_RENAME_SWAP) return a04br3_keybag_swap(ap);
+#endif
 	struct vnode *tvp = ap->a_tvp;
 	struct vnode *tdvp = ap->a_tdvp;
 	struct vnode *fvp = ap->a_fvp;
