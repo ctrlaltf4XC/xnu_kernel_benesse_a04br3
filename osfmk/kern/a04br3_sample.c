@@ -137,6 +137,9 @@ a04br3_crash_registers(const char *name, int pid, int sig,
     printf("A04BR3_CRASH %s[%d] pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx far=0x%llx\n",
         name, pid, get_saved_state_pc(ss), get_saved_state_lr(ss),
         get_saved_state_sp(ss), fp, (uint64_t)saved_state64(ss)->far);
+    printf("A04BR3_CRASH %s[%d] x0=0x%llx x1=0x%llx x2=0x%llx x3=0x%llx\n",
+        name, pid, saved_state64(ss)->x[0], saved_state64(ss)->x[1],
+        saved_state64(ss)->x[2], saved_state64(ss)->x[3]);
     if (sig == 6 && (!strcmp(name, "backboardd") || !strcmp(name, "lsd"))) a04br3_crash_strings(name);
     return fp;
 }

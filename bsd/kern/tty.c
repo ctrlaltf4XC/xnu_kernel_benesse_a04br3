@@ -716,6 +716,12 @@ parmrk:
 		 * ^T - kernel info and generate SIGINFO
 		 */
 		if (CCEQ(cc[VSTATUS], c) && ISSET(lflag, IEXTEN)) {
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+            /* Queue only: never sample or print while holding the tty lock. */
+            extern void a04br3_sample_request(void);
+            a04br3_sample_request();
+#endif
+
 			if (ISSET(lflag, ISIG)) {
 				/* SAFE: All callers drop the lock on return */
 				tty_pgsignal_locked(tp, SIGINFO, 1);

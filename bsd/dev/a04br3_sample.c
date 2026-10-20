@@ -14,7 +14,14 @@
 extern task_t proc_task(proc_t);
 extern void a04br3_sample_task(const char *, int, task_t);
 extern int hz;
-extern int serial_getc(void);
+/* ttyinput owns console receive bytes; never race it by polling UART here. */
+static unsigned request_enabled, request_pending;
+void a04br3_sample_request(void);
+void a04br3_sample_request(void)
+{
+    if (__atomic_load_n(&request_enabled, __ATOMIC_ACQUIRE))
+        __atomic_store_n(&request_pending, 1, __ATOMIC_RELEASE);
+}
 void a04br3_sample_start(void);
 
 static int
@@ -42,12 +49,14 @@ sample_thread(__unused void *arg, __unused wait_result_t wr)
     static int chan;
     unsigned uart = 0, elapsed = 0, next = 120, rounds = 0, manual = 0, last = 0;
     PE_parse_boot_argn("a04br3.sample_uart", &uart, sizeof(uart));
+    __atomic_store_n(&request_enabled, uart == 1, __ATOMIC_RELEASE);
     if (uart == 1) printf("A04BR3_SAMPLE UART: Ctrl-T requests a snapshot (10s rate limit, 16 requests)\n");
     for (;;) {
         (void)tsleep(&chan, PZERO, "a04sample", hz);
         elapsed++;
         bool scheduled = rounds < 12 && elapsed >= next;
-        bool requested = uart == 1 && serial_getc() == 20 && manual < 16 && elapsed - last >= 10;
+        bool requested = !scheduled && uart == 1 && manual < 16 && elapsed - last >= 10 &&
+            __atomic_exchange_n(&request_pending, 0, __ATOMIC_ACQ_REL);
         if (scheduled || requested) {
             unsigned sequence = scheduled ? rounds++ : 1000 + manual++;
             printf("A04BR3_SAMPLE begin %u elapsed=%u s\n", sequence, elapsed);
@@ -58,6 +67,7 @@ sample_thread(__unused void *arg, __unused wait_result_t wr)
         }
         if (rounds == 12 && (uart != 1 || manual == 16)) break;
     }
+    __atomic_store_n(&request_enabled, 0, __ATOMIC_RELEASE);
 }
 
 void

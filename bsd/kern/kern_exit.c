@@ -1904,11 +1904,13 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
 #if defined(A04BR3)
         /* Capture the actual exiting thread, not an earlier live sample.
          * Limit UART overhead and never dereference user stack directly. */
-        static unsigned a04br3_crash_count;
+        static unsigned a04br3_crash_count[2];
+        unsigned a04br3_crash_bucket = !strcmp(p->p_name, "mediaserverd") ? 1 : 0;
         if (p == current_proc() &&
             (!strcmp(p->p_name, "SpringBoard") || !strcmp(p->p_name, "backboardd") ||
-             !strcmp(p->p_name, "lsd") || strnstr(p->p_name, "datamigrat", sizeof(p->p_name))) &&
-            os_atomic_inc_orig(&a04br3_crash_count, relaxed) < 16) {
+             !strcmp(p->p_name, "lsd") || !strcmp(p->p_name, "mediaserverd") || strnstr(p->p_name, "datamigrat", sizeof(p->p_name))) &&
+            os_atomic_inc_orig(&a04br3_crash_count[a04br3_crash_bucket], relaxed) <
+                (a04br3_crash_bucket ? 2u : 16u)) {
             extern uint64_t a04br3_crash_registers(const char *, int, int, uint64_t, uint64_t);
             uint64_t fp = a04br3_crash_registers(p->p_name, proc_getpid(p),
                 WTERMSIG(rv), ((uint64_t)ut->uu_exception << 32) | (uint32_t)ut->uu_code,
