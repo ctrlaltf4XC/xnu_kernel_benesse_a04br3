@@ -49,3 +49,8 @@ Late inherited-watchdog quiescence follows mouseos/edk2-mtk Platform/Benesse/A04
 The built-in pthread provider copies Apple libpthread-514.100.2 at a6c70ca0e544347a0377babf748f831577ec24f9 (kern/private/include, with upstream license headers), paired with xnu-8796.141.3. Integration wrappers and open-header compatibility adaptations derive from dipa-studio/ios-sweet patch 0019 and its staging script (snapshot fdad0de8dc0e75c5ea84762adc03f7232dc91f19). All provider sources are committed; no build-time source fetch or clone is required. TargetConditionals.h is obtained only from the declared installed Xcode SDK by the checked-in driver.
 
 The A04BR3 legacy AES CBC/ECB provider adapts ios-sweet patch 0020 and copies the portable BearSSL constant-time bitslice AES at 7bea48e5e850ab4cafbe68d3765cdaba13a86d6f, downloaded from the official Gitweb snapshot. Selected source files, headers, upstream metadata and MIT LICENSE.txt are committed under libkern/crypto/a04br3_bearssl. No runtime or build-time source fetch, SIMD or AES CPU extension is required for this provider.
+
+Root bring-up follows ios-sweet patches 0021, 0022, and 0024 at
+fdad0de8dc0e75c5ea84762adc03f7232dc91f19: Apple mockfs enabled,
+node allocation type corrected, virtual memdev I/O and 4KiB page units
+corrected, and absent IOStorageFamily classes handled on A04BR3 only.
