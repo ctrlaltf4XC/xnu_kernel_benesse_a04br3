@@ -50,7 +50,8 @@ a04br3_sample_task(const char *name, int pid, task_t task)
          * fault user memory while holding the task lock. Saved FP/PC can race
          * running threads: these are approximate live samples, not crashes. */
         if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd") ||
-            !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd")) {
+            !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd") ||
+            !strcmp(name, "lsd") || strstr(name, "datamigrat") || strstr(name, "migrationplugin")) {
             uint64_t fp = rows[i].fp;
             for (unsigned depth = 0; depth < 16 && fp && !(fp & 7); depth++) {
                 uint64_t frame[2];
@@ -66,10 +67,11 @@ a04br3_sample_task(const char *name, int pid, task_t task)
 /* ios-sweet 0051 adaptation: bounded first-abort heap text for the actual
  * exception reason, which libc++abi does not put in os_reason. */
 static void
-a04br3_crash_strings(void)
+a04br3_crash_strings(const char *name)
 {
-    static unsigned scans;
-    if (scans++) return;
+    static unsigned scans[2];
+    unsigned bucket = !strcmp(name, "backboardd") ? 0 : 1;
+    if (scans[bucket]++) return;
     char *buf = kalloc_data(65536, Z_WAITOK);
     if (!buf) return;
     vm_map_t map = current_map();
@@ -135,7 +137,7 @@ a04br3_crash_registers(const char *name, int pid, int sig,
     printf("A04BR3_CRASH %s[%d] pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx far=0x%llx\n",
         name, pid, get_saved_state_pc(ss), get_saved_state_lr(ss),
         get_saved_state_sp(ss), fp, (uint64_t)saved_state64(ss)->far);
-    if (sig == 6 && !strcmp(name, "backboardd")) a04br3_crash_strings();
+    if (sig == 6 && (!strcmp(name, "backboardd") || !strcmp(name, "lsd"))) a04br3_crash_strings(name);
     return fp;
 }
 #endif

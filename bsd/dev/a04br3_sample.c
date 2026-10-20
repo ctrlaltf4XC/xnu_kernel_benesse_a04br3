@@ -24,7 +24,8 @@ sample_proc(proc_t p, __unused void *arg)
     if (strcmp(name, "launchd") && strcmp(name, "backboardd") &&
         strcmp(name, "SpringBoard") && strcmp(name, "logd") &&
         strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
-        strcmp(name, "containermanager") && strcmp(name, "containermanagerd")) {
+        strcmp(name, "containermanager") && strcmp(name, "containermanagerd") &&
+        strcmp(name, "lsd") && !strstr(name, "datamigrat") && !strstr(name, "migrationplugin")) {
         return PROC_RETURNED;
     }
     task_t task = proc_task(p);
@@ -39,11 +40,11 @@ sample_thread(__unused void *arg, __unused wait_result_t wr)
     static int chan;
     /* Long intervals, finite output: this is a diagnostic, not a monitor. */
     (void)tsleep(&chan, PZERO, "a04sample", 120 * hz);
-    for (unsigned i = 0; i < 3; i++) {
+    for (unsigned i = 0; i < 12; i++) {
         printf("A04BR3_SAMPLE begin %u\n", i);
         proc_iterate(PROC_ALLPROCLIST, sample_proc, NULL, NULL, NULL);
         printf("A04BR3_SAMPLE end %u\n", i);
-        if (i < 2) (void)tsleep(&chan, PZERO, "a04sample", 120 * hz);
+        if (i < 11) (void)tsleep(&chan, PZERO, "a04sample", 600 * hz);
     }
 }
 

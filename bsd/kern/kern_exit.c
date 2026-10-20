@@ -1906,7 +1906,8 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
          * Limit UART overhead and never dereference user stack directly. */
         static unsigned a04br3_crash_count;
         if (p == current_proc() &&
-            (!strcmp(p->p_name, "SpringBoard") || !strcmp(p->p_name, "backboardd")) &&
+            (!strcmp(p->p_name, "SpringBoard") || !strcmp(p->p_name, "backboardd") ||
+             !strcmp(p->p_name, "lsd") || strstr(p->p_name, "datamigrat")) &&
             os_atomic_inc_orig(&a04br3_crash_count, relaxed) < 16) {
             extern uint64_t a04br3_crash_registers(const char *, int, int, uint64_t, uint64_t);
             uint64_t fp = a04br3_crash_registers(p->p_name, proc_getpid(p),
