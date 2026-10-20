@@ -179,3 +179,7 @@ The development keybag atomic data replacement follows ios-sweet 0052 but
 is restricted to usermanagerd persona.kb/usersession.kb replacements under
 keybags, equal modes, root ownership, single links and the same directory.
 It does not advertise or implement general HFS RENAME_SWAP semantics.
+
+Development KeyStore selectors 35 (extended state) and 101 (assert consume)
+follow ios-sweet 0055. Extended state uses the existing unlocked development
+DER response. No SEP, hardware keys or real data protection is supplied.
