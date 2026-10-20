@@ -13,6 +13,8 @@
 #include <sys/fcntl.h>
 #include <sys/uio.h>
 #include <pexpert/pexpert.h>
+#include <kern/kalloc.h>
+#include "a04br3_fairplay_merge.h"
 
 void a04br3_root_prepare(void);
 static int
@@ -61,8 +63,9 @@ prepare_directory(const char *path, int *created)
 }
 
 /* Native launchd override, not a FairPlay implementation or signature bypass.
- * Never replace another administrator's override dictionary. Restore removes
- * only the exact file created here. This persists across boot-arg changes. */
+ * Preserve existing overrides through a backed-up binary-plist transaction.
+ * The small XML fallback is removable only on exact match. Both persist
+ * across boot-arg changes. */
 static const char fp_override[] =
     "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
     "<!-- a04br3 development FairPlay service isolation -->\n"
@@ -117,6 +120,7 @@ prepare_fairplay(unsigned restore)
             UIO_SYSSPACE, 0, vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx));
         if (!error && (resid || memcmp(data, fp_override, sizeof(fp_override)-1))) error = EEXIST;
         if (!error && restore) error = remove_fairplay_override(vp, ctx);
+        if (error == EEXIST) error = merge_existing_fairplay(vp, restore, ctx);
         vnode_put(vp);
         return error;
     }

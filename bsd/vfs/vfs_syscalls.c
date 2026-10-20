@@ -9689,6 +9689,14 @@ int a04br3_audio_bundle_move(unsigned restore)
         CAST_USER_ADDR_T(restore ? active : disabled), UIO_SYSSPACE,
         RENAME_EXCL | RENAME_NOFOLLOW_ANY);
 }
+int a04br3_fairplay_override_commit(void);
+int a04br3_fairplay_override_commit(void)
+{
+    return renameat_internal(vfs_context_kernel(), AT_FDCWD,
+        CAST_USER_ADDR_T("/private/var/db/com.apple.xpc.launchd/disabled.a04br3.pending"),
+        AT_FDCWD, CAST_USER_ADDR_T("/private/var/db/com.apple.xpc.launchd/disabled.plist"),
+        UIO_SYSSPACE, RENAME_NOFOLLOW_ANY);
+}
 #endif
 
 int

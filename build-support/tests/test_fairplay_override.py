@@ -70,6 +70,9 @@ static int vn_rdwr(int rw,vnode_t v,caddr_t data,int len,off_t offset,int seg,in
 static int VNOP_REMOVE(vnode_t p,vnode_t v,struct componentname *n,int flags,vfs_context_t c) {
  (void)c;assert(p==&parent && v==&file && !flags && n->cn_nameiop==DELETE && n->cn_flags==ISLASTCN && n->cn_namelen==14 && !strcmp(n->cn_nameptr,"disabled.plist"));exists=0;removes++;return 0;
 }
+static int merge_existing_fairplay(vnode_t vp,unsigned restore,vfs_context_t ctx) {
+ (void)vp;(void)restore;(void)ctx;return EEXIST;
+}
 '''+helper+r'''
 int main(int argc,char **argv) {
  assert(argc==2);
