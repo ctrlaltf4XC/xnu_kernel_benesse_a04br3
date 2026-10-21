@@ -6,10 +6,15 @@
 #define A04BR3_WLAN_RUNTIME_H
 #include "A04BR3WLANTeardown.h"
 #include "A04BR3WLANScanSnapshot.h"
+#include "A04BR3WLANPSK4Way.h"
 enum { A04_WLAN_DELIVERY_NONE=0,A04_WLAN_DELIVERY_ETHERNET=1,A04_WLAN_DELIVERY_EAPOL=2 };
 struct a04_wlan_runtime {
  struct a04_wlan_station station;struct a04_wlan_security security;
  struct a04_wlan_teardown teardown;
+ struct a04_psk4way personal;struct a04_psk_prepared credential;
+ unsigned personal_admitted,personal_busy,personal_wait_group_ack;
+ unsigned auth_lower,auth_upper,auth_upper_ext;
+ uint64_t association_counter,association_generation,personal_tx_cookie,personal_key_cookie;
  struct a04_wlan_data_state data;struct a04_wlan_slots slots;
  struct a04_wlan_ap scan[16];unsigned scan_count,scan_dropped;
  struct a04_wlan_scan_extra scan_extra[16];
@@ -24,7 +29,9 @@ struct a04_wlan_runtime {
  int failed;
 };
 static inline int a04_wlan_runtime_fail(struct a04_wlan_runtime *r,struct a04_wlan_host *h,int e){
- r->failed=e;r->security.authorized=0;r->station.sta_active=0;return a04_wlan_fail(h,e);
+ r->failed=e;r->security.authorized=0;r->station.sta_active=0;
+ if(r->personal_admitted)a04_psk_fail(&r->personal,e);
+ a04_psk_prepared_clear(&r->credential);return a04_wlan_fail(h,e);
 }
 static inline int a04_wlan_runtime_calibration(struct a04_wlan_runtime *r,const void *p,unsigned n){
  if(!r || !p || n!=512 || r->calibration_sent || r->calibration_valid)return A04_WLAN_ARGUMENT;
@@ -153,8 +160,16 @@ static inline int a04_wlan_runtime_event(struct a04_wlan_runtime *r,struct a04_w
    r->unknown++;return 0;
   }
  }
- if(v->id==0x0f && r->data.pending)return a04_wlan_data_tx_event(h,&r->station,&r->security,&r->data,v,now);
- if(v->id==0x24 && r->security.ptk_pending)return a04_wlan_security_key_event(&r->security,&r->station,v,now);
+ if(v->id==0x0f && r->data.pending){
+  unsigned kind=r->data.eapol_kind;int e=a04_wlan_data_tx_event(h,&r->station,&r->security,&r->data,v,now);
+  if(!e && kind && r->personal_admitted)e=a04_psk_tx_done(&r->personal,r->personal_tx_cookie,0,now);
+  return e;
+ }
+ if(v->id==0x24 && r->security.ptk_pending){
+  int e=a04_wlan_security_key_event(&r->security,&r->station,v,now);
+  if(!e && r->personal_admitted)e=a04_psk_key_done(&r->personal,1,r->personal_key_cookie,0,now);
+  return e;
+ }
  unsigned was_scan=r->station.scan.pending;
  int e=a04_wlan_station_event(&r->station,h,v,now);
  if(!e && was_scan && r->station.scan.complete && !r->station.selected){r->station.deadline_us=0;r->scan_completed_us=now;}
@@ -194,7 +209,7 @@ static inline int a04_wlan_runtime_step(struct a04_wlan_runtime *r,struct a04_wl
   struct a04_wlan_ethernet packet;e=a04_wlan_ethernet_rx(&r->station,&r->security,h->rx,h->rx_length,&packet);
   if(!e){r->frames++;r->delivery=packet.data;r->delivery_length=packet.length;
    r->delivery_kind=packet.eapol?A04_WLAN_DELIVERY_EAPOL:A04_WLAN_DELIVERY_ETHERNET;
-   if(packet.eapol)e=a04_wlan_security_rx(&r->security,packet.data+14,packet.length-14,verify,ctx,now);
+   if(packet.eapol && !r->personal_admitted)e=a04_wlan_security_rx(&r->security,packet.data+14,packet.length-14,verify,ctx,now);
   }else if(e==A04_WLAN_REPLAY || e==A04_WLAN_SECURITY || e==A04_WLAN_SEQUENCE || e==A04_WLAN_FORMAT)e=0;
  }else if(r->station.selected){
   struct a04_wlan_rx_frame frame;e=a04_wlan_rx_frame_parse(h->rx,h->rx_length,&frame);

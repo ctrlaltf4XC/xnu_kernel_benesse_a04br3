@@ -39,6 +39,16 @@ static inline int a04_native_get(const struct a04_network_state *s,
         }
         a04_native_put32(p+4,count);*bytes=4824;return 0;
     }
+    if(type==2){
+        // Actual iOS raw16; first word is opaque to consumer, request starts0.
+        // EXT comes from an explicitly admitted profile, NEVER SET20flags504.
+        if(*bytes<16)return EMSGSIZE;
+        if(!s->associated)return ENOTCONN;
+        if(!s->auth_profile_valid || !s->association_generation)return EOPNOTSUPP;
+        if(s->auth_lower!=1 || (s->auth_upper!=0 && s->auth_upper!=8) || s->auth_upper_ext)return EOPNOTSUPP;
+        uint8_t wire[16]={0};a04_native_put32(wire+4,s->auth_lower);a04_native_put32(wire+8,s->auth_upper);
+        a04_native_put32(wire+12,s->auth_upper_ext);memcpy(out,wire,16);*bytes=16;return 0;
+    }
     if(type==21){
         // Original __waitForJoinResult polls scalar21; zero is pending and
         // __errorForAssociateResult table entry1 maps to success0. Actual open
@@ -49,8 +59,13 @@ static inline int a04_native_get(const struct a04_network_state *s,
         case A04_NET_JOIN_NOT_STARTED:return ENOTCONN;
         case A04_NET_JOIN_FAILED:return EIO; // no invented native failure code
         case A04_NET_JOIN_PENDING:
-            if(s->associated)return EAGAIN;
+            // Personal may be associated while controlled port is still closed.
+            if(s->associated && !(s->auth_profile_valid && s->auth_upper==8 && !s->authorized))return EAGAIN;
             result=0;break;
+        case A04_NET_JOIN_PERSONAL_COMPLETE:
+            if(!s->authorized || !s->auth_profile_valid || s->auth_upper!=8 || !s->datapath_ready)return EAGAIN;
+            if(!s->associated || s->station_phase!=A04_NET_PHASE_ASSOCIATED)return EAGAIN;
+            result=1;break;
         case A04_NET_JOIN_OPEN_COMPLETE:
             if(!s->associated || s->station_phase!=A04_NET_PHASE_ASSOCIATED)return EAGAIN;
             result=1;break;

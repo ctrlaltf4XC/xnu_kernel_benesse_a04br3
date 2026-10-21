@@ -4,6 +4,8 @@
 #include "A04BR3NativeAssociation.h"
 #include "A04BR3NativeCurrentNetwork.h"
 #include "A04BR3NativePeerIdentity.h"
+#include "A04BR3NativePersonalAssociation.h"
+#include "../sdio/A04BR3WLANPSKBinding.h"
 #include "../sdio/A04BR3WLANBackendAPI.h"
 #if !defined(A04_WLAN_JOIN_TARGET_API) || A04_WLAN_JOIN_TARGET_API != 1
 #error "Native association requires atomic target admission API1"
@@ -14,6 +16,33 @@ static inline int a04_assoc_provider_record(void *p,unsigned generation,unsigned
 {return a04br3_wlan_scan_copy_record((IOService *)p,generation,index,out);}
 static inline int a04_assoc_provider_join(void *p,const struct a04_wlan_join_target *target)
 {return a04br3_wlan_join_target((IOService *)p,target);}
+/* Provider ref held by caller; no SDIO lock across PBKDF2. Original raw
+ * passphrase-derived PMK extension, when present, must match actual derivation.
+ */
+static inline int a04_assoc_personal_set(IOService *provider,unsigned value,const void *in,unsigned bytes,struct a04_wlan_scan_record *work){
+ struct a04_native_personal_request request={};int e=a04_native_personal_decode(value,in,bytes,&request);if(e)return e;
+ struct a04_wlan_scan_info info={};e=a04br3_wlan_scan_snapshot(provider,&info);
+ struct a04_wlan_join_target target={};unsigned matched=0;
+ if(!e && (!info.generation || !info.complete))e=EAGAIN;
+ if(!e && (info.error || info.count>16))e=EIO;
+ for(unsigned i=0;!e && i<info.count;i++){
+  e=a04br3_wlan_scan_copy_record(provider,info.generation,i,work);if(e)break;
+  const auto *ap=&work->ap;
+  if(ap->ssid_length!=request.peer.ssid_length || memcmp(ap->ssid,request.peer.ssid,ap->ssid_length) ||
+   (request.peer.force_bssid && memcmp(ap->mac,request.peer.bssid,6)))continue;
+  if(!(ap->capability&16) || a04_wlan_rsn_psk_ccmp(ap->rsn,ap->rsn_length)){e=EOPNOTSUPP;break;}
+  if(++matched>1){e=EEXIST;break;}
+  target.generation=info.generation;target.index=i;target.ssid_length=ap->ssid_length;target.channel=ap->channel;target.band=ap->band;
+  memcpy(target.bssid,ap->mac,6);memcpy(target.ssid,ap->ssid,ap->ssid_length);
+ }
+ if(!e && !matched)e=ENOENT;
+ struct a04_psk_prepared prepared={};auto ops=a04_psk_native_crypto();
+ if(!e)e=a04_psk_prepare(&prepared,&ops,request.key.secret,request.key.length,
+  request.key.kind==A04_NATIVE_KEY_PASSPHRASE,target.ssid,target.ssid_length)?EIO:0;
+ if(!e && request.derived_bytes && !a04_psk_equal(request.derived,prepared.pmk,32))e=EINVAL;
+ if(!e)e=a04br3_wlan_join_personal(provider,&target,&prepared);
+ a04_psk_prepared_clear(&prepared);a04_wlan_secret_clear(&request,sizeof(request));return e;
+}
 static inline int a04_assoc_provider_set(IOService *provider,uint32_t value,const void *in,uint32_t bytes)
 {
  if(!provider)return ENXIO;
@@ -24,7 +53,8 @@ static inline int a04_assoc_provider_set(IOService *provider,uint32_t value,cons
  struct a04_wlan_scan_record *work=nullptr;
  if(!error){work=(a04_wlan_scan_record *)IOMallocZero(sizeof(*work));if(!work)error=ENOMEM;}
  if(!error){struct a04_association_backend api={provider,a04_assoc_provider_info,a04_assoc_provider_record,a04_assoc_provider_join};
-  error=a04_native_association_set(&api,value,in,bytes,work);}
+  error=(in && bytes==592 && a04_assoc_u16((const uint8_t *)in+8)==8)?
+   a04_assoc_personal_set(provider,value,in,bytes,work):a04_native_association_set(&api,value,in,bytes,work);}
  if(work)IOFree(work,sizeof(*work));
  a04br3_wlan_release_backend(provider);return error;
 }
@@ -75,7 +105,11 @@ static inline int a04_assoc_provider_peer(IOService *provider,uint32_t type,uint
  struct a04_wlan_scan_record *record=nullptr;
  if(!error){record=(a04_wlan_scan_record *)IOMallocZero(sizeof(*record));if(!record)error=ENOMEM;}
  if(!error)error=a04br3_wlan_current_record(provider,record);
- if(!error && ((record->ap.capability&16) || record->ap.rsn_length))error=EOPNOTSUPP;
+ /* A secured record additionally needs the actual admitted profile, not
+  * merely a privacy IE injected by a stale/unrelated producer. */
+ if(!error && ((record->ap.capability&16) || record->ap.rsn_length) &&
+  (!state.auth_profile_valid || !state.association_generation || state.auth_lower!=1 || state.auth_upper!=8 || state.auth_upper_ext ||
+   a04_wlan_rsn_psk_ccmp(record->ap.rsn,record->ap.rsn_length)))error=EOPNOTSUPP;
  if(!error){struct a04_native_peer_identity identity={};identity.ssid_length=record->ap.ssid_length;
   memcpy(identity.bssid,record->ap.mac,6);
   if(identity.ssid_length<=32)memcpy(identity.ssid,record->ap.ssid,identity.ssid_length);

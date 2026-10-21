@@ -7,6 +7,7 @@
 #include "A04BR3Apple80211IOCTL.h"
 #include "A04BR3Apple80211SET.h"
 #include "A04BR3WiFiMedia.h"
+#include "A04BR3NetworkControlFrame.h"
 #include <sys/kauth.h>
 #include <libkern/OSAtomic.h>
 #include <sys/kern_event.h>
@@ -87,6 +88,11 @@ int A04BR3BSDNetwork::attach(IOService *service,const a04_network_backend *b,uns
     if(error){interface=nullptr;finish();return error;}
     snprintf(name,sizeof(name),"%s%u",ifnet_name(interface),ifnet_unit(interface));
     error=ifnet_set_mtu(interface,1500);
+    // This bridge bypasses Apple's default attach, whose media configuration
+    // normally sets these fields. ndrv_input prepends ifnet_hdrlen(ifp), so
+    // leaving zero would silently strip the native socket's Ethernet header.
+    if(!error)error=ifnet_set_addrlen(interface,6);
+    if(!error)error=ifnet_set_hdrlen(interface,14);
     if(!error)error=ifnet_set_flags(interface,IFF_BROADCAST|IFF_SIMPLEX|IFF_MULTICAST,
         IFF_BROADCAST|IFF_SIMPLEX|IFF_MULTICAST|IFF_UP|IFF_RUNNING);
     struct sockaddr_dl address={};address.sdl_len=sizeof(address);address.sdl_family=AF_LINK;
@@ -131,16 +137,58 @@ int A04BR3BSDNetwork::attachProvider(IOService *provider,const a04_network_backe
     return error;
 }
 
+/* Called only with the bridge gate held. Input header points exactly14 bytes
+ * into owned headroom; never dereference an unbounded pkt_hdr pointer. TX is
+ * the complete raw Ethernet mbuf supplied by ndrv_output/ifnet_output_raw.
+ * No DLIL call or ifnet flag promotion occurs while checking this envelope. */
+int A04BR3BSDNetwork::preauth(const a04_network_state *state,mbuf_t packet,bool transmit)
+{
+    if(!a04_network_control_associated(state))return ENETDOWN;
+    if(!backend.native_get)return EOPNOTSUPP;
+    if(!(mbuf_flags(packet)&MBUF_PKTHDR) || mbuf_nextpkt(packet))return EINVAL;
+    size_t n=mbuf_pkthdr_len(packet);
+    if(n<(transmit?18u:4u) || n>(transmit?A04_NET_CONTROL_MAX_FRAME:1500u))return EINVAL;
+    uint8_t frame[A04_NET_CONTROL_MAX_FRAME];unsigned bytes=(unsigned)n;
+    int error;
+    if(transmit){
+        error=mbuf_copydata(packet,0,n,frame);
+    }else{
+        const void *header=mbuf_pkthdr_header(packet);
+        uintptr_t data=(uintptr_t)mbuf_data(packet),h=(uintptr_t)header;
+        if(!header || mbuf_leadingspace(packet)<14 || h>UINTPTR_MAX-14 || h+14!=data)return EINVAL;
+        memcpy(frame,header,14);
+        error=mbuf_copydata(packet,0,n,frame+14);bytes+=14;
+    }
+    if(error)return error;
+    unsigned type=((unsigned)frame[12]<<8)|frame[13];
+    if(type!=0x888e && type!=0x88c7)return ENETDOWN; // ordinary IP/ARP stays closed
+    uint8_t peer[6]={};uint32_t peerBytes=sizeof(peer);
+    // Never read association request/cache metadata as the actual peer.
+    error=backend.native_get(backend.context,9,0,peer,&peerBytes);
+    if(error)return error;
+    if(peerBytes!=sizeof(peer))return ENETDOWN;
+    error=a04_network_control_frame(frame,bytes,mac,peer,transmit?1:0);
+    if(error)return error;
+    // A backend callback may observe a concurrent disconnect/radio change.
+    // Resample state before dispatch; backend TX/RX owner must also validate
+    // its real station under its transport lock, including peer on roam.
+    a04_network_state after={};error=snapshot(&after);
+    return error?error:((a04_network_control_associated(&after) &&
+        after.association_generation==state->association_generation)?0:ENETDOWN);
+}
+
 int A04BR3BSDNetwork::input(mbuf_t packet)
 {
     if(!packet)return EINVAL;
-    if(!gate){mbuf_freem(packet);return ENXIO;}
+    if(!gate){mbuf_freem_list(packet);return ENXIO;}
     IOLockLock(gate);a04_network_state s={};int error=snapshot(&s);
-    if(!error && (!interface || !admin || !a04_network_data_ready(&s)))error=ENETDOWN;
+    if(!error && mbuf_nextpkt(packet))error=EINVAL;
+    if(!error && (!interface || !admin))error=ENETDOWN;
+    if(!error && !a04_network_data_ready(&s))error=preauth(&s,packet,false);
     ifnet_t ifp=interface;
     if(!error)error=ifnet_reference(ifp);
     IOLockUnlock(gate);
-    if(error){mbuf_freem(packet);return error;}
+    if(error){mbuf_freem_list(packet);return error;}
     /* Protocol input may reenter output/driver callbacks. Never hold our gate
      * over DLIL; retain ifnet across concurrent asynchronous detach instead. */
     error=ifnet_input(ifp,packet,nullptr); /* consumes mbuf on success and failure */
@@ -189,12 +237,22 @@ int A04BR3BSDNetwork::refresh()
 errno_t A04BR3BSDNetwork::output(ifnet_t ifp,mbuf_t packet)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);
-    if(!s || !s->gate){mbuf_freem(packet);return ENXIO;}
+    if(!packet)return EINVAL;
+    if(!s || !s->gate){mbuf_freem_list(packet);return ENXIO;}
     IOLockLock(s->gate);a04_network_state state={};int error=s->snapshot(&state);
-    if(!error && (!s->admin || !a04_network_data_ready(&state)))error=ENETDOWN;
-    if(!error)error=s->backend.transmit?s->backend.transmit(s->backend.context,packet):EOPNOTSUPP;
+    if(!error && mbuf_nextpkt(packet))error=EINVAL;
+    if(!error && !s->admin)error=ENETDOWN;
+    uint8_t header[14]={};
+    bool control=!error && (mbuf_flags(packet)&MBUF_PKTHDR) && mbuf_pkthdr_len(packet)>=14 &&
+        !mbuf_copydata(packet,0,sizeof(header),header) && header[12]==0x88 &&
+        (header[13]==0x8e || header[13]==0xc7);
+    if(!error && (control || !a04_network_data_ready(&state)))error=s->preauth(&state,packet,true);
+    if(!error){
+        auto send=control?s->backend.transmit_eapol:s->backend.transmit;
+        error=send?send(s->backend.context,packet):EOPNOTSUPP;
+    }
     IOLockUnlock(s->gate);
-    if(error)mbuf_freem(packet); /* only successful backend TX owns the packet */
+    if(error)mbuf_freem_list(packet); /* only successful backend TX owns the packet */
     return error;
 }
 

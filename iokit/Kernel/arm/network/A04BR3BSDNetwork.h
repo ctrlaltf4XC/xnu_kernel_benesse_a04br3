@@ -43,6 +43,9 @@ private:
     uint8_t mac[6];
     char name[16];
     int snapshot(a04_network_state *);
+    /* Gate held: only real associated/radio/control-ready peer traffic may
+     * bypass the closed authorized data port. GET9 must return live peer6. */
+    int preauth(const a04_network_state *,mbuf_t,bool transmit);
     static errno_t output(ifnet_t,mbuf_t);
     static errno_t ioctl(ifnet_t,unsigned long,void *);
     static void detached(ifnet_t);

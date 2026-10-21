@@ -4,8 +4,8 @@
 #include "A04BR3WLANJoinTarget.h"
 #include "A04BR3WLANRuntime.h"
 #include <sys/errno.h>
-static inline int a04_wlan_join_target_check(const struct a04_wlan_runtime *r,
- const struct a04_wlan_join_target *t,uint64_t now)
+static inline int a04_wlan_join_target_check_mode(const struct a04_wlan_runtime *r,
+ const struct a04_wlan_join_target *t,uint64_t now,unsigned personal)
 {
  if(!r || !t || !t->generation || !t->ssid_length || t->ssid_length>32 ||
     !a04_wlan_mac_valid(t->bssid))return EINVAL;
@@ -22,9 +22,12 @@ static inline int a04_wlan_join_target_check(const struct a04_wlan_runtime *r,
     !a04_wlan_equal(a->mac,t->bssid,6) ||
     !a04_wlan_equal(a->ssid,t->ssid,t->ssid_length))return ESTALE;
  if(now<x->observed_us || now-x->observed_us>=10000000)return EAGAIN;
- if((a->capability&16) || a->rsn_length)return EOPNOTSUPP;
+ if(personal){if(!(a->capability&16) || a04_wlan_rsn_psk_ccmp(a->rsn,a->rsn_length))return EOPNOTSUPP;}
+ else if((a->capability&16) || a->rsn_length)return EOPNOTSUPP;
  if(a->band!=1 || !a->channel || a->channel>13 ||
     !(r->station.local.permitted_channels&(1u<<a->channel)))return EOPNOTSUPP;
  return 0;
 }
+static inline int a04_wlan_join_target_check(const struct a04_wlan_runtime *r,const struct a04_wlan_join_target *t,uint64_t now){return a04_wlan_join_target_check_mode(r,t,now,0);}
+static inline int a04_wlan_personal_target_check(const struct a04_wlan_runtime *r,const struct a04_wlan_join_target *t,uint64_t now){return a04_wlan_join_target_check_mode(r,t,now,1);}
 #endif

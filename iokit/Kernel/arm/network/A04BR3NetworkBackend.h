@@ -17,7 +17,8 @@ enum a04_network_station_phase {
  * or a pending transaction. Only a real open join can reach OPEN_COMPLETE. */
 enum a04_network_join_state {
     A04_NET_JOIN_UNKNOWN=0,A04_NET_JOIN_NOT_STARTED=1,
-    A04_NET_JOIN_PENDING=2,A04_NET_JOIN_OPEN_COMPLETE=3,A04_NET_JOIN_FAILED=4
+    A04_NET_JOIN_PENDING=2,A04_NET_JOIN_OPEN_COMPLETE=3,A04_NET_JOIN_FAILED=4,
+    A04_NET_JOIN_PERSONAL_COMPLETE=5
 };
 struct a04_network_state {
     /* firmware_running/control_ready describe WLAN firmware and real command
@@ -28,6 +29,9 @@ struct a04_network_state {
     unsigned station_phase; /* enum above; UNKNOWN must not produce INIT */
     unsigned permitted_channels; /* actual enforced 2.4GHz mask; zero=unknown */
     unsigned join_state; /* wire-neutral enum; actual station under transportLock */
+    unsigned preauth_ready,authorized,auth_profile_valid;
+    unsigned auth_lower,auth_upper,auth_upper_ext;
+    uint64_t association_generation; /* actual admitted owner session, not port state */
 };
 struct a04_network_backend {
     void *context;
@@ -52,6 +56,13 @@ struct a04_network_backend {
      * unsupported type/value MUST return EOPNOTSUPP, never synthetic success.
      * bytes may be zero (no payload); this does not imply any opcode meaning. */
     int (*native_set)(void *,uint32_t type,uint32_t value,const void *,uint32_t bytes);
+    /* Strict actual-associated EAPOL only, independent of ordinary IP port.
+     * Same mbuf ownership as transmit: consume on success, retain on error. */
+    #ifdef __cplusplus
+    int (*transmit_eapol)(void *,void *mbuf)=nullptr;
+#else
+    int (*transmit_eapol)(void *,void *mbuf);
+#endif
 };
 static inline int a04_network_mac_valid(const struct a04_network_state *s)
 {
@@ -62,4 +73,6 @@ static inline int a04_network_control_ready(const struct a04_network_state *s)
 {return a04_network_mac_valid(s) && s->firmware_running && s->control_ready;}
 static inline int a04_network_data_ready(const struct a04_network_state *s)
 {return a04_network_control_ready(s) && s->datapath_ready && s->associated;}
+static inline int a04_network_preauth_ready(const struct a04_network_state *s)
+{return s && a04_network_control_ready(s) && s->associated && s->preauth_ready;}
 #endif

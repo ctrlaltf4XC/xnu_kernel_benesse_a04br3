@@ -65,7 +65,10 @@ struct boot_args {uint64_t physBase,memSize,topOfKernelData;};
     (p/'kern/clock.h').write_text('#pragma once\nusing clock_sec_t=unsigned;using clock_usec_t=unsigned;\nextern void clock_get_system_microtime(clock_sec_t *,clock_usec_t *);\nextern void clock_interval_to_deadline(unsigned,unsigned,uint64_t *);\n')
     (p/'net/init.h').write_text('extern int net_init_add(void (*)(void));\n')
     (p/'sys/kpi_mbuf.h').write_text('#include <stddef.h>\ntypedef void *mbuf_t;\nextern size_t mbuf_pkthdr_len(mbuf_t);extern int mbuf_copydata(mbuf_t,size_t,size_t,void *);extern void mbuf_freem(mbuf_t);\n')
-    (p/'sys/errno.h').write_text('#pragma once\nenum {EAGAIN=35,EINVAL=22,ENXIO=6,ENOMEM=12,EALREADY=37,EBUSY=16,EOPNOTSUPP=102,ENOBUFS=55,EMSGSIZE=40,ENETDOWN=50,EIO=5,ENOENT=2,ESTALE=70,ENOSPC=28,ENOTCONN=57};\n')
+    (p/'string.h').write_text('#pragma once\n#include <stddef.h>\nextern "C" void *memcpy(void *,const void *,size_t);\nextern "C" void *memset(void *,int,size_t);\nextern "C" void *memmove(void *,const void *,size_t);\nextern "C" int memcmp(const void *,const void *,size_t);\n')
+    (p/'sys/types.h').write_text('#pragma once\ntypedef unsigned int u_int;\n')
+    (p/'sys/random.h').write_text('#pragma once\n#include <sys/types.h>\nextern "C" void read_random(void *,u_int);\n')
+    (p/'sys/errno.h').write_text('#pragma once\nenum {EAGAIN=35,EINVAL=22,ENXIO=6,ENOMEM=12,EALREADY=37,EBUSY=16,EOPNOTSUPP=102,ENOBUFS=55,EMSGSIZE=40,ENETDOWN=50,EIO=5,ENOENT=2,ESTALE=70,ENOSPC=28,ENOTCONN=57,EOVERFLOW=84};\n')
 
 class WLANDriverCompile(unittest.TestCase):
     def test_arm64_cpp_including_wmt_and_wlan_owned_boot_path(self):
@@ -75,7 +78,7 @@ class WLANDriverCompile(unittest.TestCase):
             p = Path(directory)
             write_headers(p)
             subprocess.run([clang, '--target=arm64-apple-darwin', '-std=c++14',
-                            '-ffreestanding', '-fno-exceptions', '-fno-rtti', '-O2',
+                            '-DKERNEL', '-DARM64_BOARD_CONFIG_A04BR3', '-ffreestanding', '-fno-exceptions', '-fno-rtti', '-O2',
                             '-Wall', '-Wextra', '-Werror', '-Wframe-larger-than=8192',
                             '-fstack-usage', '-I', str(p), '-c', str(SDIO/'A04BR3SDIO.cpp'),
                             '-o', str(p/'driver.o')], check=True)

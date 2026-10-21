@@ -2,6 +2,8 @@
 #include "A04BR3NetworkRuntime.h"
 #include "apple/IONetworkStack.h"
 #include <sys/errno.h>
+#include <sys/kpi_mbuf.h>
+#include "A04BR3NetworkControlFrame.h"
 /* Board startup is serialized and only one MSDC2 radio exists. Apple's stack
  * itself rejects a second singleton. Keep a real stack reference for the boot,
  * rather than manufacturing a resource or a successful naming notification. */
@@ -40,4 +42,26 @@ A04BR3EthernetController *a04br3_network_start(IOService *provider,
     IOLog("A04BR3 network: Stack registration complete; real shared BSD interface attached\n");
     *error=0;
     return controller;
+}
+
+/* No private socket or alternate listener is manufactured. Existing ether_demux
+ * on the controller's shared ifnet delivers to real AF_NDRV registrations. */
+int a04br3_network_control_input(A04BR3EthernetController *controller,
+    const void *ethernet,unsigned bytes)
+{
+    if(!controller || !ethernet || bytes<18 || bytes>A04_NET_CONTROL_MAX_FRAME ||
+        (uintptr_t)ethernet>UINTPTR_MAX-bytes)return EINVAL;
+    const uint8_t *p=(const uint8_t *)ethernet;
+    unsigned type=((unsigned)p[12]<<8)|p[13];
+    if(type!=0x888e && type!=0x88c7)return EPROTONOSUPPORT;
+    mbuf_t m=nullptr;
+    int error=mbuf_allocpacket(MBUF_DONTWAIT,bytes,nullptr,&m);
+    if(error)return error;
+    if(!m)return ENOMEM;
+    error=mbuf_copyback(m,0,bytes,ethernet,MBUF_DONTWAIT);
+    if(!error && mbuf_len(m)<14)error=EINVAL;
+    if(error){mbuf_freem(m);return error;}
+    mbuf_pkthdr_setheader(m,mbuf_data(m));
+    mbuf_adj(m,14);
+    return controller->receive(m); // consumes on EVERY return, including failure
 }

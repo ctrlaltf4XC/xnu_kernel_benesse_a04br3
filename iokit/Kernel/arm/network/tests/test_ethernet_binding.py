@@ -177,6 +177,7 @@ static void bindingCases(){
 NATIVE_API=r'''
 #pragma once
 #include "A04BR3WLANBackendAPI.h"
+#include "A04BR3WLANPSK4Way.h"
 static a04_wlan_native_client nativeClient={};
 static unsigned observedCount,observedDone,observedGeneration=1,acquires,releases,beginCalls,beginActive;
 static int runtimeError,beginError,copyError,currentRecordError,disassociateCalls,disassociateError;
@@ -216,16 +217,11 @@ extern "C" int a04br3_wlan_scan_mode(IOService *,unsigned active,unsigned *accep
 static unsigned joinCalls;static int joinError;static a04_wlan_join_target lastJoin={};
 extern "C" int a04br3_wlan_disassociate(IOService *){disassociateCalls++;return disassociateError;}
 extern "C" int a04br3_wlan_current_record(IOService *,a04_wlan_scan_record *out){if(currentRecordError)return currentRecordError;if(!realState.associated)return ENOTCONN;*out=scanRecords[0];return 0;}
+extern "C" void read_random(void *,unsigned){assert(false); /* not used by OPEN host fixture */}
+extern "C" int a04br3_wlan_join_personal(IOService *,const a04_wlan_join_target *,a04_psk_prepared *prepared){a04_psk_prepared_clear(prepared);return EOPNOTSUPP;}
 extern "C" int a04br3_wlan_join_target(IOService *,const a04_wlan_join_target *target){joinCalls++;lastJoin=*target;return joinError;}
 extern "C" int a04br3_wlan_bind_native(IOService *,const a04_wlan_native_client *c){nativeClient=*c;c->owner->retain();return 0;}
 extern "C" int a04br3_wlan_unbind_native(IOService *){nativeClient.owner->release();nativeClient={};return 0;}
-#define MBUF_DONTWAIT 0
-static int mbuf_allocpacket(int,unsigned,void *,mbuf_t *){return ENOMEM;}
-static int mbuf_copyback(mbuf_t,unsigned,unsigned,const void *,int){assert(false);return EIO;}
-static unsigned mbuf_len(mbuf_t){return 0;}
-static void mbuf_pkthdr_setheader(mbuf_t,void *){}
-static void *mbuf_data(mbuf_t){return nullptr;}
-static void mbuf_adj(mbuf_t,unsigned){}
 '''
 NATIVE_CASE=r'''
 static void nativeCases(){
@@ -418,6 +414,7 @@ static void nativeCases(){
 class EthernetBinding(unittest.TestCase):
  def test_adapter(self):
   stub=STUB.replace('static int childCount,failChildInit','static int failReference;\nstatic int childCount,failChildInit').replace('assert(p&&p->refs);p->refs++;return 0;','assert(p&&p->refs);if(failReference)return failReference;p->refs++;return 0;').replace('class IOService {','class IOService {\npublic: virtual ~IOService()=default;').replace('public: virtual ~IOService()=default;', 'public: virtual ~IOService()=default; virtual void free(){}').replace('childCount--;delete this;', 'childCount--;free();delete this;').replace('bool init(){heap=true;','bool init(void * =nullptr){heap=true;')
+  stub=stub.replace('virtual void free(){}','virtual void free(){} int messageClients(unsigned){return 0;}')
   case=CASE.replace(' mediaCases();\n','').replace(' traceCases();\n a04_network_backend b=', ' a04_network_backend b=').replace('#include "driver.cpp"','#include "driver.cpp"\n#include "apple/IOEthernetController.h"\n#include "A04BR3Ethernet.cpp"\n#include "A04BR3NetworkRuntime.cpp"').replace('int main(){',EXTRA+'\n#include \"sdio/mock_provider.h\"\n#include \"A04BR3NativeRendezvous.cpp\"\n'+NATIVE_CASE+'\nint main(){mediaCases();traceCases();nativeCases();bindingCases();')
   with tempfile.TemporaryDirectory() as d:
    p=Path(d);(p/'stub.h').write_text(stub)
@@ -426,13 +423,13 @@ class EthernetBinding(unittest.TestCase):
    (p/'sdio').mkdir();(p/'sdio/mock_provider.h').write_text(NATIVE_API)
    sdio=SOURCE.parent/'sdio'
    (p/'sdio/A04BR3WLANBackendAPI.h').write_text((sdio/'A04BR3WLANBackendAPI.h').read_text().replace('../network/','../'))
-   security=(sdio/'A04BR3WLANSecurity.h').read_text()
-   mic=next(line for line in security.splitlines() if line.startswith('typedef int (*a04_wlan_mic_verify)'))
-   (p/'sdio/A04BR3WLANData.h').write_text('#pragma once\n'+mic+'\n')
-   station=(sdio/'A04BR3WLANStation.h').read_text();a=station.index('struct a04_wlan_ap {');b=station.index('};',a)+2
-   (p/'sdio/A04BR3WLANStation.h').write_text('#pragma once\n'+station[a:b])
-   (p/'sdio/A04BR3WLANScanSnapshot.h').write_text((sdio/'A04BR3WLANScanSnapshot.h').read_text())
-   (p/'sdio/A04BR3WLANJoinTarget.h').write_text((sdio/'A04BR3WLANJoinTarget.h').read_text())
+   for header in sdio.glob('*.h'):
+    if header.name=='A04BR3WLANBackendAPI.h':continue
+    text=header.read_text().replace('../network/','../')
+    if header.name=='A04BR3WLANPersonalCrypto.h':
+     text=text.replace('../../../../libkern/crypto/a04br3_bearssl/',str(SOURCE.parents[3]/'libkern/crypto/a04br3_bearssl')+'/')
+    (p/'sdio'/header.name).write_text(text)
+   (p/'sys/random.h').write_text('extern "C" void read_random(void *,unsigned);\n')
    (p/'A04BR3NativeRendezvous.cpp').write_text((SOURCE/'A04BR3NativeRendezvous.cpp').read_text().replace('../sdio/','sdio/'))
    (p/'apple').mkdir()
    original=(SOURCE/'apple/IONetworkInterface.cpp').read_text()
@@ -464,9 +461,13 @@ class EthernetBinding(unittest.TestCase):
    for h in SOURCE.glob('*.h'):(p/h.name).write_text(h.read_text().replace('../sdio/','sdio/'))
    for name in ['A04BR3Ethernet.cpp','A04BR3NetworkRuntime.cpp']:(p/name).write_text((SOURCE/name).read_text())
    (p/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text());(p/'case.cpp').write_text(case)
+   bear=SOURCE.parents[3]/'libkern/crypto/a04br3_bearssl';objects=[]
+   for index,name in enumerate(['hash/sha1.c','codec/dec32be.c','codec/enc32be.c','symcipher/aes_ct.c','symcipher/aes_ct_dec.c','symcipher/aes_ct_cbcdec.c']):
+    obj=p/('crypto'+str(index)+'.o');objects.append(str(obj))
+    subprocess.run(['cc','-fsanitize=address,undefined','-I'+str(bear/'inc'),'-I'+str(bear/'src'),'-c',str(bear/'src'/name),'-o',str(obj)],check=True)
    for words in (0,1):
     with self.subTest(event_header_bytes=24+4*words):
-     subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-DA04_TEST_EVENT_WORDS='+str(words),'-I',str(p),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
+     subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-DKERNEL','-DARM64_BOARD_CONFIG_A04BR3','-DA04_TEST_EVENT_WORDS='+str(words),'-I',str(p),str(p/'case.cpp'),*objects,'-o',str(p/'case')],check=True)
      subprocess.run([str(p/'case')],check=True)
  def test_source_wireless_registration(self):
   # Genuine source-defined metaclasses, one functional implementation each;

@@ -42,6 +42,17 @@ static inline int a04_wlan_ethernet_rx(const struct a04_wlan_station *s,struct a
  }
  v->data=eth;v->length=n-off;v->eapol=eapol;v->wlan=p[8];v->cipher=cipher;return 0;
 }
+/* Normal authenticated IP gets a fresh per-TX deadline even after the old
+ * handshake window. Only unfinished security and EAPOL remain clamped. */
+static inline int a04_wlan_data_deadline(const struct a04_wlan_security *sec,unsigned eapol,uint64_t now,uint64_t *out){
+ if(!sec || !out || eapol>1 || now>UINT64_MAX-900000)return A04_WLAN_ARGUMENT;
+ uint64_t until=now+900000;
+ if(sec->enabled && (!sec->authorized || eapol)){
+  if(!sec->deadline_us || now>=sec->deadline_us)return A04_WLAN_TIMEOUT;
+  if(until>sec->deadline_us)until=sec->deadline_us;
+ }
+ *out=until;return 0;
+}
 static inline int a04_wlan_ethernet_send(struct a04_wlan_host *h,const struct a04_wlan_station *s,
  struct a04_wlan_security *sec,struct a04_wlan_data_state *d,const uint8_t *eth,unsigned n,
  a04_wlan_mic_verify verify,void *ctx,uint64_t now,uint64_t deadline){

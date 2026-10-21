@@ -83,7 +83,8 @@ int main(void){
  assert((h.tx[6]&0x80) && sec.pending_tx==4 && !sec.m4_confirmed);
  status[0]=(uint8_t)d.pid;v.id=0x0f;v.length=16;v.payload=status;
  assert(!a04_wlan_data_tx_event(&h,&sta,&sec,&d,&v,7000) && sec.m4_confirmed);
- assert(!a04_wlan_security_authorize(&sec,0,7100) && sec.authorized && a04_wlan_port_allowed(&sta,&sec,0));
+ /* ActualGTKcommandwasqueued, not acknowledged: neveropenIP. */
+ assert(a04_wlan_security_authorize(&sec,0,7100)==A04_WLAN_STATE && !sec.authorized && !sec.gtk_confirmed && !a04_wlan_port_allowed(&sta,&sec,0));
  return 0;
 }
 ''')

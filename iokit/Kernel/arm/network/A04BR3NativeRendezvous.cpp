@@ -13,6 +13,7 @@ class A04BR3NativeNetwork : public IOService {
     A04BR3EthernetController *controller=nullptr;
     IOService *backendProvider=nullptr;
     bool attempted=false;
+    uint64_t authenticatedEpoch=0;
     IOLock *scanLock=nullptr;
     a04_scan_result_session scanSession={};
     a04_scan_completion_state scanCompletion={};
@@ -93,9 +94,10 @@ class A04BR3NativeNetwork : public IOService {
     }
     static void packet(void *context,unsigned kind,const void *bytes,unsigned length){
         auto *self=(A04BR3NativeNetwork *)context;
-        // 1 is real Ethernet delivery in the SDIO-owned API; 2 is EAPOL, which
-        // requires a real supplicant and cannot be promoted to an authorized port.
-        if(kind!=1 || !self->controller || !bytes || length<14 || length>1514)return;
+        // kind2 is genuine preauth Ethernet EAPOL, admitted separately by BSD.
+        // Personal4way is consumed by the driver owner; this never authorizes IP.
+        if((kind!=1 && kind!=2) || !self->controller || !bytes || length<14 || length>1514)return;
+        if(kind==2 && a04_wlan_be16((const uint8_t *)bytes+12)!=0x888e)return;
         mbuf_t m=nullptr;
         if(mbuf_allocpacket(MBUF_DONTWAIT,length,nullptr,&m))return;
         if(mbuf_copyback(m,0,length,bytes,MBUF_DONTWAIT) || mbuf_len(m)<14){mbuf_freem(m);return;}
@@ -103,12 +105,26 @@ class A04BR3NativeNetwork : public IOService {
         mbuf_adj(m,14); // header remains owned by the mbuf, payload starts at L3
         (void)self->controller->receive(m); // consumes on every return
     }
+    static void authenticated(void *context,uint64_t epoch){
+        auto *self=(A04BR3NativeNetwork *)context;
+        if(!epoch || epoch==self->authenticatedEpoch || !self->backendProvider || !self->controller)return;
+        a04_network_backend backend={};int e=a04br3_wlan_acquire_backend(self->backendProvider,&backend);
+        if(e)return;
+        a04_network_state state={};e=backend.state(backend.context,&state);
+        a04br3_wlan_release_backend(self->backendProvider);
+        if(e || state.association_generation!=epoch || !state.auth_profile_valid || state.auth_upper!=8 ||
+            !state.authorized || !a04_network_data_ready(&state))return;
+        self->authenticatedEpoch=epoch;
+        // Actual interface->controller->SDIO provider tree, matching native
+        // eapolclient's two-parent IOGeneralInterest endpoint. Never from SET.
+        self->backendProvider->messageClients(0xe0000130);
+    }
 public:
     int bind(IOService *provider){
         if(!scanLock){scanLock=IOLockAlloc();if(!scanLock)return ENOMEM;}
         a04_wlan_native_client client={};client.owner=this;client.context=this;
-        client.ready=ready;client.changed=changed;client.packet=packet;
-        client.get=get;client.set=set; // verify intentionally null: no fake MIC
+        client.ready=ready;client.changed=changed;client.packet=packet;client.authenticated=authenticated;
+        client.get=get;client.set=set; // Personal verifier belongs to actual SDIO PSK owner, not a success stub
         return a04br3_wlan_bind_native(provider,&client);
     }
     int shutdown(IOService *provider){

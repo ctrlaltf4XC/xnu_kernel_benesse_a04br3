@@ -10,6 +10,7 @@
 #include "A04BR3WLANData.h"
 #include "A04BR3WLANScanSnapshot.h"
 #include "A04BR3WLANJoinTarget.h"
+struct a04_psk_prepared;
 #include "../network/A04BR3NetworkBackend.h"
 #ifdef __cplusplus
 class IOService;
@@ -34,6 +35,7 @@ struct a04_wlan_native_client {
  /* Crypto-only verifier; runs under SDIO lock and MUST NOT reenter driver.
   * Actual native supplicant owns KCK/GTK crypto, no success stub is permitted. */
  a04_wlan_mic_verify verify;
+ void (*authenticated)(void *,uint64_t); /* actual auth completion + owner generation */
 };
 int a04br3_wlan_acquire_backend(a04_wlan_service,struct a04_network_backend *);
 void a04br3_wlan_release_backend(a04_wlan_service);
@@ -60,6 +62,8 @@ int a04br3_wlan_join(a04_wlan_service,unsigned index,unsigned secured);
 /* Open-only admission; generation+index+identity validated atomically with
  * station_select. No cached index race and no association-success return. */
 int a04br3_wlan_join_target(a04_wlan_service,const struct a04_wlan_join_target *);
+/* Prepared BEFORE association/SDIO lock; consumed and wiped on every result. */
+int a04br3_wlan_join_personal(a04_wlan_service,const struct a04_wlan_join_target *,struct a04_psk_prepared *);
 /* Open-only SET22 admission. Real deauth TX_DONE precedes associated teardown.
  * Scan/data/key work in flight is rejected, never erased to claim completion.
  * Completed teardown quarantines indices and allocates a distinct context;

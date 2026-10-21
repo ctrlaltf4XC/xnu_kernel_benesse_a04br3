@@ -12,9 +12,12 @@
 #include "A04BR3WLANFirmware.h"
 #include "A04BR3WLANBootFirmware.h"
 #include "A04BR3WLANRuntime.h"
+#include "A04BR3WLANPersonalRuntime.h"
+#include "A04BR3WLANPSKBinding.h"
 #include "A04BR3WLANBackendAPI.h"
 #include "A04BR3WLANJoinAdmission.h"
 #include "A04BR3WLANCurrentNetwork.h"
+#include "A04BR3WLANNetworkProfile.h"
 #include <kern/thread_call.h>
 #include <kern/clock.h>
 extern "C" {
@@ -51,12 +54,14 @@ class A04BR3SDIO : public IOService {
  struct a04_wmt_startup_options startupOptions={0,0,0,1,2,1};
  struct Live {
   struct a04_wlan_runtime runtime;
+  struct a04_psk4way personalWork;uint8_t personalRX[1514];unsigned groupWaitReported;
   struct {unsigned bytes;uint8_t data[1514];} queue[8];
   unsigned head,count,attempted,readyNotified,notifiedEvents,notifiedScan;
  } *live=nullptr;
  thread_call_t liveCall=nullptr;
  bool liveStopping=false,networkInitialized=false;
  struct a04_wlan_native_client nativeClient={};
+ uint64_t nativeEpoch=1;
  static A04BR3SDIO *netOwner;
  static uint64_t liveNow(){clock_sec_t s;clock_usec_t u;clock_get_system_microtime(&s,&u);return (uint64_t)s*1000000+u;}
  void scheduleLive(unsigned ms=5){
@@ -88,8 +93,10 @@ class A04BR3SDIO : public IOService {
  }
  void stopLive(){
   if(!transportLock)return;
-  IOLockLock(transportLock);liveStopping=true;networkInitialized=false;
-  if(live){live->runtime.admin=0;live->runtime.security.authorized=0;live->runtime.station.sta_active=0;live->count=0;}
+  IOLockLock(transportLock);++nativeEpoch;liveStopping=true;networkInitialized=false;
+  if(live){live->runtime.admin=0;live->runtime.security.authorized=0;live->runtime.station.sta_active=0;live->count=0;
+   if(live->runtime.personal_admitted)a04_psk_fail(&live->runtime.personal,A04_WLAN_STATE);
+   a04_psk_prepared_clear(&live->runtime.credential);}
   IOLockUnlock(transportLock);
   A04BR3SDIO *expected=this;
   if(__atomic_compare_exchange_n(&netOwner,&expected,(A04BR3SDIO *)nullptr,false,__ATOMIC_ACQ_REL,__ATOMIC_ACQUIRE))release();
@@ -119,20 +126,50 @@ class A04BR3SDIO : public IOService {
    IOLog("A04BR3 WLAN: runtime board read/query=%d after net_init (no automatic retry)\n",e);
   }
   struct a04_wlan_native_client client=nativeClient;if(client.owner)client.owner->retain();
-  unsigned changed=0,ready=0;
+  unsigned changed=0,ready=0;uint64_t authenticatedGeneration=0;
   for(unsigned step=0;!r->failed && step<8;step++){
-   uint64_t now=liveNow();e=a04_wlan_runtime_step(r,wlanHost,now,client.verify,client.context);
+   uint64_t now=liveNow();e=a04_wlan_runtime_step(r,wlanHost,now,r->personal_admitted?a04_psk_verify:client.verify,r->personal_admitted?(void *)&r->personal:client.context);
    bool empty=(e==A04_WLAN_PENDING);if(empty)e=0;
    if(!e && !r->teardown.pending && r->station.selected && r->station.grant_ms && !r->station.channel_pending && r->station.join.phase==0)
     e=a04_wlan_station_auth(&r->station,wlanHost,now);
    if(!e && !r->teardown.pending && r->station.join.phase==2){unsigned bytes=0;const uint8_t *rsn=r->station.secured?a04_wlan_rsn_selected(&bytes):nullptr;
     e=a04_wlan_station_assoc(&r->station,wlanHost,r->station.ap.capability,10,rsn,bytes,now);}
-   if(!e && !r->teardown.pending && r->station.sta_active && r->station.secured && !r->security.enabled)
-    e=a04_wlan_security_begin(&r->security,&r->station,now,now+10000000);
+   if(!e && !r->teardown.pending && r->station.sta_active && r->station.secured && !r->security.enabled){
+    if(r->personal_admitted){auto ops=a04_psk_native_crypto();e=a04_wlan_personal_start(r,&ops,now);}
+    else e=a04_wlan_security_begin(&r->security,&r->station,now,now+10000000);
+   }
+   if(!e && r->personal_admitted && r->delivery_kind==A04_WLAN_DELIVERY_EAPOL){
+    uint64_t epoch=r->association_generation,consumer=nativeEpoch;unsigned bytes=r->delivery_length;
+    if(bytes<14 || bytes>sizeof(live->personalRX))e=A04_WLAN_FORMAT;
+    else{
+     bcopy(r->delivery,live->personalRX,bytes);live->personalWork=r->personal;r->personal_busy=1;
+     IOLockUnlock(transportLock);
+     // CSPRNG and all actual handshake crypto run outside SDIO/spin locks.
+     int crypto=a04_psk_rx(&live->personalWork,live->personalRX+14,bytes-14,now);
+     IOLockLock(transportLock);r->personal_busy=0;now=liveNow();
+     if(!liveStopping && a04_wlan_personal_commit_allowed(r,epoch,consumer,nativeEpoch,nativeClient.owner && nativeClient.owner==client.owner)){
+      if(crypto!=A04_WLAN_PENDING){
+       if(!crypto)crypto=a04_psk_live(&live->personalWork,now);
+       e=crypto?crypto:a04_wlan_personal_observed(r,&live->personalWork);
+      }
+     }
+     a04_wlan_secret_clear(&live->personalWork,sizeof(live->personalWork));
+     a04_wlan_secret_clear(live->personalRX,sizeof(live->personalRX));
+    }
+    r->delivery_kind=r->delivery_length=0;r->delivery=nullptr;
+    if(liveStopping)break;
+   }
+   if(!e && !r->teardown.pending)e=a04_wlan_personal_drive(r,wlanHost,now);
+   if(!e && r->personal_admitted && a04_psk_authenticated(&r->personal) && !r->security.authorized)
+    e=a04_wlan_security_authorize(&r->security,0,now);
+   if(!e && r->security.authorized && r->personal_admitted && !r->personal.completion_reported){
+    e=a04_psk_completion_take(&r->personal);if(!e)authenticatedGeneration=r->association_generation;
+   }
    if(!e && !r->teardown.pending && live->count && !r->data.pending){
-    unsigned at=live->head;uint64_t until=now+900000;
-    if(r->security.enabled && until>r->security.deadline_us)until=r->security.deadline_us;
-    e=a04_wlan_ethernet_send(wlanHost,&r->station,&r->security,&r->data,live->queue[at].data,live->queue[at].bytes,client.verify,client.context,now,until);
+    unsigned at=live->head;uint64_t until=0;
+    unsigned eapol=a04_wlan_be16(live->queue[at].data+12)==0x888e;
+    e=a04_wlan_data_deadline(&r->security,eapol,now,&until);
+    if(!e)e=a04_wlan_ethernet_send(wlanHost,&r->station,&r->security,&r->data,live->queue[at].data,live->queue[at].bytes,r->personal_admitted?a04_psk_verify:client.verify,r->personal_admitted?(void *)&r->personal:client.context,now,until);
     a04_wlan_secret_clear(live->queue[at].data,live->queue[at].bytes);live->head=(at+1)%8;live->count--;
    }
    if(e)a04_wlan_runtime_fail(r,wlanHost,e);
@@ -146,6 +183,9 @@ class A04BR3SDIO : public IOService {
   }
   if(r->configured && !live->readyNotified && client.ready && !r->failed){live->readyNotified=1;ready=1;}
   if(live->notifiedEvents!=r->events || live->notifiedScan!=r->scan_count || r->failed){changed=1;live->notifiedEvents=r->events;live->notifiedScan=r->scan_count;}
+  if(r->personal_wait_group_ack && !live->groupWaitReported){live->groupWaitReported=1;
+   setProperty("WLANPersonalWaitingForGTKCompletion",kOSBooleanTrue);
+   IOLog("A04BR3 WLAN: Personal GTK queued, no proven firmware group-key ACK; controlled port remains closed\n");}
   if(r->configured && !getRuntimeAnnounced){getRuntimeAnnounced=true;
    IOLog("A04BR3 WLAN: runtime MAC valid=%u source=%u NIC=0x%x FW=0x%x boardQueued=%u passive scan seq=%u RFfail=%u BBfail=%u\n",r->mac_valid,r->mac_source,r->firmware_product,r->firmware_version,r->calibration_sent,r->scan_sequence,r->rf_cal_fail,r->bb_cal_fail);}
   if(r->station.scan.complete && !scanAnnounced){scanAnnounced=true;IOLog("A04BR3 WLAN: passive scan complete results=%u dropped=%u events=%u\n",r->scan_count,r->scan_dropped,r->events);}
@@ -158,6 +198,7 @@ class A04BR3SDIO : public IOService {
   else if(!liveStopping)scheduleLive((r->cap_pending || r->station.scan.pending || r->station.selected || r->data.pending || live->count)?20:50);
   IOLockUnlock(transportLock);
   if(ready)client.ready(client.context,this);
+  if(authenticatedGeneration && client.authenticated)client.authenticated(client.context,authenticatedGeneration);
   if(changed && client.changed)client.changed(client.context);
   if(client.owner)client.owner->release();
  }
@@ -170,11 +211,8 @@ class A04BR3SDIO : public IOService {
    out->present=s->identityReady;out->firmware_running=s->wlanDownload.ready && s->wlanHost && !s->wlanHost->failed;
    out->control_ready=s->networkInitialized && !s->liveStopping && r->configured && !r->failed;
    out->radio_enabled=r->admin && out->control_ready;
-   out->station_phase=out->control_ready?a04_network_phase_from_station(&r->station):A04_NET_PHASE_UNKNOWN;
-   out->join_state=out->control_ready && !r->teardown.pending?a04_network_join_from_station(&r->station):A04_NET_JOIN_UNKNOWN;
-   out->permitted_channels=out->control_ready?r->station.local.permitted_channels:0;
-   out->mac_valid=r->mac_valid;bcopy(r->mac,out->mac,6);out->associated=r->station.sta_active && r->station.join.phase==4 && !r->failed;
-   out->datapath_ready=out->control_ready && !r->teardown.pending && out->associated && s->nativeClient.packet && a04_wlan_port_allowed(&r->station,&r->security,0);
+   out->mac_valid=r->mac_valid;bcopy(r->mac,out->mac,6);
+   a04_wlan_network_profile(r,out,s->nativeClient.packet!=nullptr);
   }IOLockUnlock(s->transportLock);return 0;
  }
  static int backendGet(void *p,uint32_t type,uint32_t value,void *buf,uint32_t *n){return ((A04BR3SDIO *)p)->nativeDispatch(false,type,value,buf,n);}
@@ -209,22 +247,37 @@ class A04BR3SDIO : public IOService {
   }else if(s->live && s->live->count==8)e=ENOBUFS;
   IOLockUnlock(s->transportLock);if(!e)mbuf_freem(m);return e;
  }
+ static int backendEAPOLTransmit(void *p,void *packet){
+  if(!packet)return EINVAL;
+  auto *s=(A04BR3SDIO *)p;mbuf_t m=(mbuf_t)packet;size_t n=mbuf_pkthdr_len(m);
+  if(n<14 || n>1514)return EMSGSIZE;
+  uint8_t eth[1514];int e=mbuf_copydata(m,0,n,eth);if(e)return e;
+  IOLockLock(s->transportLock);
+  if(!s->live || s->liveStopping)e=ENXIO;
+  else if(s->live->runtime.personal_admitted)e=EOPNOTSUPP; // driver owns Personal4way; no competing native writer
+  else if(a04_wlan_be16(eth+12)!=0x888e || !a04_wlan_equal(eth,s->live->runtime.station.ap.mac,6) ||
+   !a04_wlan_equal(eth+6,s->live->runtime.station.local.mac,6))e=EINVAL;
+  else e=s->queuePacket(eth,(unsigned)n);
+  IOLockUnlock(s->transportLock);a04_wlan_secret_clear(eth,sizeof(eth));if(!e)mbuf_freem(m);return e;
+ }
 public:
  int acquireBackend(struct a04_network_backend *out){
   if(!out)return EINVAL;
   struct a04_network_state state;backendState(this,&state);if(!state.control_ready || !state.mac_valid)return ENXIO;
-  retain();*out={this,backendState,backendGet,backendAdmin,backendTransmit,backendSet};return 0;
+  retain();*out={this,backendState,backendGet,backendAdmin,backendTransmit,backendSet,backendEAPOLTransmit};return 0;
  }
  int bindNative(const struct a04_wlan_native_client *client){
   if(!client || !client->owner)return EINVAL;
   IOLockLock(transportLock);int e=0;
-  if(liveStopping)e=ENXIO;else if(nativeClient.owner)e=EBUSY;else{nativeClient=*client;client->owner->retain();if(live)live->readyNotified=0;scheduleLive();}
+  if(liveStopping)e=ENXIO;else if(nativeClient.owner)e=EBUSY;else{++nativeEpoch;nativeClient=*client;client->owner->retain();if(live)live->readyNotified=0;scheduleLive();}
   IOLockUnlock(transportLock);return e;
  }
  int unbindNative(){
-  IOLockLock(transportLock);struct a04_wlan_native_client c=nativeClient;bzero(&nativeClient,sizeof(nativeClient));
+  IOLockLock(transportLock);++nativeEpoch;struct a04_wlan_native_client c=nativeClient;bzero(&nativeClient,sizeof(nativeClient));
   /* Removing a supplicant/consumer closes the host controlled port. */
-  if(live){live->runtime.security.authorized=0;live->count=0;}
+  if(live){live->runtime.security.authorized=0;live->count=0;
+   if(live->runtime.personal_admitted)a04_psk_fail(&live->runtime.personal,A04_WLAN_STATE);
+   a04_psk_prepared_clear(&live->runtime.credential);}
   IOLockUnlock(transportLock);if(c.owner)c.owner->release();return 0;
  }
  int requestScanMode(unsigned mode,unsigned *acceptedGeneration){
@@ -292,9 +345,27 @@ public:
    if(!e){
     r->station.local.active_channels=r->station.local.permitted_channels;
     int command=a04_wlan_station_select(&r->station,wlanHost,&r->scan[target->index],0,1,1000,now,now+1500000);
-    e=command?EIO:0;if(!e)scheduleLive();
+    e=command?EIO:0;if(!e){
+     r->auth_lower=1;r->auth_upper=r->auth_upper_ext=0;
+     r->association_generation=++r->association_counter;scheduleLive();}
    }
   }IOLockUnlock(transportLock);return e;
+ }
+ int requestPersonalJoin(const struct a04_wlan_join_target *target,struct a04_psk_prepared *prepared){
+  if(!target || !prepared){a04_psk_prepared_clear(prepared);return EINVAL;}
+  IOLockLock(transportLock);int e=ENXIO;
+  if(live && !liveStopping && networkInitialized && wlanHost){
+   auto *r=&live->runtime;e=a04_wlan_personal_target_check(r,target,liveNow());
+   if(!e && (!prepared->ready || prepared->ssid_bytes!=target->ssid_length || !a04_psk_equal(prepared->ssid,target->ssid,target->ssid_length)))e=EINVAL;
+   if(!e && r->association_counter>=0xffffffffffffULL)e=EOVERFLOW;
+   if(!e){r->station.local.active_channels=r->station.local.permitted_channels;uint64_t now=liveNow();
+    int wire=a04_wlan_station_select(&r->station,wlanHost,&r->scan[target->index],1,1,1000,now,now+1500000);
+    if(wire)e=EIO;
+    else{r->credential=*prepared;r->personal_admitted=1;r->auth_lower=1;r->auth_upper=8;r->auth_upper_ext=0;
+     r->association_generation=++r->association_counter;scheduleLive();}
+   }
+  }
+  a04_psk_prepared_clear(prepared);IOLockUnlock(transportLock);return e;
  }
  int sendEAPOL(const void *p,unsigned n){if(!p || n<14 || a04_wlan_be16((const uint8_t *)p+12)!=0x888e)return EINVAL;IOLockLock(transportLock);int e=queuePacket(p,n);IOLockUnlock(transportLock);return e;}
  int requestDisassociate(){
@@ -313,8 +384,8 @@ public:
    if(!e){if(!r->teardown.pending){r->scan_count=0;r->scan_completed_us=0;}scheduleLive();}
   }IOLockUnlock(transportLock);return e;
  }
- int installKey(unsigned pairwise,unsigned id,const uint8_t *key,const uint8_t *rsc){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_security_install(&live->runtime.security,&live->runtime.station,wlanHost,pairwise,id,key,rsc,liveNow());if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
- int authorize(int result){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_security_authorize(&live->runtime.security,result,liveNow());if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
+ int installKey(unsigned pairwise,unsigned id,const uint8_t *key,const uint8_t *rsc){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:(live->runtime.personal_admitted?EOPNOTSUPP:a04_wlan_security_install(&live->runtime.security,&live->runtime.station,wlanHost,pairwise,id,key,rsc,liveNow()));if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
+ int authorize(int result){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:(live->runtime.personal_admitted?EOPNOTSUPP:a04_wlan_security_authorize(&live->runtime.security,result,liveNow()));if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
 private:
 
  static uint32_t dataRead(void *p,unsigned off,unsigned width){
@@ -687,3 +758,5 @@ extern "C" int a04br3_wlan_scan_mode(IOService *p,unsigned mode,unsigned *accept
 }
 
 extern "C" int a04br3_wlan_disassociate(IOService *p){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->requestDisassociate():ENXIO;}
+
+extern "C" int a04br3_wlan_join_personal(IOService *p,const struct a04_wlan_join_target *t,struct a04_psk_prepared *prepared){auto s=OSDynamicCast(A04BR3SDIO,p);if(!s){a04_psk_prepared_clear(prepared);return ENXIO;}return s->requestPersonalJoin(t,prepared);}

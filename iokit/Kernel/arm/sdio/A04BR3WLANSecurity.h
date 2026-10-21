@@ -57,7 +57,7 @@ static inline int a04_wlan_eapol_parse(const uint8_t *p,unsigned n,struct a04_wl
 }
 typedef int (*a04_wlan_mic_verify)(void *,const uint8_t *,unsigned,unsigned,unsigned);
 struct a04_wlan_security {
- unsigned enabled,phase,pending_tx,ptk_pending,ptk_confirmed,gtk_queued,m4_confirmed,authorized;
+ unsigned enabled,phase,pending_tx,ptk_pending,ptk_confirmed,gtk_queued,gtk_confirmed,m4_confirmed,authorized;
  uint64_t replay,deadline_us,rx_pn[16],gtk_pn[4];unsigned gtk_id;uint8_t anonce[32];int failed;
 };
 static inline int a04_wlan_security_fail(struct a04_wlan_security *s,int e){
@@ -141,15 +141,17 @@ static inline int a04_wlan_security_key_event(struct a04_wlan_security *s,const 
  if(!s || !sta || !v || s->failed)return A04_WLAN_STATE;
  if(v->id!=0x24)return A04_WLAN_UNSUPPORTED;
  if(now>=s->deadline_us)return a04_wlan_security_fail(s,A04_WLAN_TIMEOUT);
- if(!s->ptk_pending || s->ptk_confirmed || v->length!=8 || v->payload[0]!=sta->local.bss ||
+ if(!s->ptk_pending || s->ptk_confirmed || v->length!=8 || v->payload[1] || v->payload[0]!=sta->local.bss ||
   !a04_wlan_equal(v->payload+2,sta->ap.mac,6))return a04_wlan_security_fail(s,A04_WLAN_SEQUENCE);
  s->ptk_pending=0;s->ptk_confirmed=1;return 0;
 }
 /* Called only by the native supplicant after its authenticated handshake,
  * RSN/GTK checks and successful M4 TX completion. Never from a set-key ioctl.
+ * gtk_confirmed requires actual independently proved firmware completion;
+ * currentgen3 onlyqueuesGTK, so this cannotopenitsportwithoutnewACKevidence.
  * This trusted callback is a security boundary, not a synthetic success flag. */
 static inline int a04_wlan_security_authorize(struct a04_wlan_security *s,int supplicant_result,uint64_t now){
- if(!s || s->failed || !s->enabled || s->phase!=3 || !s->ptk_confirmed || !s->gtk_queued || !s->m4_confirmed)return A04_WLAN_STATE;
+ if(!s || s->failed || !s->enabled || s->phase!=3 || !s->ptk_confirmed || !s->gtk_queued || !s->gtk_confirmed || !s->m4_confirmed)return A04_WLAN_STATE;
  if(now>=s->deadline_us)return a04_wlan_security_fail(s,A04_WLAN_TIMEOUT);
  if(supplicant_result)return a04_wlan_security_fail(s,A04_WLAN_SECURITY);
  s->authorized=1;return 0;

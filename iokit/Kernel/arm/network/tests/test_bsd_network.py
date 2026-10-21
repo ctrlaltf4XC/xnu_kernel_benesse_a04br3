@@ -26,7 +26,27 @@ static inline void clock_get_system_microtime(clock_sec_t *s,clock_usec_t *u){*s
 static const unsigned IFNAMSIZ=16;
 using user64_addr_t=uint64_t;using user32_addr_t=uint32_t;
 using errno_t=int;using user_addr_t=uint64_t;using protocol_family_t=uint32_t;
-struct Packet {bool freed;};using mbuf_t=Packet *;
+struct Packet {bool freed;unsigned flags=2;size_t length=0,offset=0,used=0;uint8_t storage[1600]={};Packet *nextpkt=nullptr,*segment=nullptr;void *header=nullptr;bool heap=false;};using mbuf_t=Packet *;
+#define MBUF_PKTHDR 2
+#define MBUF_DONTWAIT 0
+static inline unsigned mbuf_flags(mbuf_t p){return p->flags;}
+static inline mbuf_t mbuf_nextpkt(mbuf_t p){return p->nextpkt;}
+static inline size_t mbuf_pkthdr_len(mbuf_t p){return p->length;}
+static inline void *mbuf_data(mbuf_t p){return p->storage+p->offset;}
+static inline void *mbuf_pkthdr_header(mbuf_t p){return p->header;}
+static inline size_t mbuf_leadingspace(mbuf_t p){return p->offset;}
+static inline int mbuf_copydata(mbuf_t p,size_t offset,size_t n,void *out){
+ uint8_t *d=(uint8_t *)out;
+ for(;p&&n;p=p->segment){size_t available=p->used-p->offset;if(offset>=available){offset-=available;continue;}available-=offset;if(available>n)available=n;memcpy(d,p->storage+p->offset+offset,available);d+=available;n-=available;offset=0;}
+ return n?EINVAL:0;
+}
+static int rxAllocError,rxCopyError,rxShortHeader,rxAllocNull;
+static inline int mbuf_allocpacket(int how,size_t bytes,unsigned *,mbuf_t *out){assert(how==MBUF_DONTWAIT&&bytes<=1514);if(rxAllocError)return rxAllocError;if(rxAllocNull){*out=nullptr;return 0;}*out=new Packet{false};(*out)->heap=true;return 0;}
+static inline int mbuf_copyback(mbuf_t p,size_t offset,size_t bytes,const void *in,int how){assert(!offset&&how==MBUF_DONTWAIT);if(rxCopyError)return rxCopyError;memcpy(p->storage,in,bytes);p->length=p->used=bytes;return 0;}
+static inline size_t mbuf_len(mbuf_t p){return rxShortHeader?13:p->used-p->offset;}
+static inline void mbuf_pkthdr_setheader(mbuf_t p,void *h){p->header=h;}
+static inline void mbuf_adj(mbuf_t p,int bytes){assert(bytes==14);p->offset+=14;p->length-=14;}
+
 struct IF;using ifnet_t=IF *;
 using Out=int (*)(ifnet_t,mbuf_t);using Ioctl=int (*)(ifnet_t,unsigned long,void *);using Detached=void (*)(ifnet_t);
 struct IOLock {bool held;};
@@ -107,7 +127,7 @@ struct ifnet_init_eparams {
  decltype(&ether_check_multi) check_multi;decltype(&ether_frameout_extended) framer_extended;
  void *softc;Ioctl ioctl;Detached detach;const void *broadcast_addr;unsigned broadcast_len;
 };
-struct IF {ifnet_init_eparams init;unsigned flags,refs;bool attached;};
+struct IF {ifnet_init_eparams init;unsigned flags,refs;bool attached;unsigned addrlen=0,hdrlen=0;};
 static IF *current,*pending;
 static int ifnet_allocate_extended(const ifnet_init_eparams *p,ifnet_t *out){
  assert(p->ver==2 && p->len==sizeof(*p) && p->flags==IFNET_INIT_LEGACY);
@@ -116,6 +136,9 @@ static int ifnet_allocate_extended(const ifnet_init_eparams *p,ifnet_t *out){
  if(failAlloc)return ENOMEM;assert(!current);current=new IF{*p,0,1,false};*out=current;return 0;
 }
 static void *ifnet_softc(ifnet_t p){return p->init.softc;}
+static int failMediaLength;
+static int ifnet_set_addrlen(ifnet_t p,unsigned n){assert(n==6);if(failMediaLength==1)return EINVAL;p->addrlen=n;return 0;}
+static int ifnet_set_hdrlen(ifnet_t p,unsigned n){assert(n==14);if(failMediaLength==2)return EINVAL;p->hdrlen=n;return 0;}
 static int ifnet_set_mtu(ifnet_t,unsigned n){assert(n==1500);return failMtu;}
 static int ifnet_set_flags(ifnet_t p,unsigned v,unsigned mask){p->flags=(p->flags&~mask)|(v&mask);return failFlags;}
 static int ifnet_attach(ifnet_t p,const sockaddr_dl *a){assert(a->sdl_alen==6 && a->sdl_family==AF_LINK && !memcmp(LLADDR(a),p->init.uniqueid,6));if(failAttach)return failAttach;p->attached=true;return 0;}
@@ -141,15 +164,18 @@ static int ifnet_event(ifnet_t p,kern_event_msg *e){
  }
  return eventError;
 }
-static int ifnet_reference(ifnet_t p){assert(p&&p->refs);p->refs++;return 0;}
+static int failInputReference;
+static int ifnet_reference(ifnet_t p){if(failInputReference)return failInputReference;assert(p&&p->refs);p->refs++;return 0;}
 static const char *ifnet_name(ifnet_t p){return p->init.name;}
 static unsigned ifnet_unit(ifnet_t p){return p->init.unit;}
 static unsigned ifnet_flags(ifnet_t p){return p->flags;}
 static int ifnet_detach(ifnet_t p){if(failDetach)return failDetach;pending=p;if(inlineDetach)p->init.detach(p);return 0;}
 static void completeDetach(){assert(pending);auto p=pending;p->init.detach(p);}
 static int IOLockSleep(IOLock *g,void *,int){sleeps++;IOLockUnlock(g);completeDetach();IOLockLock(g);return 0;}
-static void mbuf_freem(mbuf_t p){assert(!p->freed);p->freed=true;packetFrees++;}
-static int ifnet_input(ifnet_t p,mbuf_t m,const void *){assert(p->refs==2 && !heldLocks);inputCalls++;mbuf_freem(m);return inputError;}
+static void mbuf_freem(mbuf_t p){assert(!p->freed);p->freed=true;packetFrees++;if(p->segment)mbuf_freem(p->segment);if(p->heap)delete p;}
+static int mbuf_freem_list(mbuf_t p){int n=0;while(p){auto next=p->nextpkt;mbuf_freem(p);p=next;++n;}return n;}
+static void (*inputObserver)(ifnet_t,mbuf_t)=nullptr;
+static int ifnet_input(ifnet_t p,mbuf_t m,const void *){assert(p->refs==2 && !heldLocks);inputCalls++;if(inputObserver)inputObserver(p,m);mbuf_freem(m);return inputError;}
 static uint8_t userBuffer[16384];
 static int copyin(user_addr_t a,void *out,size_t n){copyIns++;if(copyInError)return copyInError;if(a!=(uintptr_t)userBuffer || n>sizeof(userBuffer))return EFAULT;memcpy(out,userBuffer,n);return 0;}
 static int copyout(const void *in,user_addr_t a,size_t n){copyOuts++;if(copyOutError)return copyOutError;if((a!=(uintptr_t)userBuffer && a!=0x1234) || n>sizeof(userBuffer))return EFAULT;memcpy(userBuffer,in,n);return 0;}
@@ -173,14 +199,14 @@ static int set(void *,uint32_t type,uint32_t value,const void *p,uint32_t n){
 }
 static int admin(void *,unsigned enabled){adminCalls++;lastAdmin=enabled;return adminError;}
 static int tx(void *,void *p){txCalls++;if(transmitError)return transmitError;mbuf_freem((mbuf_t)p);return 0;}
-static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={1,1,0,0,0,0,{0,2,3,4,5,6},0,0,0,0};
+static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={};realState.present=realState.mac_valid=1;const uint8_t initialMac[6]={0,2,3,4,5,6};memcpy(realState.mac,initialMac,6);
  stateError=nativeError=adminError=transmitError=failAlloc=failMtu=failFlags=failAttach=failDetach=failMemory=copyInError=copyOutError=0;
  credentialRoot=1;credentialChecks=setCalls=setError=0;adminCalls=0;lastAdmin=99;registrations=releaseCount=packetFrees=txCalls=nativeCalls=copyIns=copyOuts=0;backendOutput=4;inlineDetach=false;}
 static a04_apple80211_req64 req(){a04_apple80211_req64 r={};strcpy(r.name,"en7");r.type=12;r.value=7;r.length=8;r.user_data=(uintptr_t)userBuffer;return r;}
 static void ready(){realState.firmware_running=realState.control_ready=realState.datapath_ready=realState.associated=1;}
 static void cleanup(A04BR3BSDNetwork &n,IOService &s){assert(n.detach()==0);if(pending)completeDetach();assert(n.isDetached() && n.finish()==0 && s.refs==1);assert(!lockCount && !current);}
 static void mediaCases(){
- reset();a04_network_backend b={nullptr,state,get,admin,tx,set};A04BR3BSDNetwork bridge;IOService service;
+ reset();a04_network_backend b={};b.state=state;b.native_get=get;b.set_admin=admin;b.transmit=tx;b.native_set=set;A04BR3BSDNetwork bridge;IOService service;
  realState.firmware_running=realState.control_ready=1;assert(!bridge.attach(&service,&b,7));
  ifmediareq64 m={};strcpy(m.ifm_name,"en7");
  assert(!current->init.ioctl(current,SIOCGIFMEDIA64,&m));
@@ -226,7 +252,7 @@ static void mediaCases(){
  cleanup(bridge,service);
 }
 static void traceCases(){
- reset();a04_network_backend b={nullptr,state,get,admin,tx,set};A04BR3BSDNetwork bridge;IOService service;
+ reset();a04_network_backend b={};b.state=state;b.native_get=get;b.set_admin=admin;b.transmit=tx;b.native_set=set;A04BR3BSDNetwork bridge;IOService service;
  ready();assert(!bridge.attach(&service,&b,7));
  for(unsigned i=0;i<64;i++){
   auto r=req();unsigned cmd=i%2?A04_APPLE80211_SET64:A04_APPLE80211_GET64;
@@ -280,7 +306,7 @@ static void traceCases(){
 int main(){
  mediaCases();
  traceCases();
- a04_network_backend b={nullptr,state,get,admin,tx,set};
+ a04_network_backend b={};b.state=state;b.native_get=get;b.set_admin=admin;b.transmit=tx;b.native_set=set;
  // No invented identity or parent; no ifnet allocated for absent hardware.
  for(unsigned fault=0;fault<5;fault++){
   reset();A04BR3BSDNetwork n;IOService s;
