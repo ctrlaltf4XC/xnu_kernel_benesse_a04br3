@@ -23,11 +23,13 @@
 
 #include <sys/cdefs.h>
 
-__BEGIN_DECLS
 #include <IOKit/assert.h>
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
+/* XNU8796 BSD includes contain C++ startup templates. Keep only the C
+ * function declaration inside the explicit C linkage block. */
+__BEGIN_DECLS
 struct mbuf * m_getpackets(int num_needed, int num_with_pkthdrs, int how);
 __END_DECLS
 

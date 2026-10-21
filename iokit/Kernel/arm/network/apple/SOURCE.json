@@ -66,7 +66,7 @@
       "path": "IOMbufMemoryCursor.cpp",
       "sha256": "0a74e504c7c22b906d0f4ce87a45605377320145c8daab3ea5b9219ab3de0c58",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IOMbufMemoryCursor.cpp",
-      "vendored_sha256": "cd6d79ba6a7f0acfee2ce1daab215694dd504c788cbca4e9d00d4478b022fe5f"
+      "vendored_sha256": "0cccf37e60e844047f744eb0d86e3ba30fc14355c9c36738224c577438e86974"
     },
     {
       "path": "IOMbufMemoryCursor.h",
@@ -201,7 +201,7 @@
       "vendored_sha256": "f2192a69dc33cdcac2e025fd545b92e1499e058bd5343a668c3a7ed0f44a6b0d"
     }
   ],
-  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained.",
+  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained.; IOMbufMemoryCursor limits explicit C linkage to m_getpackets declaration, leaving XNU C++ template-bearing includes outside.",
   "build_adaptations": {
     "family_private_spi": "Parent-owned Makefile must define __PRIVATE_SPI__=1 for every network object; matches original pinned project GCC_PREPROCESSOR_DEFINITIONS, no declarations or enum values fabricated.",
     "target_conditionals": "IONetworkInterface.cpp and IOKernelDebugger.cpp include source-owned A04BR3FamilyTarget.h; only consumed TARGET_OS_IPHONE derived from explicit target or board/XNU defines. No SDK system header dependency."
