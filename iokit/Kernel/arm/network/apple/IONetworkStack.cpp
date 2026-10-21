@@ -897,6 +897,17 @@ IOReturn IONetworkStack::registerAllNetworkInterfaces( void )
 
 //------------------------------------------------------------------------------
 
+IOReturn IONetworkStack::registerKernelInterface(
+    IONetworkInterface * netif,uint32_t unit)
+{
+    if (!netif) return kIOReturnBadArgument;
+    // Directly run the same publication callback BEFORE any asynchronous
+    // IOFirstPublish match. The caller deliberately has not registered the
+    // nub yet. Real BSD attach below publishes it after the unit is reserved.
+    if (!interfacePublished(this,netif,0)) return kIOReturnError;
+    return registerNetworkInterface(netif,unit,false);
+}
+
 IOReturn IONetworkStack::registerNetworkInterface(
     IONetworkInterface * netif,
     uint32_t             unit,

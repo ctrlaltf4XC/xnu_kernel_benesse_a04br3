@@ -38,6 +38,7 @@ public:
     bool start(IOService *) APPLE_KEXT_OVERRIDE;
     void stop(IOService *) APPLE_KEXT_OVERRIDE;
     IONetworkInterface *createInterface() APPLE_KEXT_OVERRIDE;
+    IONetworkInterface *networkInterface() const {return interface;} /* borrowed, serialized owner */
     IOReturn getHardwareAddress(IOEthernetAddress *) APPLE_KEXT_OVERRIDE;
     IOReturn getPacketFilters(UInt32 *) const APPLE_KEXT_OVERRIDE;
     IOReturn enablePacketFilter(const OSSymbol *,UInt32,UInt32,IOOptionBits) APPLE_KEXT_OVERRIDE;

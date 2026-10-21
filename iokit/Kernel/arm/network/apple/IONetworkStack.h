@@ -99,6 +99,10 @@ protected:
                             void * messageArgument, vm_size_t argSize );
 
 public:
+    /* Trusted source-owned kernel startup: caller keeps the nub unpublished
+     * until this call. Reuses normal publication/reservation/open/BSD attach
+     * state transitions, never allocates a second ifnet or fabricates a name. */
+    IOReturn registerKernelInterface(IONetworkInterface * netif,uint32_t unit);
     virtual bool        start( IOService * provider ) APPLE_KEXT_OVERRIDE;
     virtual void        stop( IOService * provider ) APPLE_KEXT_OVERRIDE;
     virtual bool        finalize( IOOptionBits options ) APPLE_KEXT_OVERRIDE;

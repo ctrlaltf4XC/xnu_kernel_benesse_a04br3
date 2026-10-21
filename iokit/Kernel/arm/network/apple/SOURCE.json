@@ -144,13 +144,13 @@
       "path": "IONetworkStack.cpp",
       "sha256": "a2b5d2302fdb7fceed1060e8ddcef9f4379a71ee229ad277f8ca56fd11b2da6c",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkStack.cpp",
-      "vendored_sha256": "56c16910bff47f62db90d4fd5df3dc8e75f1fcfe6987961bacdbae5e62b598a7"
+      "vendored_sha256": "9d2df3467eb60fcd3eb997ecb34869ebd904a3b73060d6ec7328f043417381c0"
     },
     {
       "path": "IONetworkStack.h",
       "sha256": "a074333b96a6847b818aa1888451e0ad6e2d2effaf295fef0261b8d11398d327",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkStack.h",
-      "vendored_sha256": "a074333b96a6847b818aa1888451e0ad6e2d2effaf295fef0261b8d11398d327"
+      "vendored_sha256": "dc2c97c0d0c6ee3e71c4d3569f86cf7cd34fa12085fc6107f76824528e31e12c"
     },
     {
       "path": "IONetworkStats.h",
@@ -219,5 +219,6 @@
       "path": "A04BR3IONetworkBacking.inc",
       "sha256": "90c66a211550ce8b3a846c6f245530d81e463682f32e4e020c2eedc53ea9ada8"
     }
-  ]
+  ],
+  "a04_kernel_registration": "Original nonvirtual registerKernelInterface reuses interfacePublished then registerNetworkInterface (reserve/open/name/BSDattach). Board controller delays nub publication until this synchronous path. No second ifnet or IOClass/BSDname property substitution; no private ABI emulation."
 }

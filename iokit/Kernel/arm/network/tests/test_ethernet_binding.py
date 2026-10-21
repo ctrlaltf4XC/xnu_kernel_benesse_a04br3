@@ -13,7 +13,7 @@ using UInt16=uint16_t;using UInt32=uint32_t;using SInt32=int32_t;using IOOptionB
 #define OSDeclareDefaultStructors(x)
 #define OSDefineMetaClassAndStructors(x,y)
 #define OSDynamicCast(t,p) dynamic_cast<t *>(p)
-static const int kIOReturnSuccess=0,kIOReturnError=1,kIOReturnBadArgument=2,kIOReturnNotReady=3,kIOReturnUnsupported=4,kIOReturnBusy=5;
+static const int kIOReturnSuccess=0,kIOReturnError=1,kIOReturnBadArgument=2,kIOReturnNotReady=3,kIOReturnUnsupported=4,kIOReturnBusy=5,kIOReturnNoSpace=6;
 static const unsigned kConfigFrozen=1,kConfigTxPull=2,kConfigRxPoll=4,kConfigDataRates=8;
 struct IOEthernetAddress{uint8_t bytes[6];};
 struct OSSymbol {};
@@ -51,7 +51,9 @@ public:
  virtual bool setFlags(UInt16,UInt16=0);
  virtual SInt32 performCommand(IONetworkController *,unsigned long,void *,void *){return EOPNOTSUPP;}
  virtual bool setInterfaceSubType(unsigned v){assert(v==IFNET_SUBFAMILY_WIFI);return true;}
- virtual UInt16 getUnitNumber() const{return 7;}
+ bool assigned=false;
+ virtual bool setUnitNumber(uint32_t unit){assert(unit==7 && !assigned);assigned=true;return true;}
+ virtual UInt16 getUnitNumber() const{assert(assigned);return 7;}
 };
 class IOEthernetInterface:public IONetworkInterface {};
 static IONetworkInterface *mockAttachedInterface;
@@ -65,17 +67,37 @@ public:
  virtual IOReturn enablePacketFilter(const OSSymbol *,UInt32,UInt32,IOOptionBits){return kIOReturnUnsupported;}
  virtual IOReturn enable(IONetworkInterface *){return 1;}
  virtual IOReturn disable(IONetworkInterface *){return 1;}
- virtual bool attachInterface(IONetworkInterface **out,bool){
+ virtual bool attachInterface(IONetworkInterface **out,bool doRegister){
   auto *p=createInterface();if(!p)return false;
   if(!p->attach(this)){p->release();return false;}
-  if(p->attachToDataLinkLayer(0,nullptr)){p->detach(this);p->release();return false;}
+  // Genuine Apple attachInterface only creates/attaches and optionally
+  // publishes; it NEVER attaches to DLIL. Regression must not hide that gap.
+  assert(!doRegister && !p->getIfnet());
   mockAttachedInterface=p;*out=p;return true;
  }
  virtual void detachInterface(IONetworkInterface *p,bool){p->detachFromDataLinkLayer(0,nullptr);p->detach(this);p->release();}
 };
+static unsigned stackPublishes,stackReserves,stackAttaches;
 class IONetworkStack:public IOService {
-public:bool start(IOService *){return true;}
+ bool published=false;
+ bool interfacePublished(void *,IOService *service,void *){
+  auto *netif=dynamic_cast<IONetworkInterface *>(service);assert(netif && !netif->getIfnet());
+  assert(!published);published=true;stackPublishes++;return true;
+ }
+ bool reserveInterfaceUnitNumber(IONetworkInterface *netif,uint32_t unit,bool fixed,bool *attach){
+  assert(published && unit==0 && !fixed && !netif->getIfnet());
+  published=false;stackReserves++;*attach=true;return netif->setUnitNumber(7); // mock occupied units0..6
+ }
+ IOReturn attachNetworkInterfaceToBSD(IONetworkInterface *netif){
+  assert(netif->assigned && !netif->getIfnet());stackAttaches++;
+  return netif->attachToDataLinkLayer(0,nullptr);
+ }
+ IOReturn registerNetworkInterface(IONetworkInterface *,uint32_t,bool);
+public:
+ bool start(IOService *){return true;}
+ IOReturn registerKernelInterface(IONetworkInterface *,uint32_t);
 };
+
 '''
 EXTRA=r'''
 class BackingProbe:public IOEthernetInterface {
@@ -99,6 +121,7 @@ static void bindingCases(){
  realState.firmware_running=realState.control_ready=1;
  int error=99;auto *controller=a04br3_network_start(&provider,&b,&error);
  assert(controller && !error && current && childCount==3);
+ assert(stackPublishes && stackPublishes==stackReserves && stackReserves==stackAttaches);
  assert(dynamic_cast<IO80211Controller *>(controller));
  assert(dynamic_cast<IO80211Interface *>(mockAttachedInterface));
  assert(current->refs==2); // one allocated ifnet: bridge ref + genuine base ref
@@ -136,7 +159,9 @@ static void bindingCases(){
   reset();realState.firmware_running=realState.control_ready=1;
   A04BR3EthernetController failed;
   assert(failed.configureBackend(&b));if(fault==0)failReference=EIO;else failAttach=EIO;
-  assert(!failed.start(&provider) && !current && !childCount && !lockCount);failReference=0;
+  assert(failed.start(&provider) && !current); // nub exists, no premature DLIL
+  IONetworkStack stack;assert(stack.registerKernelInterface(failed.networkInterface(),0)!=kIOReturnSuccess);
+  failed.stop(&provider);assert(!current && !childCount && !lockCount);failReference=0;
  }
  reset();realState.mac_valid=0;assert(!a04br3_network_start(&provider,&b,&error) && error==ENXIO && !childCount && !current);
  seamFallbackCase(b);
@@ -266,6 +291,14 @@ class EthernetBinding(unittest.TestCase):
    real+=function('ifnet_t IONetworkInterface::getIfnet')
    real+='#define ABS(a) ((a)<0?-(a):(a))\n'+function('void IONetworkInterface::pushInputPacket')+function('bool IONetworkInterface::inputEvent')
    real+=(SOURCE/'apple/A04BR3IONetworkBacking.inc').read_text()
+   stackSource=(SOURCE/'apple/IONetworkStack.cpp').read_text()
+   for signature in ['IOReturn IONetworkStack::registerKernelInterface(', 'IOReturn IONetworkStack::registerNetworkInterface(']:
+    a=stackSource.index(signature);i=stackSource.index('{',a);depth=1;j=i+1
+    while depth:
+     if stackSource[j]=='{':depth+=1
+     elif stackSource[j]=='}':depth-=1
+     j+=1
+    real+=stackSource[a:j]+'\n'
    freeStart=original.index('    if (_backingIfnet)',original.index('void IONetworkInterface::free'))
    freeEnd=original.index('\n    }',freeStart)+6
    apple=APPLE.replace('FREE_BACKING_FRAGMENT',original[freeStart:freeEnd])

@@ -29,6 +29,15 @@ A04BR3EthernetController *a04br3_network_start(IOService *provider,
     if(!controller->start(provider)){
         controller->detach(provider);controller->release();*error=EIO;return nullptr;
     }
+    IOReturn registered=a04Stack->registerKernelInterface(controller->networkInterface(),0);
+    if(registered!=kIOReturnSuccess || !controller->networkInterface()->getIfnet()){
+        IOLog("A04BR3 network: Stack registration failed result=0x%x; no live BSD interface\n",(unsigned)registered);
+        controller->stop(provider);controller->detach(provider);controller->release();
+        *error=EIO;return nullptr;
+    }
+    // Success now requires the actual Stack reserve/open/attach path and a
+    // live shared ifnet, not merely controller/nub allocation. No fake state.
+    IOLog("A04BR3 network: Stack registration complete; real shared BSD interface attached\n");
     *error=0;
     return controller;
 }

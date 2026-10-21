@@ -81,7 +81,9 @@ bool IO80211Controller::configureBackend(const a04_network_backend *b)
 bool IO80211Controller::start(IOService *provider)
 {
     if(!configured || !IOEthernetController::start(provider))return false;
-    if(!attachInterface(&interface,true)){
+    // A published nub alone waits for user-space InterfaceNamer. Board startup
+    // must first enter the real Stack naming/attach path synchronously.
+    if(!attachInterface(&interface,false)){
         IOEthernetController::stop(provider);return false;
     }
     return true;
