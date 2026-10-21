@@ -8,5 +8,17 @@
     "drivers/clk/mediatek/clk-mt8167.c",
     "arch/arm64/boot/dts/mediatek/mt8167.dtsi"
   ],
-  "status": "power/register transport; no rendering"
+  "status": "power/register and reserved firmware CPU staging verified on device; firmware execution and rendering not yet verified",
+  "ddk_root": "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693",
+  "ddk_reference_paths": [
+    "hwdefs/km/cores/rgxcore_km_22.40.54.30.h",
+    "hwdefs/km/configs/rgxconfig_km_22.V.54.30.h",
+    "hwdefs/km/rgx_cr_defs_km.h",
+    "services/server/devices/rgx/rgxfwimageutils.c",
+    "services/server/devices/rgx/rgxmipsmmuinit.c",
+    "services/server/devices/rgx/rgxstartstop.c",
+    "services/server/devices/rgx/rgxfwutils.c",
+    "services/server/devices/rgx/rgxinit.c",
+    "services/server/devices/rgx/rgxpower.c"
+  ]
 }

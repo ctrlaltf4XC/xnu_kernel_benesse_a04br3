@@ -242,3 +242,21 @@ identify the source configuration and CORE_ID/PBVNC register format.
 No Apple AGX interface or Linux DMA/firmware implementation is claimed here.
 The development platform work-interval grant follows the ABI identified by
 ios-sweet patch0064, restricted to platform-signed processes and PRIV1008.
+
+
+MT6630 STP/SDIO/WMT framing, ownership, revision queries and patch sequencing
+use protocol facts from MediaTek connectivity sources in the board Linux
+revision above. Firmware-selection metadata follows
+`combo_tool/src/stp_uart_launcher.c` from
+https://github.com/s1204IT/CT3_GPL_LGPL_Src at
+`7c4782127d4ea11965be00ce1343056be9bfb769` (MediaTek). Its FVR-low8 comparator
+and multi-patch count/sequence/address fields are explicitly identified; this
+is a reference source, not proof of an identical stock launcher executable.
+Firmware bodies stay external to the XNU source repository.
+
+Rogue MIPS ELF layout, page table/boot parameters and startup register sequencing
+use Imagination's m1.11ED5425693 DDK from the same pinned board Linux source.
+`iokit/Kernel/arm/rogue/UPSTREAM.json` lists the exact source areas. The new
+allocation-free helpers and XNU adapters are independent implementations;
+original license headers are retained on any copied declarations. CPU staging
+is distinct from GPU firmware execution and rendering.
