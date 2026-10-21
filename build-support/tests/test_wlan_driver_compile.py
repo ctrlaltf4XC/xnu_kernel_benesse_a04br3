@@ -25,13 +25,14 @@ extern "C" IOLock *IOLockAlloc();extern "C" void IOLockFree(IOLock *);
 extern "C" void IOLockLock(IOLock *);extern "C" void IOLockUnlock(IOLock *);
 extern "C" void *IOMalloc(size_t);extern "C" void IOFree(void *,size_t);
 extern "C" void bcopy(const void *,void *,size_t);
+extern "C" void bzero(void *,size_t);
 extern "C" void IOSleep(unsigned);extern "C" void IODelay(unsigned);
 extern "C" void IOLog(const char *,...) __attribute__((format(printf,1,2)));
 ''')
             (p/'IOKit/IOService.h').write_text('''#pragma once
 #include <IOKit/IOLib.h>
 #define OSDeclareDefaultStructors(c)
-#define OSDefineMetaClassAndStructors(c,b)
+#define OSDefineMetaClassAndStructors(c,b) static_assert(sizeof(c)<=16U*1024U,"real IOKit object size ceiling");
 #define APPLE_KEXT_OVERRIDE override
 #define OSDynamicCast(c,p) static_cast<c *>(p)
 class OSObject {public:void release();};

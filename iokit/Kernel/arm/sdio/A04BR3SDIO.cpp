@@ -29,7 +29,7 @@ class A04BR3SDIO : public IOService {
  void *wlanSnapshot=nullptr;
  unsigned wlanBytes=0;
  bool wlanAttempted=false;
- struct a04_wlan_host wlanHost={};
+ struct a04_wlan_host *wlanHost=nullptr;
  struct a04_wlan_firmware wlanFirmware={};
  struct a04_wlan_download_state wlanDownload={};
  struct a04_wmt_firmware_set firmwareSet={};
@@ -81,6 +81,7 @@ public:
  void free(void) APPLE_KEXT_OVERRIDE {
   if(firmwareSnapshot)IOFree(firmwareSnapshot,firmwareBytes);
   if(wlanSnapshot)IOFree(wlanSnapshot,wlanBytes);
+  if(wlanHost)IOFree(wlanHost,sizeof(*wlanHost));
   if(transportLock)IOLockFree(transportLock);
   IOService::free();
  }
@@ -167,21 +168,28 @@ public:
   IOLockLock(transportLock);
   if(wlanAttempted || !wlanSnapshot || !transportReady || transport.failed ||
      downloadState.phase!=A04_WMT_DL_READY || !downloadState.function1_ready){IOLockUnlock(transportLock);return A04_WLAN_STATE;}
+  wlanHost=(struct a04_wlan_host *)IOMalloc(sizeof(*wlanHost));
+  if(!wlanHost){
+   setProperty("WLANFirmwareDownloadError",A04_WMT_FW_MEMORY,32);
+   IOLog("A04BR3 WLAN: host buffer allocation failed; no fn1 transaction attempted\n");
+   IOLockUnlock(transportLock);return A04_WMT_FW_MEMORY;
+  }
+  bzero(wlanHost,sizeof(*wlanHost));
   wlanAttempted=true;
-  int e=a04_wlan_host_open(&wlanHost,&transport);
-  IOLog("A04BR3 WLAN: fn1 prepare=%d WCIR=0x%x WHLPCR=0x%x own-polls=%u enabled=0x%x\n",e,wlanHost.wcir,wlanHost.chlpcr,wlanHost.own_polls,transport.enabled);
-  if(!e)e=a04_wlan_download(&wlanHost,&wlanFirmware,&wlanDownload);
+  int e=a04_wlan_host_open(wlanHost,&transport);
+  IOLog("A04BR3 WLAN: fn1 prepare=%d WCIR=0x%x WHLPCR=0x%x own-polls=%u enabled=0x%x\n",e,wlanHost->wcir,wlanHost->chlpcr,wlanHost->own_polls,transport.enabled);
+  if(!e)e=a04_wlan_download(wlanHost,&wlanFirmware,&wlanDownload);
   if(transport.failed)transportReady=false;
-  bool ready=!e && wlanDownload.ready && wlanHost.ready;
+  bool ready=!e && wlanDownload.ready && wlanHost->ready;
   setProperty("WLANFirmwareDownloadError",(unsigned)e,32);
   setProperty("WLANFirmwareReady",ready?kOSBooleanTrue:kOSBooleanFalse);
-  setProperty("WLANWCIR",wlanHost.wcir,32);
+  setProperty("WLANWCIR",wlanHost->wcir,32);
   setProperty("WMTTransportReady",transportReady?kOSBooleanTrue:kOSBooleanFalse);
   setProperty("NetworkDataPathAvailable",kOSBooleanFalse);
-  IOLog("A04BR3 WLAN: download result=%d attempted=%u section=%u/%u offset=%u configs=%u packets=%u start=%u ready=%u WCIR=0x%x rxlen=%u CPU-free=%u used=%u transport-error=%d\n",e,wlanDownload.attempted,wlanDownload.section,wlanFirmware.count,wlanDownload.offset,wlanDownload.configured,wlanDownload.packets,wlanDownload.started,ready?1u:0u,wlanHost.wcir,wlanHost.rx_length,wlanHost.cpu_free,wlanHost.cpu_used,transport.failed);
-  if(e && wlanHost.rx_length){
+  IOLog("A04BR3 WLAN: download result=%d attempted=%u section=%u/%u offset=%u configs=%u packets=%u start=%u ready=%u WCIR=0x%x rxlen=%u CPU-free=%u used=%u transport-error=%d\n",e,wlanDownload.attempted,wlanDownload.section,wlanFirmware.count,wlanDownload.offset,wlanDownload.configured,wlanDownload.packets,wlanDownload.started,ready?1u:0u,wlanHost->wcir,wlanHost->rx_length,wlanHost->cpu_free,wlanHost->cpu_used,transport.failed);
+  if(e && wlanHost->rx_length){
    IOLog("A04BR3 WLAN: failing init event");
-   for(unsigned i=0;i<wlanHost.rx_length && i<32;i++)IOLog(" %02x",wlanHost.rx[i]);
+   for(unsigned i=0;i<wlanHost->rx_length && i<32;i++)IOLog(" %02x",wlanHost->rx[i]);
    IOLog("\n");
   }
   IOLockUnlock(transportLock);return e;
@@ -224,7 +232,7 @@ public:
   /* fn2 belongs to the serialized WMT channel: raw CHISR/FIFO accesses
    * would consume status/data behind its credit and response bookkeeping. */
   int e=!transportReady?A04_SDIO_POISONED:
-   ((fn==2 && channel.initialized) || (fn==1 && wlanHost.initialized))?A04_SDIO_ARGUMENT:
+   ((fn==2 && channel.initialized) || (fn==1 && wlanHost && wlanHost->initialized))?A04_SDIO_ARGUMENT:
    a04_sdio_transfer(&transport,fn,address,write,increment,buffer,length);
   if(transport.failed){transportReady=false;setProperty("WMTTransportReady",kOSBooleanFalse);}
   IOLockUnlock(transportLock);return e;
