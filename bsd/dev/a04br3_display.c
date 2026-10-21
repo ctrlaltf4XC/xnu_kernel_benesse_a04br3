@@ -10,6 +10,8 @@
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <kern/clock.h>
+#include <kern/locks.h>
+#include "a04br3_pwrap_lock.h"
 #include <vm/memory_types.h>
 #include <machine/machine_routines.h>
 #include <pexpert/pexpert.h>
@@ -18,6 +20,13 @@ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
 /* BSD translation units do not expose MACH_KERNEL_PRIVATE declarations. */
 extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, uint32_t);
 void a04br3_display_init(void);
+/* Static lock startup precedes bsd_init/vfsinit. Definitions are present even
+ * when display_probe is disabled; no dependency on display MMIO mappings. */
+static LCK_GRP_DECLARE(a04pwrap_group,"a04br3_pwrap");
+static LCK_MTX_DECLARE(a04pwrap_mutex,&a04pwrap_group);
+void a04br3_pwrap_lock(void){lck_mtx_lock(&a04pwrap_mutex);}
+int a04br3_pwrap_try_lock(void){return lck_mtx_try_lock(&a04pwrap_mutex)?1:0;}
+void a04br3_pwrap_unlock(void){lck_mtx_unlock(&a04pwrap_mutex);}
 static vm_offset_t display_system, display_mm;
 static uintptr_t display_address(uintptr_t address)
 {
@@ -363,7 +372,7 @@ PwrapWaitForFsm (
 
 static
 int
-PwrapRead16 (
+PwrapRead16Unlocked (
     uint16_t  Address,
    uint16_t  *Value
   )
@@ -385,10 +394,15 @@ PwrapRead16 (
   MmioWrite32 (PWRAP_WACS2_VLDCLR, 1U);
   return PwrapWaitForFsm (PWRAP_FSM_IDLE);
 }
+static int PwrapRead16(uint16_t Address,uint16_t *Value){
+  a04br3_pwrap_lock();int error=PwrapRead16Unlocked(Address,Value);
+  a04br3_pwrap_unlock();return error;
+}
+
 
 static
 int
-PwrapWrite16 (
+PwrapWrite16Unlocked (
    uint16_t  Address,
    uint16_t  Value
   )
@@ -406,6 +420,11 @@ PwrapWrite16 (
     );
   return PwrapWaitForFsm (PWRAP_FSM_IDLE);
 }
+static int PwrapWrite16(uint16_t Address,uint16_t Value){
+  a04br3_pwrap_lock();int error=PwrapWrite16Unlocked(Address,Value);
+  a04br3_pwrap_unlock();return error;
+}
+
 
 static
 int

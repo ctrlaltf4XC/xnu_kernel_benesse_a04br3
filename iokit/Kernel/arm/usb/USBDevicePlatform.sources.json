@@ -1,0 +1,65 @@
+{
+  "implementation": "Original BSD-2-Clause-Patent callback MMIO peripheral platform helper, no Linux/EDK2 implementation text copied; scalar register/sequencing facts corroborated",
+  "reference_credits": "MediaTek BSP authors (GPL reference only), board EDK2 contributors; implementation independent. Source tree revisions/content hashes below.",
+  "bsp_revision": "7c4782127d4ea11965be00ce1343056be9bfb769",
+  "edk2_revision": "1982d888c765f5b12f6e0dce71f1ed8bc92ac50b",
+  "sources": [
+    {
+      "path": "CT3_GPL_LGPL_Src/kernel-4.4/drivers/clk/mediatek/clk-mt8167.c",
+      "sha256": "735babc19c46ef6c558ca8a516704abac5ce4f366ebcac1d49ccd19f15aa7b6c",
+      "facts": "TOP W1clear aliases0x84/9c and gates13,14,24,31"
+    },
+    {
+      "path": "CT3_GPL_LGPL_Src/kernel-4.4/drivers/misc/mediatek/usb20/mt8167/usb20_phy.c",
+      "sha256": "4fdac908c94581da7b6dad72768abbd89f97d9dd2e87f2e9a45f6450ff25ce75",
+      "facts": "poweron/recover UART/GPIO/BC1.2/suspend/DTM0/sensitivity/50us800us facts; native forceVBUS not adopted"
+    },
+    {
+      "path": "CT3_GPL_LGPL_Src/kernel-4.4/drivers/regulator/mt6392-regulator.c",
+      "sha256": "a9a1151d5c8cd9d8bed4ae67000a5a75c5dbd84897a4a643ad49dd4659ca72d8",
+      "facts": "fixedVUSB enable14,QI15; no voltage selector"
+    },
+    {
+      "path": "CT3_GPL_LGPL_Src/kernel-4.4/drivers/misc/mediatek/include/mt-plat/mt8167/include/mach/upmu_hw.h",
+      "sha256": "3897e3d6e2dd1fbfbbc121bb11d0dc85fd767d60bda798c82f1f94b983d51550",
+      "facts": "RG_VUSB_EN14,DA_QI15"
+    },
+    {
+      "path": "CT3_GPL_LGPL_Src/kernel-4.4/include/linux/mfd/mt6392/registers.h",
+      "sha256": "522baa7b5795fe228e15b83b65fb81293b5afaa64b9ee69095c15dd4c039eb09",
+      "facts": "DIGLDO_CON2=0502"
+    },
+    {
+      "path": "CT3_GPL_LGPL_Src/kernel-4.4/drivers/misc/mediatek/mu3phy/mtk-phy-a60810.h",
+      "sha256": "a68d4956cdadd5657101715b5a88d1e3ea0b01bc8459af775e0fc99c8fa2eb27",
+      "facts": "DTM1 namedIDDIGbit1/forcebit9, busvalidforcebits10..13; crosscheckedboardforcedwordsequence, no ISA/binary analysis"
+    },
+    {
+      "path": "port/edk2/edk2-mtk-a04br3/Platform/Benesse/A04BR3Pkg/Drivers/Mt8167UsbHostDxe/Mt8167UsbHostDxe.c",
+      "sha256": "19483c44cbc2cde1372826737bbf0d4dd3ab7c696006d120a96c6c46dc17faea",
+      "facts": "board MAC/PHY/TOP maps, DTM0recoverymask00ba3cf4, realPWRAP VUSB enable/readback source; hostdrive/modeNOTcopied"
+    }
+  ],
+  "region_ids": {
+    "0": "MAC11100000/span>=1000",
+    "1": "PHY11110800/span>=800",
+    "2": "TOP10000000/span>=1000"
+  },
+  "pmic": "Root real serializedPMICtransport: RMW0502 EN4000,300us afternewenable, readbackC000 required(EN+QI). Transport timeout/error propagates. PMICidentity/rootmutex responsibility remains caller; no callbacksynthsuccess.",
+  "device_role": "KeepSOFTCONN/session/hostreqoff; DTM1 clear3f3f set202 = onlyIDDIGforcehigh; realDEVCTL98maskVBUS needed. Neverforcebusvalid ordriveVBUSGPIO/charger/hostsession.",
+  "runtime": "Rootowner alone mapsregions/ownslease; preparethenobserve beforeFranklinEP0enable. NO_VBUS6 means prepared disconnected, ownercanpollobserve onretainedmapping. No automaticstartuphook inheader. No USB success inferred.",
+  "reviews": {
+    "1": "Actual register/PMIC/clock/PHY references crosschecked.",
+    "2": "platform2PASS26cases+ARM64; shared2PASS actual concurrency/timeouts+ARM64transactions; existingtouch2PASS",
+    "3": "ParentactualSDK/hardware PENDING; cannot call physicalpower/enumeration success."
+  },
+  "shared_pwrap": {
+    "definitions": "bsd/dev/a04br3_display.c static LCK_GRP_DECLARE/LCK_MTX_DECLARE alwaysboardcompiled; no display_probe runtime initialization requirement",
+    "declarations": "bsd/dev/a04br3_pwrap_lock.h lock/try_lock/unlock C linkage",
+    "clients": "Actual display PwrapRead16/Write16 and touch pw_read/write hold SAME mutex across complete finite WACS2 transaction, unlock every return. Do NOT hold across power regulator pause/sleep or wholeVUSB enable+callback recursively.",
+    "usb_adapter": "A04BR3USBPwrap.h real 1000f000/span1000 callback transport, only PMIC502, INIT_DONE2==1, trylockonce16busy beforeMMIO, wait eachFSM<=1000x10us, timeout60, unlockallevents; doesnotclearforeignstale response. callbacks requireactualvolatileMMIO/barriers.",
+    "tests": "test_pwrap_shared: actual functions/lockdefinitions+pthread 3threads600loops,3timeoutphases,contention/uninit; actualdisplay/touchtransaction ARM64compile. test_touch_pwrap actualpowersequence/regression no lockheldacross20mssleep.",
+    "third_review": "Full actualMacSDK display.c andtouch.c translation units REQUIRED(newkern/locks.h dependency), aswell asparentUSBcontrollerlink. LocalARM64transactioncompile doesnotreplaceactualSDKgate."
+  },
+  "runtime_owner": "Parent owns actual bsd/dev/a04br3_usb_controller.c start/poll/stop + supplies sharedPWRAPtrylock/unlock. Franklin confirmed EP0/PIO ownership, no duplicate bridge."
+}

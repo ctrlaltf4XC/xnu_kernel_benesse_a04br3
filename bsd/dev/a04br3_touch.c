@@ -13,6 +13,7 @@
 #include <mach/mach_types.h>
 #include <pexpert/pexpert.h>
 #include "a04br3_touch_protocol.h"
+#include "a04br3_pwrap_lock.h"
 extern vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 extern kern_return_t thread_terminate(thread_t);
 extern void a04br3_hid_touch(int,int,int,int);
@@ -26,8 +27,12 @@ static uint16_t iread(unsigned o){uint16_t v=*(volatile uint16_t *)(bus+o);__asm
 static void iw(unsigned o,uint16_t v){*(volatile uint16_t *)(bus+o)=v;__asm__ volatile("dsb oshst":::"memory");}
 static void pause_ms(unsigned ms){uint64_t deadline;clock_interval_to_deadline(ms,NSEC_PER_MSEC,&deadline);assert_wait_deadline(&sleep_chan,THREAD_UNINT,deadline);thread_block(THREAD_CONTINUE_NULL);}
 static int pw_wait(unsigned fsm){for(unsigned n=0;n<1000;n++){if(((rd(pwrap,0xa4)>>16)&7)==fsm)return 0;delay(10);}return ETIMEDOUT;}
-static int pw_read(unsigned addr,uint16_t *value){int e=pw_wait(0);if(e)return e;wr(pwrap,0xa0,(addr>>1)<<16);e=pw_wait(6);if(e)return e;*value=(uint16_t)rd(pwrap,0xa4);wr(pwrap,0xa8,1);return pw_wait(0);}
-static int pw_write(unsigned addr,uint16_t value){int e=pw_wait(0);if(e)return e;wr(pwrap,0xa0,0x80000000|((addr>>1)<<16)|value);return pw_wait(0);}
+static int pw_read_unlocked(unsigned addr,uint16_t *value){int e=pw_wait(0);if(e)return e;wr(pwrap,0xa0,(addr>>1)<<16);e=pw_wait(6);if(e)return e;*value=(uint16_t)rd(pwrap,0xa4);wr(pwrap,0xa8,1);return pw_wait(0);}
+static int pw_write_unlocked(unsigned addr,uint16_t value){int e=pw_wait(0);if(e)return e;wr(pwrap,0xa0,0x80000000|((addr>>1)<<16)|value);return pw_wait(0);}
+/* Entire WACS2 transactions, including every timeout exit, share display/USB
+ * exclusion. Never hold this across power_on pause_ms or I2C operations. */
+static int pw_read(unsigned addr,uint16_t *value){a04br3_pwrap_lock();int e=pw_read_unlocked(addr,value);a04br3_pwrap_unlock();return e;}
+static int pw_write(unsigned addr,uint16_t value){a04br3_pwrap_lock();int e=pw_write_unlocked(addr,value);a04br3_pwrap_unlock();return e;}
 static int power_on(void){uint16_t v;int e;uint32_t init=rd(pwrap,0x9c);
     printf("A04BR3 TOUCH: PWRAP init=0x%x status=0x%x\n",init,rd(pwrap,0xa4));
     if(!(init&1))return ENXIO;

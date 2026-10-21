@@ -868,6 +868,13 @@ bsd_init(void)
 	net_init_run();
 #endif /* NETWORKING */
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+	/* Explicit opt-in USB console: BSD/devfs is ready, never an early IOKit
+	 * registration with no usable character endpoint. Worker owns controller. */
+	extern void a04br3_usb_init(void);
+	a04br3_usb_init();
+#endif
+
 	bsd_init_kprintf("calling inittodr\n");
 	inittodr(0);
 

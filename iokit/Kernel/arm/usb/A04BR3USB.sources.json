@@ -1,0 +1,87 @@
+{
+  "license": "BSD-2-Clause-Patent for original A04BR3USBBulk.h, A04BR3MUSBPIO.h, host usb_bulk_probe.py and tests",
+  "implementation": "Independent original portable protocol/state validation and callback PIO leaf. Linux functions/header bodies NOT copied. Numeric register/bit/address facts and lifecycle constraints corroborated from cited sources. Not an upstream Linux gadget port.",
+  "upstream_credits": [
+    {
+      "project": "MediaTek Linux MT8167 USB2/MUSB BSP",
+      "copyright": "MediaTek Inc. (2015/2017); Mentor Graphics and MUSB gadget contributors as retained in upstream files",
+      "license": "GPL-2.0-only source reference; not relicensed/copied into these independent headers"
+    },
+    {
+      "project": "A04BR3 EDK2 MT8167 USB host driver",
+      "license": "BSD-2-Clause-Patent",
+      "use": "Board address/clock/PWRAP/PHY corroboration; host VBUS/role driver implementation not copied into current transport leaf"
+    }
+  ],
+  "sources": [
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "arch/arm64/boot/dts/mediatek/mt8167.dtsi",
+      "sha256": "2fff8ff252b6e23748f6ae800df18bfb3aa1e359edf0e6a8d32a32060640de6e",
+      "matches_commit": true,
+      "pinned_sha256": "2fff8ff252b6e23748f6ae800df18bfb3aa1e359edf0e6a8d32a32060640de6e"
+    },
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "drivers/misc/mediatek/usb20/mtk_musb_reg.h",
+      "sha256": "e94526b272b889ed2d875a52f223504b3b9eaec576e9b4d7a03136d60591d3c7",
+      "matches_commit": true,
+      "pinned_sha256": "e94526b272b889ed2d875a52f223504b3b9eaec576e9b4d7a03136d60591d3c7"
+    },
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "drivers/misc/mediatek/usb20/musb_gadget.c",
+      "sha256": "9bf5cc73de3be24ff7142eafc4b599a518de9a7173940943af8efb44e6e0823b",
+      "matches_commit": true,
+      "pinned_sha256": "9bf5cc73de3be24ff7142eafc4b599a518de9a7173940943af8efb44e6e0823b"
+    },
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "drivers/misc/mediatek/usb20/musb_gadget_ep0.c",
+      "sha256": "df98f2b29c5f50551ddfcb1fdf84a977980b9388d231e73071ae71a759d89c8e",
+      "matches_commit": true,
+      "pinned_sha256": "df98f2b29c5f50551ddfcb1fdf84a977980b9388d231e73071ae71a759d89c8e"
+    },
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "drivers/misc/mediatek/usb20/mt8167/usb20.c",
+      "sha256": "ff5c06f1b49d9efec87e0519f666a5d764ec93fc96c2016d140fc9518b76bec4",
+      "matches_commit": true,
+      "pinned_sha256": "ff5c06f1b49d9efec87e0519f666a5d764ec93fc96c2016d140fc9518b76bec4"
+    },
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "drivers/misc/mediatek/usb20/mt8167/usb20_phy.c",
+      "sha256": "f3692445ac7a2c48314922225eedbd705661c1b8ef64e2b34dfec233b25927d4",
+      "matches_commit": true,
+      "pinned_sha256": "f3692445ac7a2c48314922225eedbd705661c1b8ef64e2b34dfec233b25927d4"
+    },
+    {
+      "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+      "commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "path": "drivers/clk/mediatek/clk-mt8167.c",
+      "sha256": "59ac328666c887dce8d1cac247b018f06f0d47b50c8ee6c274703dd35da78ab8",
+      "matches_commit": true,
+      "pinned_sha256": "59ac328666c887dce8d1cac247b018f06f0d47b50c8ee6c274703dd35da78ab8"
+    },
+    {
+      "repository": "https://github.com/mouseos/edk2-mtk",
+      "commit": "1982d888c765f5b12f6e0dce71f1ed8bc92ac50b",
+      "path": "Platform/Benesse/A04BR3Pkg/Drivers/Mt8167UsbHostDxe/Mt8167UsbHostDxe.c",
+      "sha256": "19483c44cbc2cde1372826737bbf0d4dd3ab7c696006d120a96c6c46dc17faea",
+      "matches_commit": false,
+      "pinned_sha256": "79a7e5eafbf212653c3f750b6d980d029bc2205a15bab2a71f51d5cb4b9e22de"
+    }
+  ],
+  "hardware_facts": "MAC11100000; PHY11110000+800; SPI72=INTID104 level-low. No actualdevice role/power/clock assertion; no guessed clock frequency/calibration. USB endpointPIO indexes/widths and WZC facts fromMTK reg/gadget source.",
+  "protocol": "Original AU04 privatev1 test transport, not stock MediaTek/Apple ABI. Header32/CRC32/strictsequence+offset/streamlimit32MiB. No flash or bootstage API. ENDCRC is not bootimage/hash/install proof.",
+  "runtime_boundary": "Dormant leaf only. No startup/MMIO/IRQ/softconnect bydefault. Full EP0/owner/power lifecycle in separate nextfiles. Parent currenttransferimage untouched.",
+  "identity_policy": "No production VID/PID default or assignment claim. Hostrequires explicit IDs and configured vendor IF0 EP1pair. No calibration/serial/MAC/privateassets included.",
+  "tests": "3 hosttests pass: actualPIO+processorASanUBSan, Pythonclient vs realCprocessorFS/HS, ARM64 actualC caller. Hardware/SDK/performance unverified."
+}

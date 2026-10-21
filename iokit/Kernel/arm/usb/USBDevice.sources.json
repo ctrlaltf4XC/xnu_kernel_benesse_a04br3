@@ -1,0 +1,40 @@
+{
+  "license": "BSD-2-Clause-Patent",
+  "implementation": "Independent implementation, not copied Linux function bodies. Register/EP0 state facts referenced from board BSP.",
+  "upstream_credit": "MediaTek / Mentor Graphics MUSB Linux authors; source copyright notices retained in original reference files.",
+  "source_repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3",
+  "reference_commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+  "references": [
+    {
+      "path": "drivers/misc/mediatek/usb20/mtk_musb_reg.h",
+      "sha256": "e94526b272b889ed2d875a52f223504b3b9eaec576e9b4d7a03136d60591d3c7"
+    },
+    {
+      "path": "drivers/misc/mediatek/usb20/musb_gadget_ep0.c",
+      "sha256": "df98f2b29c5f50551ddfcb1fdf84a977980b9388d231e73071ae71a759d89c8e"
+    },
+    {
+      "path": "drivers/misc/mediatek/usb20/musb_gadget.c",
+      "sha256": "9bf5cc73de3be24ff7142eafc4b599a518de9a7173940943af8efb44e6e0823b"
+    },
+    {
+      "path": "drivers/misc/mediatek/usb20/mt8167/usb20.c",
+      "sha256": "ff5c06f1b49d9efec87e0519f666a5d764ec93fc96c2016d140fc9518b76bec4"
+    }
+  ],
+  "contracts": [
+    "Register offsets/WZC/EP0 commands from mtk_musb_reg.h",
+    "SET_ADDRESS deferred until STATUSIN completion and DATAEND clear: musb_gadget_ep0.c 774,837-850",
+    "FIFO dynamic address in units8 and single-buffer sizes64/512; EP0 reserved64; board RAM8192",
+    "SWRST bits0/1 only: mt8167/usb20.c musb_platform_reset",
+    "USB2 standard requests/descriptors independently implemented; unsupported requests STALL",
+    "Explicit parent-authorized board debug VID0e8d/PID20ff, no allocation or production identity claim",
+    "Console AU04 v1 op7/8 is original private byte transport; existing userland owns commands and bootwriter"
+  ],
+  "limits": [
+    "No SDK/hardware success claimed",
+    "Caller must supply exclusive real PHY/clock/VUSB/device role owner",
+    "No IRQ unmask, host VBUS source, disk backend, DMA or raw memory operation",
+    "Caller must serialize all APIs and honor all-or-none RX and bounded TX callbacks"
+  ]
+}
