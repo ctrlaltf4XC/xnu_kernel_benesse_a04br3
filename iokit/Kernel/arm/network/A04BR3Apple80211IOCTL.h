@@ -36,6 +36,23 @@ static inline int a04_network_get(const struct a04_network_backend *backend,
     if(n==16)return EINVAL;
     unsigned i=0;for(;i<n;i++)if(!name[i] || name[i]!=req->name[i])return ENXIO;
     if(name[i])return ENXIO;
+    /* iOS GetWithIOCTL case0x60 uses a zero-length/null-data request and
+     * consumes req.value as its scalar output. Normalize ONLY this observed
+     * opcode to a private4-byte backend buffer; no user pointer is touched.
+     * Existing SDIO callback ABI remains unchanged. */
+    if(req->type==96){
+        if(req->length || req->user_data)return EINVAL;
+        if(capacity<4)return EMSGSIZE;
+        if(!a04_network_control_ready(state))return ENETDOWN;
+        if(!backend->native_get)return EOPNOTSUPP;
+        uint32_t output=4;
+        int error=backend->native_get(backend->context,req->type,req->value,scratch,&output);
+        if(error)return error;
+        if(output!=4)return EOVERFLOW;
+        const uint8_t *p=(const uint8_t *)scratch;
+        req->value=(uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);
+        return 0;
+    }
     if(!req->length || req->length>A04_APPLE80211_MAX_BYTES || req->length>capacity || !req->user_data)return EINVAL;
     if(!a04_network_control_ready(state))return ENETDOWN;
     if(!backend->native_get)return EOPNOTSUPP;

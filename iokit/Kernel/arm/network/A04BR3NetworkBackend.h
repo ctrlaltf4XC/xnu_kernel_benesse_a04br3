@@ -18,6 +18,9 @@ struct a04_network_backend {
     void *context;
     int (*state)(void *,struct a04_network_state *);
     /* Native GET payload is opaque, bounded and initially copied from user.
+     * Observed scalar GET96 is normalized by the BSD adapter to an internal
+     * four-byte little-endian output buffer (wire length0, result req.value).
+     * This is our adapter representation, not a new SDIO or Apple payload ABI.
      * Return errno, and actual initialized output length <= supplied capacity.
      * Unsupported operations MUST return EOPNOTSUPP; never synthesize results. */
     int (*native_get)(void *,uint32_t type,uint32_t value,void *,uint32_t *bytes);

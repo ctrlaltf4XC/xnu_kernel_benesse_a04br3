@@ -164,7 +164,7 @@ static a04_network_state realState;
 static int setCalls,setError;static uint32_t lastSetType,lastSetValue,lastSetBytes;
 static int stateError,nativeError,adminError,transmitError,adminCalls;static unsigned backendOutput,lastAdmin;
 static int state(void *,a04_network_state *s){*s=realState;return stateError;}
-static int get(void *,uint32_t type,uint32_t value,void *p,uint32_t *n){nativeCalls++;assert(type==12 && value==7);if(nativeError)return nativeError;memset(p,0x53,*n);*n=backendOutput;return 0;}
+static int get(void *,uint32_t type,uint32_t value,void *p,uint32_t *n){nativeCalls++;assert((type==12 && value==7) || (type==96 && value==0 && *n==4));if(nativeError)return nativeError;memset(p,0x53,*n);*n=backendOutput;return 0;}
 static int set(void *,uint32_t type,uint32_t value,const void *p,uint32_t n){
  setCalls++;lastSetType=type;lastSetValue=value;lastSetBytes=n;
  if(n){assert(p && p!=userBuffer && !memcmp(p,userBuffer,n));}else assert(!p);
@@ -236,7 +236,27 @@ static void traceCases(){
    assert(traceRows.size()==i+1 && traceRows.back()==expected);
   }else assert(traceRows.size()==32);
  }
- assert(a04_native_trace_count==32);credentialRoot=1;cleanup(bridge,service);
+ assert(a04_native_trace_count==32);credentialRoot=1;
+ // Scalar GET96 has no user payload: the only output is req.value, while
+ // production backend uses an explicit normalized four-byte scratch buffer.
+ auto scalar=req();scalar.type=96;scalar.value=0;scalar.length=0;scalar.user_data=0;
+ int ins=copyIns,outs=copyOuts;backendOutput=4;
+ assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&scalar));
+ assert(scalar.value==0x53535353 && scalar.length==0 && !scalar.user_data && copyIns==ins && copyOuts==outs);
+ scalar.value=0;nativeError=EOPNOTSUPP;
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EOPNOTSUPP && !scalar.value);
+ nativeError=0;backendOutput=3;
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EOVERFLOW && !scalar.value);
+ backendOutput=4;
+ a04_network_copy scalarCopy={nullptr,a04_network_copyin,a04_network_copyout};uint8_t small[4]={};
+ int priorCalls=nativeCalls;
+ assert(a04_network_get(&b,&realState,&scalar,"en7",small,3,&scalarCopy)==EMSGSIZE && nativeCalls==priorCalls);
+ scalar.user_data=(uintptr_t)userBuffer;
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EINVAL);
+ scalar.length=4;assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EINVAL);
+ scalar=req();scalar.type=95;scalar.length=0;scalar.user_data=0;
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EINVAL);
+ cleanup(bridge,service);
  // A detach/reattach does not renew the boot-wide quota.
  assert(!bridge.attach(&service,&b,7));auto r=req();assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&r));assert(traceRows.size()==32);
  cleanup(bridge,service);
