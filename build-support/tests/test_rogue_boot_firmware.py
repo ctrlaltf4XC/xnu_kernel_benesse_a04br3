@@ -97,9 +97,12 @@ public:
 ''')
             (root/'A04BR3RogueRenderMemory.h').write_text(r'''
 #pragma once
+#include "A04BR3RogueRenderSubmit.h"
 static unsigned coldPrepares,renderPins,renderResets,renderUpdates;
 static bool coldOK=true;static int renderError;
 class A04BR3RogueRenderMemory {public:
+ a04_rgx_render_observation terminal={};
+ const a04_rgx_render_observation &observation()const{return terminal;}
  bool prepareCold(A04BR3RogueMemory &,unsigned id){assert(id==1);++coldPrepares;return coldOK;}
  void pinForFirmware(){++renderPins;}
  void reset(){++renderResets;}
@@ -119,7 +122,7 @@ public:
  bool prepare(A04BR3RogueMemory &,uint32_t){assert(coldPrepares==1);++runtimePrepares;return prepareOK;}
  int start(A04BR3RogueMemory &,const a04_rgx_exec_io &){assert(renderPins==1);++runtimeStarts;return startError;}
  int fence(uint32_t dm,const a04_rgx_command_io &){assert(lockHeld);++fenceCalls;lastDM=dm;return fenceError;}
- int renderUpdate(A04BR3RogueRenderMemory &,uint32_t dm,const a04_rgx_command_io &){assert(lockHeld && (dm==2 || dm==3));++renderUpdates;return renderError;}
+ int renderUpdate(A04BR3RogueRenderMemory &,uint32_t dm,const a04_rgx_command_io &){assert(lockHeld && dm==0);++renderUpdates;return renderError;}
  uint32_t readShared(uint32_t){return 0;}
  uint32_t ready(){return 0;}
 };
@@ -214,10 +217,10 @@ int main() {
  initialize();autoStart=1;gpu.core=(vm_offset_t)coreMemory;gpu.stageBootFirmware();
  assert(runtimePrepares==1 && runtimeStarts==1 && runningTrue==1);
  assert(!strcmp(bringupStage,"firmware-ready"));
- assert(fenceCalls==5 && lastDM==3 && renderUpdates==2 && renderMask==0xc && memoryBytes==643072);
+ assert(fenceCalls==4 && lastDM==0 && renderUpdates==1 && renderMask==1 && memoryBytes==643072);
  forceLockBusy=true;
- assert(gpu.submitRenderUpdate(2)==A04_CCB_BUSY && renderUpdates==2);
- assert(gpu.submitFence(3)==A04_CCB_BUSY && fenceCalls==5);forceLockBusy=false;
+ assert(gpu.submitRenderUpdate(2)==A04_CCB_BUSY && renderUpdates==1);
+ assert(gpu.submitFence(3)==A04_CCB_BUSY && fenceCalls==4);forceLockBusy=false;
  assert(gpu.callPlatformFunction(nullptr,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnBadArgument);
  OSSymbol fenceName("A04BR3RogueFence"),otherName("unknown");
  assert(gpu.callPlatformFunction(&otherName,false,nullptr,nullptr,nullptr,nullptr)==99);
@@ -225,7 +228,7 @@ int main() {
  assert(gpu.callPlatformFunction(&fenceName,false,nullptr,(void*)1,nullptr,nullptr)==kIOReturnBadArgument);
  inInterrupt=true;
  assert(gpu.callPlatformFunction(&fenceName,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnNotPermitted);
- assert(fenceCalls==5);inInterrupt=false;
+ assert(fenceCalls==4);inInterrupt=false;
  assert(gpu.callPlatformFunction(&fenceName,false,(void*)2,nullptr,nullptr,nullptr)==0 && lastDM==2);
  fenceError=A04_CCB_TIMEOUT;
  assert(gpu.callPlatformFunction(&fenceName,false,(void*)3,nullptr,nullptr,nullptr)==kIOReturnTimeout);

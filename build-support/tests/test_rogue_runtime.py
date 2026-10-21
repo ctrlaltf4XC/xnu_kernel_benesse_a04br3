@@ -170,12 +170,14 @@ static void waitCommand(void *,uint32_t us) {
   assert(cmd.eDM==3);
   *(uint32_t*)commandMemory(cmd.uCmdData.sSyncData.sSyncObjDevVAddr.ui32Addr)=cmd.uCmdData.sSyncData.uiUpdateVal;
  } else {
-  assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_KICK && (cmd.eDM==2 || cmd.eDM==3));
-  auto r=activeRender->view();unsigned n=cmd.eDM==3;
+  assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_KICK && (cmd.eDM==0 || cmd.eDM==2 || cmd.eDM==3));
+  auto r=activeRender->view();unsigned n=a04_rgx_render_index(cmd.eDM);
   assert(cmd.uCmdData.sCmdKickData.psContext.ui32Addr==
-    a04_rgx_render_fw_address(r,n?&r->context->s3DContext:&r->context->sTAContext));
+    a04_rgx_render_fw_address(r,a04_rgx_render_context(r,cmd.eDM)));
   auto client=r->control[n];
   auto header=(RGXFWIF_CCB_CMD_HEADER*)(r->commands[n]+client->ui32ReadOffset);
+  if(cmd.eDM==0){assert(header->eCmdType==A04_RGX_CLIENT_NULL && !header->ui32CmdSize);
+   header=(RGXFWIF_CCB_CMD_HEADER*)((char*)header+40);}
   assert(header->eCmdType==A04_RGX_CLIENT_UPDATE && header->ui32CmdSize==8);
   auto ufo=(RGXFWIF_UFO*)((char*)header+40);
   assert(ufo->puiAddrUFO.ui32Addr==r->sync_addr.ui32Addr);
@@ -218,13 +220,15 @@ int main(){
    assert(runtime.fence(4,commandIO)==A04_CCB_INPUT && !commandKicks);
    assert(runtime.fence(3,commandIO)==A04_CCB_OK && commandKicks==1 && commandWaits==1);
    assert(runtime.renderUpdate(render,4,commandIO)==A04_CCB_INPUT && commandKicks==1);
-   assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OK);
+   assert(runtime.renderUpdate(render,0,commandIO)==A04_CCB_OK);
    assert(runtime.renderUpdate(render,3,commandIO)==A04_CCB_OK);
    assert(runtime.fence(3,commandIO)==A04_CCB_OK);
    commandAnswer=failure==4;commandCorrupt=failure==4;commandWaits=0;
    int commandResult=failure==5?runtime.fence(3,commandIO):runtime.renderUpdate(render,3,commandIO);
    assert(commandResult==(failure==4?A04_CCB_CORRUPT:A04_CCB_TIMEOUT));
    assert(commandKicks==5 && commandWaits==(failure==4?1U:10000U));
+   if(failure!=5)assert(render.observation().valid && render.observation().expected==3);
+   else assert(!render.observation().valid);
    assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE && commandKicks==5);
    assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OFFLINE && commandKicks==5);
   }

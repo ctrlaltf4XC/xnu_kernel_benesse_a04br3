@@ -17,6 +17,7 @@ static unsigned char pc[4096],pd[4096],pt[16384],data[0x402000],bank[65536];
 static unsigned char mainbuf[A04_RGX_MAIN_BYTES],config[A04_RGX_CONFIG_BYTES];
 static uint32_t table[8192];
 static a04_rgx_render_resources r;static a04_rgx_render_ring_state state;
+static a04_rgx_render_observation observed;
 static a04_rgx_fw_runtime kernel;static a04_rgx_bif bif;
 static unsigned dm=3,mode,waits,kicks,published,padding;
 static void publish(void *) {++published;}
@@ -25,15 +26,20 @@ static void kick(void *,uint32_t reg,uint32_t value) {
  assert(reg==0xb00 && value==0x10 && !(published&1));++kicks;
  auto &k=kernel.kcommands[kernel.kctl->ui32ReadOffset];
  RGXFWIF_KCCB_CMD expected={};expected.eCmdType=RGXFWIF_KCCB_CMD_KICK;expected.eDM=dm;
- auto c=dm==3?&r.context->s3DContext:&r.context->sTAContext;
+ auto c=a04_rgx_render_context(&r,dm);
  expected.uCmdData.sCmdKickData.psContext.ui32Addr=a04_rgx_render_fw_address(&r,c);
- expected.uCmdData.sCmdKickData.ui32CWoffUpdate=state.write[dm==3];
+ expected.uCmdData.sCmdKickData.ui32CWoffUpdate=state.write[a04_rgx_render_index(dm)];
  assert(!memcmp(&expected,&k,sizeof(k)));
- auto ctl=r.control[dm==3];unsigned at=ctl->ui32ReadOffset;
- auto header=(RGXFWIF_CCB_CMD_HEADER*)(r.commands[dm==3]+at);
+ auto ctl=r.control[a04_rgx_render_index(dm)];unsigned at=ctl->ui32ReadOffset;
+ auto header=(RGXFWIF_CCB_CMD_HEADER*)(r.commands[a04_rgx_render_index(dm)]+at);
  if(header->eCmdType==A04_RGX_CLIENT_PADDING){
   assert(header->ui32CmdSize==4096-at-40);++padding;at=0;
-  header=(RGXFWIF_CCB_CMD_HEADER*)r.commands[dm==3];
+  header=(RGXFWIF_CCB_CMD_HEADER*)r.commands[a04_rgx_render_index(dm)];
+ }
+ if(dm==0){
+  RGXFWIF_CCB_CMD_HEADER nullHeader={};nullHeader.eCmdType=0x2abc80cf;
+  assert(!memcmp(header,&nullHeader,40)); /* GP only, native zero-payload NULL */
+  header=(RGXFWIF_CCB_CMD_HEADER*)((char*)header+40);
  }
  RGXFWIF_CCB_CMD_HEADER eh={};eh.eCmdType=0x2abc00d6;eh.ui32CmdSize=8;
  assert(!memcmp(header,&eh,40));
@@ -43,15 +49,20 @@ static void kick(void *,uint32_t reg,uint32_t value) {
 }
 static void wait(void *,uint32_t us) {
  assert(us==10);++waits;
+ if(mode==8){
+  kernel.fctl->ui32WriteOffset=1;
+  auto commands=(RGXFWIF_FWCCB_CMD*)a04_rgx_command_memory(&kernel,kernel.init->psFirmwareCCB.ui32Addr,32*40);
+  commands[0].eCmdType=(RGXFWIF_FWCCB_CMD_TYPE)0x2abc0067;return;
+ }
  if(mode==1)return; /* FW unresponsive */
  if(mode==2){kernel.kctl->ui32ReadOffset=kernel.kctl->ui32WriteOffset;return;}
  if(mode==3){*r.sync=state.sequence;return;}
  if(mode==4){*r.sync=state.sequence+1;return;}
- if(mode==5){r.control[dm==3]->ui32ReadOffset=4096;return;}
- if(mode==6){r.control[dm==3]->ui32WriteOffset=4096;return;}
- if(mode==7){r.control[dm==3]->ui32DepOffset=1;return;}
+ if(mode==5){r.control[a04_rgx_render_index(dm)]->ui32ReadOffset=4096;return;}
+ if(mode==6){r.control[a04_rgx_render_index(dm)]->ui32WriteOffset=4096;return;}
+ if(mode==7){r.control[a04_rgx_render_index(dm)]->ui32DepOffset=1;return;}
  if(waits%2)return;
- auto ctl=r.control[dm==3];ctl->ui32ReadOffset=ctl->ui32WriteOffset=ctl->ui32DepOffset=state.write[dm==3];
+ auto ctl=r.control[a04_rgx_render_index(dm)];ctl->ui32ReadOffset=ctl->ui32WriteOffset=ctl->ui32DepOffset=state.write[a04_rgx_render_index(dm)];
  kernel.kctl->ui32ReadOffset=kernel.kctl->ui32WriteOffset;*r.sync=state.sequence;
 }
 static a04_rgx_command_io io={nullptr,publish,acquire,kick,wait};
@@ -64,7 +75,7 @@ static void reset() {
  kernel.init->bFirmwareStarted=IMG_TRUE;auto &c=kernel.init->sRGXCompChecks;
  c.bUpdated=IMG_TRUE;c.ui32DDKVersion=0x1000b;c.ui32DDKBuild=5425693;c.ui32FWProcessorVersion=1;
  c.sFWBVNC.ui64BVNC=c.sHWBVNC.ui64BVNC=0x001600280036001eULL;
- state={};mode=waits=kicks=published=padding=0;
+ observed={};state={};mode=waits=kicks=published=padding=0;
 }
 int main() {
  reset();uint64_t pa=0;
@@ -78,21 +89,42 @@ int main() {
  assert(r.memory->sPCDevPAddr.uiAddr==bif.pc.pa && r.memory->uiPageCatBaseRegID==0xffffffff);
  assert(r.context->sTAContext.ui32ServerCommonContextID==10 && r.context->s3DContext.ui32ServerCommonContextID==11);
  assert(r.context->sTAContext.eDM==2 && r.context->s3DContext.eDM==3);
+ assert(r.gp->eDM==0 && !r.gp->ui32Priority && !r.gp->psRFCmd.ui32Addr && !r.gp->psContextState.ui32Addr);
+ assert(r.gp->psFWMemContext.ui32Addr==r.memory_addr.ui32Addr && r.gp->ui32ServerCommonContextID==12);
  assert(!a04_rgx_render_map_cold(&r,table,8192,0x85000000));
  assert(table[0x80]==0x42080017 && table[0x8f] && !table[0x90]);
  assert(a04_rgx_render_map_cold(&r,table,8192,0x85000000));
  for(unsigned n=0;n<600;n++) {
-  dm=n%2?2:3;assert(!a04_rgx_render_submit_update(&r,&state,&kernel,&io,dm));
+  dm=n%3==0?0:(n%3==1?2:3);assert(!a04_rgx_render_submit_update(&r,&state,&kernel,&io,dm));
  }
  assert(state.sequence==600 && padding>=6 && kicks==600);
  /* Both resource/ring and firmware response errors refuse replay. */
  for(unsigned f=1;f<=7;f++) {
   reset();mode=f;dm=3;
-  int result=a04_rgx_render_submit_update(&r,&state,&kernel,&io,3);
+  int result=a04_rgx_render_submit_update(&r,&state,&kernel,&io,3,&observed);
   assert(result==(f<=3?A04_CCB_TIMEOUT:A04_CCB_CORRUPT));assert(state.poisoned);
-  assert(a04_rgx_render_submit_update(&r,&state,&kernel,&io,3)==A04_CCB_OFFLINE && kicks==1);
+  assert(observed.valid && observed.dm==3 && observed.expected==1 && observed.kexpected==1 && observed.cexpected==48);
+  assert(observed.kread==(f==2?1U:0U) && observed.ufo==(f==3?1U:(f==4?2U:0U)));
+  assert(observed.cread==(f==5?4096U:0U) && observed.cwrite==(f==6?4096U:0U) && observed.cdep==(f==7?1U:0U));
+  assert(observed.polls==(f<=3?10000U:2U));
+  auto saved=observed;
+  assert(a04_rgx_render_submit_update(&r,&state,&kernel,&io,3,&observed)==A04_CCB_OFFLINE && kicks==1);
+  assert(!memcmp(&saved,&observed,sizeof(saved)));
   if(f<=3)assert(waits==10000);
  }
+ reset();dm=0;mode=8;kernel.trace->ui32KCCBCmdsExecuted=3;
+ kernel.trace->sTraceBuf[0].ui32TracePointer=27;kernel.trace->ui64StartIdleTime=0x1234567887654321ULL;
+ kernel.init->ui32FirmwareStartedTimeStamp=42;
+ assert(a04_rgx_render_submit_update(&r,&state,&kernel,&io,0,&observed)==A04_CCB_TIMEOUT);
+ assert(observed.valid && observed.dm==0 && observed.cexpected==88 && observed.polls==10000);
+ assert(observed.fread==0 && observed.fwrite==1 && observed.ftype==0x2abc0067);
+ assert(observed.kexecuted==3 && observed.tracePointer==27 && observed.startedTime==42);
+ assert(observed.idleTime==0x1234567887654321ULL && kernel.fctl->ui32ReadOffset==0);
+ auto terminal=observed;kernel.kctl->ui32ReadOffset=99;
+ assert(a04_rgx_render_submit_update(&r,&state,&kernel,&io,0,&observed)==A04_CCB_OFFLINE);
+ assert(!memcmp(&terminal,&observed,sizeof(terminal)) && kicks==1); /* snapshot once, no replay */
+ reset();dm=0;
+ assert(a04_rgx_render_submit_update(&r,&state,&kernel,&io,0,(a04_rgx_render_observation*)bank)==A04_CCB_INPUT && !kicks);
  reset();kernel.init->bFirmwareStarted=IMG_FALSE;
  assert(a04_rgx_render_submit_update(&r,&state,&kernel,&io,3)==A04_CCB_OFFLINE && !kicks);
  reset();kernel.init->sRGXCompChecks.ui32DDKBuild=1;
@@ -146,6 +178,7 @@ _Static_assert(sizeof(RGXFWIF_RF_CMD)==16,"RF native ABI");
 _Static_assert(offsetof(RGXFWIF_RF_CMD,sFWRegisters)==8,"RF registers");
 _Static_assert(sizeof(RGXFWIF_CCB_CMD_HEADER)==40,"client header");
 _Static_assert(sizeof(RGXFWIF_UFO)==8,"UFO");
+_Static_assert(RGXFWIF_CCB_CMD_TYPE_NULL==0x2abc80cf,"NULL native opcode");
 _Static_assert(RGXFWIF_CCB_CMD_TYPE_UPDATE==0x2abc00d6,"UPDATE opcode");
 _Static_assert(RGXFWIF_CCB_CMD_TYPE_PADDING==0x2abc00dd,"PADDING opcode");
 _Static_assert(RGXFWIF_KCCB_CMD_KICK==0x2abc0065,"KICK opcode");

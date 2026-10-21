@@ -11,6 +11,7 @@
 class A04BR3RogueRenderMemory {
     IOBufferMemoryDescriptor *owned[5]={};bool prepared[5]={};
     a04_rgx_render_resources resources={};a04_rgx_render_ring_state state={};
+    a04_rgx_render_observation terminal={};
     uint32_t *mips=nullptr;bool mapped=false,pinned=false;
     static unsigned size(unsigned i) {return i==0?65536:(i==4?65536:4096);}
     A04BR3RogueRenderMemory(const A04BR3RogueRenderMemory &)=delete;
@@ -34,7 +35,7 @@ public:
             owned[i]=nullptr;prepared[i]=false;
         }
         mapped=false;mips=nullptr;a04_rgx_fw_zero(&resources,sizeof(resources));
-        a04_rgx_fw_zero(&state,sizeof(state));
+        a04_rgx_fw_zero(&state,sizeof(state));a04_rgx_fw_zero(&terminal,sizeof(terminal));
     }
     bool prepareCold(A04BR3RogueMemory &source,uint32_t first_context_id) {
         if (pinned) return false;
@@ -75,8 +76,9 @@ public:
      * The kernel view is the real Runtime layout, not a userspace descriptor. */
     int update(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io,unsigned dm) {
         if(!mapped || !pinned)return A04_CCB_OFFLINE;
-        return a04_rgx_render_submit_update(&resources,&state,&kernel,&io,dm);
+        return a04_rgx_render_submit_update(&resources,&state,&kernel,&io,dm,&terminal);
     }
+    const a04_rgx_render_observation &observation() const {return terminal;}
     const a04_rgx_render_resources *view() const {return mapped?&resources:nullptr;}
 };
 #endif

@@ -1,5 +1,5 @@
 {
-  "status": "Cold native render-context owner integrated before runtime prepare; bounded TA/3D client UPDATE/KCCB KICK plus post-UPDATE SYNC, host/ARM64 compile tested; physical UPDATE and rasterization unverified",
+  "status": "GP-only native KickSync context NULL+UPDATE/KCCB KICK candidate and one terminal snapshot; 32 host tests/ARM64 compile pass, physical candidate untested; previous DM2 standalone UPDATE timed out on40907a9",
   "ddk": "Imagination/MediaTek m1.11ED5425693, MT8167 user config, BVNC22.40.54.30",
   "source_sha256": {
     "hwdefs/km/rgxmmudefs_km.h": "bfedc5799e2b57b27cece82d3cd882c557f44ce3356895c9ffa5d7471cdffd28",
@@ -11,7 +11,9 @@
     "services/include/rgx_fwif_km.h": "c9857eb9bcc4a8a70c3431266af3b39c4c2f996e06744ce5707f48dfe5059e9e",
     "services/include/rgx_fwif_resetframework.h": "1c2cf14a28513985e846dd20f5b4e416b454d40557f475f2578bc060798fe104",
     "hwdefs/km/configs/rgxconfig_km_22.V.54.30.h": "f16b6e17abcd2df6ebfb7fdbcd395d0e5ccec28ef3e49f8dde6e612c8a9191e1",
-    "services/server/devices/rgx/rgxheapconfig.h": "dbb55d164329624b1100d5ee95feca005fafc66f78f2306d9a2e4c2e3ba3d89f"
+    "services/server/devices/rgx/rgxheapconfig.h": "dbb55d164329624b1100d5ee95feca005fafc66f78f2306d9a2e4c2e3ba3d89f",
+    "services/server/devices/rgx/rgxkicksync.c": "da9e709937468240c15519055350fbead434b21dd9dfa50bc6c105f69ecbe7fa",
+    "hwdefs/km/rgx_cr_defs_km.h": "a3ffc839b90eac0f52a11fa8aa65fde6fd02d4a97667e7d9f1f3090fd89d1f5b"
   },
   "license": {
     "A04BR3RogueRenderABI.h": "Exact selected RF declarations with A04 names; original Imagination Dual MIT/GPLv2 license retained verbatim, MIT option selected",
@@ -39,19 +41,30 @@
   ],
   "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE",
   "hardware_baseline": {
-    "source": "user current157a; integration/wlan-native-runtime-first-boot.txt lines167-171",
-    "observed": "FW ready ABI/DDK/BVNC verified; KCCB SYNC DM0/2/3 result0; baseline predates this integration"
+    "source": "user40907a9; integration/wlan-native-scan-first-boot.txt baseline528176210 lines167-173",
+    "observed": "cold context prepared1, FWready, SYNC DM0/2/3 result0; DM2 standalone client UPDATE/KICK timeout4. No previous consumption/UFO/FWCCB snapshot, so exact hardware cause undetermined."
   },
   "integration_implemented": [
     "GPU.cpp owns render after Memory/Runtime; prepareCold before Runtime.prepare, pin before Runtime.start, reset render before runtime/base; five additional owned allocations total143360bytes",
     "Allocation failure preserves FW/SYNC baseline; no new required boot arguments or user command ABI",
-    "Only after baseline GP/TA/3D SYNC verified mask0xd: UPDATE/KICK DM2 then SYNC DM2, UPDATE/KICK DM3 then SYNC DM3; each command bounded100ms",
-    "Runtime.renderUpdate accepts only typed owner and private runtime layout; shares commandBusy gate with fence and driver bridgeLock with stop; render timeout/corrupt poisons common KCCB transport",
-    "Success requires exact own UFO and kernel/client consumption; verified mask0xc additionally requires post-UPDATE SYNC for each DM"
+    "Baseline GP/TA/3D SYNC verified mask0xd required; boot now exercises only separate GP common context NULL40+UPDATE48 -> KCCB KICK DM0 -> post-SYNC DM0. Success mask1. TA/3D standalone UPDATE helper unchanged48bytes, not automatically boot-executed after physical failure.",
+    "Runtime.renderUpdate accepts typed owner/private layout; shared commandBusy and bridgeLock; timeout/corrupt poisons common transport. Terminal observation retained before poison; one three-line UART report under bridgeLock, no replay.",
+    "GP success requires exact own UFO + KCCB read + client read; post-UPDATE GP SYNC additionally required. Fixed10000 polls*10us unchanged; failures retain/quarantine all DMA resources."
   ],
   "limits": [
-    "UPDATE executes client firmware scheduling/UFO operations only; no BIF hardware translation or rasterizer work is demonstrated",
-    "Physical FW UPDATE/KICK response remains untested in this candidate; parent commits/builds/boots",
-    "Main/render command banks normal-NC; cached BIF tables cleaned cold; no live table mutation or speculative shader bytes"
-  ]
+    "Actual40907a9 DM2 timeout cause cannot be inferred from result4 without consumption/UFO/FWCCB data. GP-only standard sync packet replaces unproven TA/3D boot experiment; this is not a claim of fixing/proving TA/3D firmware execution.",
+    "Physical GP client NULL/UPDATE response, BIF hardware translation and rasterization remain unverified; parent builds/boots.",
+    "No invented TA/3D task/shader bytes; TA/3D NULL support not established by pinned source. No timeout increase/retry. Rendering targets/freelists/shader packets and iOS bridge remain future work."
+  ],
+  "gp_source_contract": {
+    "context": "rgxkicksync.c134-146: FWCommonContextAllocate DM_GP priority0, NULL context state and framework; separate common context, memory context supplied",
+    "packet": "rgxkicksync.c620-640: RGXCmdHelperInitCmdCCB payload0,NULL, RGXFWIF_CCB_CMD_TYPE_NULL; rgxccb.c1539-1540 retains sizeof(header) even for zero payload; acquire emits DM header before UPDATE",
+    "scheduling": "rgxkicksync.c680-709: KCCB KICK with common-context pointer, CWoff, cleanup0/workest0, schedule DM_GP. rgxfwutils.c967-1095 common-context initialization and host-only sCommonCtxtList, no separate firmware REGISTER command in this path. No TA/3D NULL validity inferred."
+  },
+  "terminal_observation": [
+    "actual KCCB read/write/expected; client read/write/dependency/expected; exact UFO/sequence; FWCCB read/write and first pending opcode only if within32 slots",
+    "context flags/priority/run/wait nodes; bounded owned trace KCCB executed/trace pointer/power/HWR/faults; INIT started timestamp, FW idle time and RGX_CR_TIMER0x160 before/after",
+    "Only terminal timeout/corrupt observation, no pointer-following or FWCCB consumption; driver logs three lines once. Main and render are normal-NC; acquire barrier before observation. Concurrent fields are observational, not an atomic firmware freeze."
+  ],
+  "tests_result": "32 tests PASS in7.676s; ASan/UBSan, exact original DDK NULL opcode/header ABI, 600 mixed pure-helper ring submissions/wrap, GP terminal FWCCB/time snapshot/no replay, actual Runtime+owner and full ARM64 CPP compile; not full XNU link or hardware validation"
 }

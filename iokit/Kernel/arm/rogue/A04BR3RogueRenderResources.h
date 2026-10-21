@@ -13,15 +13,17 @@
 #include "A04BR3RogueRuntimeLayout.h"
 static constexpr uint64_t A04_RGX_RENDER_SCRATCH_VA=0x65c0000000ULL; /* rgxheapconfig.h BRN65273 */
 enum {A04_RGX_RENDER_BANK_BYTES=65536,A04_RGX_RENDER_FW_OFFSET=0x80000,
-      A04_RGX_CLIENT_BYTES=4096,A04_RGX_CLIENT_UPDATE=0x2abc00d6,
+      A04_RGX_CLIENT_BYTES=4096,A04_RGX_CLIENT_NULL=0x2abc80cf,
+      A04_RGX_CLIENT_UPDATE=0x2abc00d6,
       A04_RGX_CLIENT_PADDING=0x2abc00dd};
 struct a04_rgx_render_resources {
     a04_rgx_render_buffer bank;
     a04_rgx_bif bif;
     RGXFWIF_FWRENDERCONTEXT *context;
+    RGXFWIF_FWCOMMONCONTEXT *gp; /* exact rgxkicksync.c DM_GP context */
     RGXFWIF_FWMEMCONTEXT *memory;
-    RGXFWIF_CCCB_CTL *control[2];
-    unsigned char *commands[2];
+    RGXFWIF_CCCB_CTL *control[3];
+    unsigned char *commands[3];
     volatile uint32_t *sync;
     RGXFWIF_DEV_VIRTADDR context_addr,memory_addr,sync_addr;
     uint32_t used;
@@ -42,7 +44,7 @@ static inline int a04_rgx_render_validate(const a04_rgx_render_buffer *bank,cons
 static inline int a04_rgx_render_build(a04_rgx_render_resources *out,
     const a04_rgx_render_buffer *bank,const a04_rgx_bif *b,uint32_t first_context_id)
 {
-    if (!out || a04_rgx_render_validate(bank,b) || !first_context_id || first_context_id==0xffffffffU ||
+    if (!out || a04_rgx_render_validate(bank,b) || !first_context_id || first_context_id>0xfffffffcU ||
         a04_rgx_fw_alias(out,sizeof(*out),bank->cpu,bank->bytes)) return 1;
     const a04_rgx_render_buffer all[]={b->pc,b->pd,b->pt,b->data};
     for (unsigned i=0;i<4;i++)
@@ -71,6 +73,17 @@ static inline int a04_rgx_render_build(a04_rgx_render_resources *out,
         c->ui32ServerCommonContextID=first_context_id+n;
     }
     out->sync=(volatile uint32_t *)a04_rgx_fw_alloc(&pool,64,&out->sync_addr);
+    /* rgxkicksync.c CreateKickSyncContext: independent common context,
+     * GP domain, priority0, no suspend state and no reset framework. Do not
+     * transplant the GP NULL-task contract into TA/3D contexts. */
+    RGXFWIF_DEV_VIRTADDR gp_address;
+    out->gp=(RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_fw_alloc(&pool,sizeof(*out->gp),&gp_address);
+    auto gp=out->gp;
+    out->control[2]=(RGXFWIF_CCCB_CTL *)a04_rgx_fw_alloc(&pool,sizeof(RGXFWIF_CCCB_CTL),&gp->psCCBCtl);
+    out->commands[2]=(unsigned char *)a04_rgx_fw_alloc(&pool,A04_RGX_CLIENT_BYTES,&gp->psCCB);
+    out->control[2]->ui32WrapMask=A04_RGX_CLIENT_BYTES-1;
+    gp->psFWMemContext=out->memory_addr;gp->eDM=0;
+    gp->ui32ServerCommonContextID=first_context_id+2;
     out->used=pool.used;
     return a04_rgx_bif_build(b);
 }
@@ -98,7 +111,11 @@ enum {
     A04_RENDER_CCB0=a04_rgx_render_align64(A04_RENDER_CTL0+16),
     A04_RENDER_CTL1=A04_RENDER_CCB0+4096,
     A04_RENDER_CCB1=a04_rgx_render_align64(A04_RENDER_CTL1+16),
-    A04_RENDER_SYNC=A04_RENDER_CCB1+4096,A04_RENDER_USED=A04_RENDER_SYNC+64
+    A04_RENDER_SYNC=A04_RENDER_CCB1+4096,
+    A04_RENDER_GP=A04_RENDER_SYNC+64,
+    A04_RENDER_GPCTL=a04_rgx_render_align64(A04_RENDER_GP+sizeof(RGXFWIF_FWCOMMONCONTEXT)),
+    A04_RENDER_GPCCB=a04_rgx_render_align64(A04_RENDER_GPCTL+16),
+    A04_RENDER_USED=A04_RENDER_GPCCB+4096
 };
 static_assert(A04_RENDER_USED<16384,"bounded context bank");
 static inline bool a04_rgx_render_view_valid(const a04_rgx_render_resources *r)
@@ -111,6 +128,12 @@ static inline bool a04_rgx_render_view_valid(const a04_rgx_render_resources *r)
         (const void *)r->sync!=base+A04_RENDER_SYNC ||
         r->context_addr.ui32Addr!=0xc0080000 || r->memory_addr.ui32Addr!=0xc0080000+A04_RENDER_MEM ||
         r->sync_addr.ui32Addr!=0xc0080000+A04_RENDER_SYNC) return false;
+    if ((void *)r->gp!=base+A04_RENDER_GP || (void *)r->control[2]!=base+A04_RENDER_GPCTL ||
+        r->commands[2]!=base+A04_RENDER_GPCCB || r->gp->eDM!=0 ||
+        r->gp->psCCBCtl.ui32Addr!=0xc0080000+A04_RENDER_GPCTL ||
+        r->gp->psCCB.ui32Addr!=0xc0080000+A04_RENDER_GPCCB ||
+        r->gp->psFWMemContext.ui32Addr!=r->memory_addr.ui32Addr ||
+        r->gp->psContextState.ui32Addr || r->gp->psRFCmd.ui32Addr) return false;
     if (r->memory->sPCDevPAddr.uiAddr!=r->bif.pc.pa) return false;
     for (unsigned n=0;n<2;n++) {
         auto c=n?&r->context->s3DContext:&r->context->sTAContext;
@@ -123,14 +146,17 @@ static inline bool a04_rgx_render_view_valid(const a04_rgx_render_resources *r)
     }
     return true;
 }
-struct a04_rgx_render_ring_state {uint32_t write[2],sequence;bool poisoned;};
+static inline unsigned a04_rgx_render_index(unsigned dm) {return dm==0?2U:(dm==3?1U:0U);}
+static inline RGXFWIF_FWCOMMONCONTEXT *a04_rgx_render_context(const a04_rgx_render_resources *r,unsigned dm)
+{return dm==0?r->gp:(dm==3?&r->context->s3DContext:&r->context->sTAContext);}
+struct a04_rgx_render_ring_state {uint32_t write[3],sequence;bool poisoned;};
 /* Prepares typed KICK + client bytes, no MMIO. Caller reserves a KCCB slot
  * FIRST under the sole producer lock. Once published, pin resources until
  * actual device shutdown/drain proof. No context/command pointer arguments. */
 static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_render_ring_state *state,
                                       unsigned dm,RGXFWIF_KCCB_CMD *kick)
 {
-    if (!state || !kick || (dm!=2 && dm!=3) || !a04_rgx_render_view_valid(r) ||
+    if (!state || !kick || (dm!=0 && dm!=2 && dm!=3) || !a04_rgx_render_view_valid(r) ||
         state->poisoned || !state->sequence || state->sequence==0xffffffffU) return 1;
     const a04_rgx_render_buffer all[]={r->bank,r->bif.pc,r->bif.pd,r->bif.pt,r->bif.data};
     for (unsigned i=0;i<5;i++)
@@ -140,23 +166,33 @@ static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_rend
     if (a04_rgx_fw_alias(kick,sizeof(*kick),state,sizeof(*state)) ||
         a04_rgx_fw_alias(kick,sizeof(*kick),r,sizeof(*r)) ||
         a04_rgx_fw_alias(state,sizeof(*state),r,sizeof(*r))) return 1;
-    unsigned n=dm==3;auto c=n?&r->context->s3DContext:&r->context->sTAContext;
+    unsigned n=a04_rgx_render_index(dm);auto c=a04_rgx_render_context(r,dm);
     auto ctl=(volatile RGXFWIF_CCCB_CTL *)r->control[n];uint32_t at=state->write[n];
     if (ctl->ui32WrapMask!=4095 || at>4095 || (at&7) || ctl->ui32ReadOffset!=at ||
         ctl->ui32DepOffset>4095 || (ctl->ui32DepOffset&7) || ctl->ui32WriteOffset!=at || 4096-at<40) return 2;
     RGXFWIF_CCB_CMD_HEADER header={};header.eCmdType=A04_RGX_CLIENT_UPDATE;header.ui32CmdSize=8;
-    if (at+48+40>4096) {
+    unsigned commandBytes=dm==0?88U:48U;
+    if (at+commandBytes+40>4096) {
         RGXFWIF_CCB_CMD_HEADER pad={};pad.eCmdType=A04_RGX_CLIENT_PADDING;pad.ui32CmdSize=4096-at-40;
         a04_rgx_fw_zero(r->commands[n]+at,4096-at);
         *(RGXFWIF_CCB_CMD_HEADER *)(r->commands[n]+at)=pad;at=0;
     }
-    *(RGXFWIF_CCB_CMD_HEADER *)(r->commands[n]+at)=header;
-    auto ufo=(RGXFWIF_UFO *)(r->commands[n]+at+40);
+    /* Exact GP-only sync contract from rgxkicksync.c. TA/3D standalone
+     * UPDATE helpers remain available for investigation, not boot-executed.
+     * No zero-filled/guessed TA/3D task or shader packet is constructed. */
+    unsigned updateAt=at;
+    if (dm==0) {
+        RGXFWIF_CCB_CMD_HEADER nullCmd={};nullCmd.eCmdType=A04_RGX_CLIENT_NULL;
+        *(RGXFWIF_CCB_CMD_HEADER *)(r->commands[n]+at)=nullCmd;
+        updateAt+=40;
+    }
+    *(RGXFWIF_CCB_CMD_HEADER *)(r->commands[n]+updateAt)=header;
+    auto ufo=(RGXFWIF_UFO *)(r->commands[n]+updateAt+40);
     ufo->puiAddrUFO=r->sync_addr;ufo->ui32Value=state->sequence;*r->sync=0;
     RGXFWIF_KCCB_CMD cmd={};cmd.eCmdType=RGXFWIF_KCCB_CMD_KICK;cmd.eDM=dm;
     cmd.uCmdData.sCmdKickData.psContext.ui32Addr=a04_rgx_render_fw_address(r,c);
-    cmd.uCmdData.sCmdKickData.ui32CWoffUpdate=at+48;*kick=cmd;
+    cmd.uCmdData.sCmdKickData.ui32CWoffUpdate=at+commandBytes;*kick=cmd;
     /* FW owns CCCB_CTL.write; publish ONLY through KCCB.ui32CWoffUpdate. */
-    state->write[n]=at+48;return 0;
+    state->write[n]=at+commandBytes;return 0;
 }
 #endif

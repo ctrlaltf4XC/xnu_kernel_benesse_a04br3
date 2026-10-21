@@ -9,13 +9,54 @@
 #define A04BR3_ROGUE_RENDER_SUBMIT_H
 #include "A04BR3RogueCommand.h"
 #include "A04BR3RogueRenderResources.h"
+/* One terminal observation, never a replay/extra poll. Values are a bounded
+ * read-only snapshot of concurrently FW-owned words, not an atomic FW dump.
+ * No following firmware pointers, no FWCCB consumption, no cache-line clean. */
+struct a04_rgx_render_observation {
+    bool valid;
+    uint32_t dm,polls,kread,kwrite,kexpected,cread,cwrite,cdep,cexpected;
+    uint32_t ufo,expected,fread,fwrite,ftype,flags,priority;
+    uint32_t runPrev,runNext,waitPrev,waitNext,kexecuted,tracePointer,power,hwr,fwfaults;
+    uint32_t startedTime;
+    uint64_t idleTime;
+};
+static inline void a04_rgx_render_observe(a04_rgx_render_observation *out,
+    const a04_rgx_render_resources *r,const a04_rgx_render_ring_state *state,
+    a04_rgx_fw_runtime *kernel,unsigned dm,unsigned polls,unsigned next)
+{
+    if (!out || out->valid) return;
+    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[a04_rgx_render_index(dm)];
+    auto context=(volatile RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_render_context(r,dm);
+    out->dm=dm;out->polls=polls;
+    out->kread=kernel->kctl->ui32ReadOffset;out->kwrite=kernel->kctl->ui32WriteOffset;out->kexpected=next;
+    out->cread=client->ui32ReadOffset;out->cwrite=client->ui32WriteOffset;out->cdep=client->ui32DepOffset;
+    out->cexpected=state->write[a04_rgx_render_index(dm)];out->ufo=*r->sync;out->expected=state->sequence;
+    out->fread=kernel->fctl->ui32ReadOffset;out->fwrite=kernel->fctl->ui32WriteOffset;
+    out->ftype=0xffffffffU;
+    auto fcommands=(volatile RGXFWIF_FWCCB_CMD *)a04_rgx_command_memory(kernel,
+        kernel->init->psFirmwareCCB.ui32Addr,32*sizeof(RGXFWIF_FWCCB_CMD));
+    if (fcommands && out->fread<32 && out->fwrite<32 && out->fread!=out->fwrite)
+        out->ftype=fcommands[out->fread].eCmdType;
+    out->flags=context->ui32FWComCtxFlags;out->priority=context->ui32Priority;
+    out->runPrev=context->sRunNode.p.ui32Addr;out->runNext=context->sRunNode.n.ui32Addr;
+    out->waitPrev=context->sWaitingNode.p.ui32Addr;out->waitNext=context->sWaitingNode.n.ui32Addr;
+    auto trace=(volatile RGXFWIF_TRACEBUF *)a04_rgx_command_memory(kernel,
+        kernel->init->sTraceBufCtl.ui32Addr,sizeof(RGXFWIF_TRACEBUF));
+    if (trace && (const void *)trace==kernel->trace) {
+        out->kexecuted=trace->ui32KCCBCmdsExecuted;out->tracePointer=trace->sTraceBuf[0].ui32TracePointer;
+        out->power=trace->ePowState;out->hwr=trace->ui32HWRStateFlags;
+        out->fwfaults=trace->ui32FWFaults;out->idleTime=trace->ui64StartIdleTime;
+    }
+    out->startedTime=kernel->init->ui32FirmwareStartedTimeStamp;
+    out->valid=true;
+}
 static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
     a04_rgx_render_ring_state *state,a04_rgx_fw_runtime *kernel,
-    const a04_rgx_command_io *io,unsigned dm)
+    const a04_rgx_command_io *io,unsigned dm,a04_rgx_render_observation *observation=nullptr)
 {
     if (!r || !state || !kernel || !io || !io->acquire || !io->publish || !io->kick ||
         !io->wait_us || !kernel->init || !a04_rgx_render_view_valid(r) ||
-        (dm!=2 && dm!=3) || state->sequence>=0xfffffffeU) return A04_CCB_INPUT;
+        (dm!=0 && dm!=2 && dm!=3) || state->sequence>=0xfffffffeU) return A04_CCB_INPUT;
     if (state->poisoned) return A04_CCB_OFFLINE;
     if ((void *)kernel->init!=kernel->config.cpu || kernel->config.bytes!=A04_RGX_CONFIG_BYTES ||
         kernel->init->bFirmwareStarted!=IMG_TRUE || kernel->init->sRGXCompChecks.bUpdated!=IMG_TRUE)
@@ -38,6 +79,16 @@ static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
             a04_rgx_fw_alias(state,sizeof(*state),parts[i].cpu,parts[i].bytes)) return A04_CCB_INPUT;
     if (a04_rgx_fw_alias(state,sizeof(*state),runtime.cpu,runtime.bytes) ||
         a04_rgx_fw_alias(state,sizeof(*state),config.cpu,config.bytes)) return A04_CCB_INPUT;
+    if (observation) {
+        if (!a04_rgx_fw_pointer(observation,sizeof(*observation)) ||
+            a04_rgx_fw_alias(observation,sizeof(*observation),state,sizeof(*state)) ||
+            a04_rgx_fw_alias(observation,sizeof(*observation),r,sizeof(*r)) ||
+            a04_rgx_fw_alias(observation,sizeof(*observation),kernel,sizeof(*kernel)) ||
+            a04_rgx_fw_alias(observation,sizeof(*observation),runtime.cpu,runtime.bytes) ||
+            a04_rgx_fw_alias(observation,sizeof(*observation),config.cpu,config.bytes)) return A04_CCB_INPUT;
+        for (unsigned i=0;i<5;i++)
+            if (a04_rgx_fw_alias(observation,sizeof(*observation),parts[i].cpu,parts[i].bytes)) return A04_CCB_INPUT;
+    }
     io->acquire(io->context);
     uint32_t read=ctl->ui32ReadOffset,write=ctl->ui32WriteOffset,next=(write+1)&127;
     if (ctl->ui32WrapMask!=127 || ctl->ui32CmdSize!=56 || read>127 || write>127 ||
@@ -57,17 +108,19 @@ static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
     ctl->ui32WriteOffset=next;(void)ctl->ui32WriteOffset;
     io->publish(io->context);
     io->kick(io->context,0xb00,0x10);
-    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[dm==3];
+    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[a04_rgx_render_index(dm)];
     for (unsigned i=0;i<10000;i++) {
         io->acquire(io->context);
         uint32_t value=*r->sync,kread=ctl->ui32ReadOffset,cread=client->ui32ReadOffset;
         if (kread>127 || cread>4095 || (cread&7) || (value && value!=state->sequence) ||
             ctl->ui32WriteOffset!=next || ctl->ui32WrapMask!=127 || ctl->ui32CmdSize!=56 ||
             client->ui32WrapMask!=4095 || client->ui32WriteOffset>4095 ||
-            (client->ui32WriteOffset&7) || client->ui32DepOffset>4095 || (client->ui32DepOffset&7)) {state->poisoned=true;return A04_CCB_CORRUPT;}
-        if (value==state->sequence && kread==next && cread==state->write[dm==3]) return A04_CCB_OK;
+            (client->ui32WriteOffset&7) || client->ui32DepOffset>4095 || (client->ui32DepOffset&7)) {a04_rgx_render_observe(observation,r,state,kernel,dm,i+1,next);state->poisoned=true;return A04_CCB_CORRUPT;}
+        if (value==state->sequence && kread==next && cread==state->write[a04_rgx_render_index(dm)]) return A04_CCB_OK;
         io->wait_us(io->context,10);
     }
+    io->acquire(io->context);
+    a04_rgx_render_observe(observation,r,state,kernel,dm,10000,next);
     state->poisoned=true;return A04_CCB_TIMEOUT;
 }
 #endif
