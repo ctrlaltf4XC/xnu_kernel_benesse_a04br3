@@ -22,14 +22,14 @@ static int kernel_task;
 enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,
  kIOMapWriteCombineCache=0x400,kIOReturnSuccess=0};
 class IOBufferMemoryDescriptor;
-static IOBufferMemoryDescriptor *retained[64];static unsigned live,total,attempts,cleaned;
+static IOBufferMemoryDescriptor *retained[256];static unsigned live,total,attempts,cleaned;
 static unsigned failAllocation,failPrepare;
 class IOBufferMemoryDescriptor {
 public:void *cpu;uint64_t bytes,pa;unsigned id,slot;
  static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(int,unsigned options,uint64_t size,uint64_t mask){
   assert(mask==0xfffff000);unsigned at=++attempts;if(at==failAllocation)return nullptr;
-  assert(((options&kIOMapWriteCombineCache)!=0)==(at%5==1 || at%5==0));
-  auto b=new IOBufferMemoryDescriptor;b->id=total++;b->slot=at;assert(b->id<64);
+  assert(((options&kIOMapWriteCombineCache)!=0)==(size==65536));
+  auto b=new IOBufferMemoryDescriptor;b->id=total++;b->slot=at;assert(b->id<256);
   b->bytes=size;b->pa=0x90000000ULL+b->id*0x20000;
   assert(!posix_memalign(&b->cpu,4096,size));memset(b->cpu,0xcc,size);retained[b->id]=b;++live;return b;
  }
@@ -76,6 +76,30 @@ int main(){
  attempts=0;
  {A04BR3RogueMemory source;A04BR3RogueRenderMemory r;sourceTable[0]|=4;
   assert(!r.prepareCold(source,10) && !live && !attempts);}
+ for(unsigned fault=1;fault<=11;fault++) {
+  attempts=0;failAllocation=fault;A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
+  assert(!r.prepareCold(source,10,0xa800000000ULL,0xba00000000ULL) && !live && !sourceTable[0x80]);
+ }
+ failAllocation=0;
+ for(unsigned fault=1;fault<=11;fault++) {
+  attempts=0;failPrepare=fault;A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
+  assert(!r.prepareCold(source,10,0xa800000000ULL,0xba00000000ULL) && !live && !sourceTable[0x80]);
+ }
+ failPrepare=0;attempts=0;
+ {A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
+  assert(r.prepareCold(source,10,0xa800000000ULL,0xba00000000ULL) && live==11 && r.ownedBytes()==290816);
+  auto general=r.view()->bif;auto pds=r.executionHeap(0);auto usc=r.executionHeap(1);
+  assert(pds && usc && !r.executionHeap(2) && pds->pc.pa==general.pc.pa && usc->read_only);
+  const a04_rgx_bif heaps[]={general,*pds,*usc};uint64_t physical=0;
+  for(auto &h:heaps)for(unsigned n=0;n<65536;n++)
+   assert(!a04_rgx_bif_translate(&h,h.va+n,&physical) && physical==h.data.pa+n);
+  r.reset();assert(!live && !sourceTable[0x80]);}
+ for(unsigned bad=0;bad<3;bad++) {
+  attempts=0;A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
+  uint64_t pds=bad==0?0:0xa800000000ULL;
+  uint64_t usc=bad==1?pds:(bad==2?A04_RGX_RENDER_SCRATCH_VA:0xba00000000ULL);
+  assert(!r.prepareCold(source,10,pds,usc) && !live && !sourceTable[0x80]);
+ }
  attempts=0;
  {A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
   assert(r.prepareCold(source,10));sourceTable[0]|=4;

@@ -166,12 +166,12 @@ public:
      * kernel layout to a bridge client. Same producer gate as fence(), with
      * outer service lock required for power/stop exclusion. Optional priority
      * selects only bounded native TA/3D PRIORITY0/1; no task payload input. */
-    int renderUpdate(A04BR3RogueRenderMemory &owner,uint32_t dm,const a04_rgx_command_io &io,uint32_t priority=0xffffffffU) {
+    int renderUpdate(A04BR3RogueRenderMemory &owner,uint32_t dm,const a04_rgx_command_io &io,uint32_t priority=0xffffffffU,bool transfer=false) {
         unsigned expected=0;
         if (!__atomic_compare_exchange_n(&commandBusy,&expected,1,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))
             return A04_CCB_BUSY;
         int error=firmwareOnline && !commandState.poisoned?
-            owner.update(layout,io,dm,priority):A04_CCB_OFFLINE;
+            owner.update(layout,io,dm,priority,transfer):A04_CCB_OFFLINE;
         /* An unresolved KICK owns the shared transport too. Do not allow SYNC
          * to overwrite/replay it after timeout or corrupt firmware response. */
         if (error==A04_CCB_TIMEOUT || error==A04_CCB_CORRUPT) commandState.poisoned=true;

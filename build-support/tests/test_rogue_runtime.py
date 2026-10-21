@@ -171,15 +171,17 @@ static void waitCommand(void *,uint32_t us) {
   *(uint32_t*)commandMemory(cmd.uCmdData.sSyncData.sSyncObjDevVAddr.ui32Addr)=cmd.uCmdData.sSyncData.uiUpdateVal;
  } else {
   assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_KICK && (cmd.eDM==0 || cmd.eDM==2 || cmd.eDM==3));
-  auto r=activeRender->view();unsigned n=a04_rgx_render_index(cmd.eDM);
+  auto r=activeRender->view();
+  bool transfer=cmd.uCmdData.sCmdKickData.psContext.ui32Addr==a04_rgx_render_fw_address(r,r->tq);
+  unsigned n=a04_rgx_render_index(cmd.eDM,transfer);
   assert(cmd.uCmdData.sCmdKickData.psContext.ui32Addr==
-    a04_rgx_render_fw_address(r,a04_rgx_render_context(r,cmd.eDM)));
+    a04_rgx_render_fw_address(r,a04_rgx_render_context(r,cmd.eDM,transfer)));
   auto client=r->control[n];
   auto header=(RGXFWIF_CCB_CMD_HEADER*)(r->commands[n]+client->ui32ReadOffset);
   if(header->eCmdType==A04_RGX_CLIENT_PRIORITY){
    auto priority=(RGXFWIF_CMD_PRIORITY*)((char*)header+40);
    assert(header->ui32CmdSize==8);
-   a04_rgx_render_context(r,cmd.eDM)->ui32Priority=priority->ui32Priority;
+   a04_rgx_render_context(r,cmd.eDM,transfer)->ui32Priority=priority->ui32Priority;
   } else {
   if(cmd.eDM==0){assert(header->eCmdType==A04_RGX_CLIENT_NULL && !header->ui32CmdSize);
    header=(RGXFWIF_CCB_CMD_HEADER*)((char*)header+40);}
@@ -233,14 +235,16 @@ int main(){
     assert(runtime.renderUpdate(render,dm,commandIO,0)==A04_CCB_OK);
     assert(runtime.renderUpdate(render,dm,commandIO,1)==A04_CCB_OK);
    }
+   assert(runtime.renderUpdate(render,3,commandIO,0,true)==A04_CCB_OK);
+   assert(runtime.renderUpdate(render,3,commandIO,1,true)==A04_CCB_OK);
    commandAnswer=failure==4;commandCorrupt=failure==4;commandWaits=0;
    int commandResult=failure==5?runtime.fence(3,commandIO):runtime.renderUpdate(render,3,commandIO);
    assert(commandResult==(failure==4?A04_CCB_CORRUPT:A04_CCB_TIMEOUT));
-   assert(commandKicks==9 && commandWaits==(failure==4?1U:10000U));
-   if(failure!=5)assert(render.observation().valid && render.observation().expected==7);
+   assert(commandKicks==11 && commandWaits==(failure==4?1U:10000U));
+   if(failure!=5)assert(render.observation().valid && render.observation().expected==9);
    else assert(!render.observation().valid);
-   assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE && commandKicks==9);
-   assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OFFLINE && commandKicks==9);
+   assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE && commandKicks==11);
+   assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OFFLINE && commandKicks==11);
   }
   else {assert(result!=0);assert(regs[0x100/8]==0x100000000ULL);
    assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE);}

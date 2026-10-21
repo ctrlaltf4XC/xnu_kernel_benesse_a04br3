@@ -113,18 +113,18 @@ private:
         IOLockUnlock(bridgeLock);
         return error;
     }
-    int submitRenderUpdate(uint32_t dm,uint32_t priority=0xffffffffU) {
+    int submitRenderUpdate(uint32_t dm,uint32_t priority=0xffffffffU,bool transfer=false) {
         if (!bridgeLock) return A04_CCB_OFFLINE;
         if (!IOLockTryLock(bridgeLock)) return A04_CCB_BUSY;
         a04_rgx_command_io io={this,commandPublish,commandAcquire,fwWrite32,fwWait};
         uint64_t timerBefore=fwRead64(this,0x160); /* pinned RGX_CR_TIMER */
-        int error=bridgeOnline?runtime.renderUpdate(render,dm,io,priority):A04_CCB_OFFLINE;
+        int error=bridgeOnline?runtime.renderUpdate(render,dm,io,priority,transfer):A04_CCB_OFFLINE;
         uint64_t timerAfter=fwRead64(this,0x160);
         const auto &s=render.observation();
         if (error && s.valid && !renderReported) {
             renderReported=true;
-            IOLog("A04BR3 GPU: render terminal DM=%u polls=%u KCCB r/w/expected=%u/%u/%u client r/w/dep/expected=%u/%u/%u/%u UFO=%u expected=%u\n",
-                s.dm,s.polls,s.kread,s.kwrite,s.kexpected,s.cread,s.cwrite,s.cdep,s.cexpected,s.ufo,s.expected);
+            IOLog("A04BR3 GPU: render terminal DM=%u transfer=%u polls=%u KCCB r/w/expected=%u/%u/%u client r/w/dep/expected=%u/%u/%u/%u UFO=%u expected=%u\n",
+                s.dm,s.transfer,s.polls,s.kread,s.kwrite,s.kexpected,s.cread,s.cwrite,s.cdep,s.cexpected,s.ufo,s.expected);
             IOLog("A04BR3 GPU: render FWCCB r/w/type=%u/%u/0x%x context flags=0x%x priority=%u expected=%u seq=%u run=0x%x/0x%x wait=0x%x/0x%x\n",
                 s.fread,s.fwrite,s.ftype,s.flags,s.priority,s.priorityExpected,s.prioritySequence,s.runPrev,s.runNext,s.waitPrev,s.waitNext);
             IOLog("A04BR3 GPU: render FW executed=%u traceptr=%u power=%u HWR=0x%x faults=%u startedTime=%u idleTime=0x%llx CRtimer=0x%llx/0x%llx; terminal snapshot only, no replay\n",
@@ -156,7 +156,7 @@ private:
         setProperty("FirmwareRenderUpdateVerifiedDMs",(uint64_t)verified,32);
         return verified;
     }
-    void verifyPriorityBridge() {
+    bool verifyPriorityBridge() {
         uint32_t verified=0;
         /* rgxta3d.c SetRenderContextPriorityKM explicitly calls the same
          * ContextSetPriority for TA then3D. No NULL task on either domain. */
@@ -165,7 +165,7 @@ private:
                 int error=submitRenderUpdate(dm,priority);
                 setProperty("FirmwarePriorityResult",(uint64_t)error,32);
                 IOLog("A04BR3 GPU: client PRIORITY/KICK DM=%u target=%u result=%d; FW priority + KCCB/client read-offset required, no UFO/draw proof\n",dm,priority,error);
-                if (error) {setProperty("FirmwarePriorityVerifiedDMs",(uint64_t)verified,32);return;}
+                if (error) {setProperty("FirmwarePriorityVerifiedDMs",(uint64_t)verified,32);return false;}
             }
             int error=submitFence(dm);
             setProperty("FirmwarePriorityPostFenceResult",(uint64_t)error,32);
@@ -174,6 +174,21 @@ private:
             verified|=1U<<dm;
         }
         setProperty("FirmwarePriorityVerifiedDMs",(uint64_t)verified,32);
+        return verified==0xc;
+    }
+    void verifyTransferContext() {
+        /* rgxtransfer.c SetTransferContextPriorityKM explicitly uses DM3.
+         * No actual task until original register/PDS/EOT producer is complete. */
+        for (uint32_t priority=0;priority<=1;priority++) {
+            int error=submitRenderUpdate(3,priority,true);
+            setProperty("FirmwareTQContextResult",(uint64_t)error,32);
+            IOLog("A04BR3 GPU: independent TQ_3D PRIORITY target=%u result=%d; no transfer task submitted\n",priority,error);
+            if (error) return;
+        }
+        int error=submitFence(3);
+        setProperty("FirmwareTQPostFenceResult",(uint64_t)error,32);
+        setProperty("FirmwareTQContextVerified",error?kOSBooleanFalse:kOSBooleanTrue);
+        IOLog("A04BR3 GPU: post-TQ-context SYNC DM=3 result=%d; pixel test not submitted\n",error);
     }
     uint32_t verifyCommandBridge() {
         const uint32_t domains[]={A04_RGX_DM_GP,A04_RGX_DM_TA,A04_RGX_DM_3D};
@@ -223,7 +238,7 @@ private:
         /* No live TLB edits: reserve/map native contexts before runtime
          * promotes code PTEs, and before MIPS reset is released. Allocation
          * failure leaves the proven firmware/SYNC path available. */
-        bool renderPrepared=render.prepareCold(memory,1);
+        bool renderPrepared=render.prepareCold(memory,1,0xa800000000ULL,0xba00000000ULL);
         setProperty("FirmwareRenderContextPrepared",renderPrepared?kOSBooleanTrue:kOSBooleanFalse);
         IOLog("A04BR3 GPU: cold render context prepared=%u; no tasks/shaders submitted\n",(unsigned)renderPrepared);
         if (!runtime.prepare(memory,26000000)) {
@@ -233,7 +248,7 @@ private:
         }
         setProperty("FirmwareMemoryBytes",(uint64_t)(A04BR3RogueMemory::TableBytes+
             A04BR3RogueMemory::CodeBytes+A04BR3RogueMemory::DataBytes+
-            A04_RGX_MAIN_BYTES+A04_RGX_CONFIG_BYTES+0x4000+(renderPrepared?143360:0)),32);
+            A04_RGX_MAIN_BYTES+A04_RGX_CONFIG_BYTES+0x4000+(renderPrepared?render.ownedBytes():0)),32);
         a04_rgx_exec_io io={this,fwRead32,fwRead64,fwWrite32,fwWrite64,fwWait,fwShared};
         render.pinForFirmware(); /* quarantine before any reset release, including failed start */
         attempted=true;
@@ -251,7 +266,7 @@ private:
         setProperty("BringupStage","firmware-ready");
         IOLog("A04BR3 GPU: FW ready=1 ABI/DDK/BVNC verified; IRQ=0x%x; no acceleration bridge\n",fwRead32(this,0x8a8));
         bridgeOnline=true;
-        if (verifyCommandBridge()==0xd && verifyRenderBridge()==1) verifyPriorityBridge();
+        if (verifyCommandBridge()==0xd && verifyRenderBridge()==1 && verifyPriorityBridge()) verifyTransferContext();
     }
     void stageBootFirmware() {
         DTEntry map=nullptr;

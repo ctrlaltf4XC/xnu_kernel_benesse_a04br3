@@ -21,9 +21,10 @@ struct a04_rgx_render_resources {
     a04_rgx_bif bif;
     RGXFWIF_FWRENDERCONTEXT *context;
     RGXFWIF_FWCOMMONCONTEXT *gp; /* exact rgxkicksync.c DM_GP context */
+    RGXFWIF_FWCOMMONCONTEXT *tq; /* independent rgxtransfer.c TQ_3D */
     RGXFWIF_FWMEMCONTEXT *memory;
-    RGXFWIF_CCCB_CTL *control[3];
-    unsigned char *commands[3];
+    RGXFWIF_CCCB_CTL *control[4];
+    unsigned char *commands[4];
     volatile uint32_t *sync;
     RGXFWIF_DEV_VIRTADDR context_addr,memory_addr,sync_addr;
     uint32_t used;
@@ -44,13 +45,13 @@ static inline int a04_rgx_render_validate(const a04_rgx_render_buffer *bank,cons
 static inline int a04_rgx_render_build(a04_rgx_render_resources *out,
     const a04_rgx_render_buffer *bank,const a04_rgx_bif *b,uint32_t first_context_id)
 {
-    if (!out || a04_rgx_render_validate(bank,b) || !first_context_id || first_context_id>0xfffffffcU ||
+    if (!out || a04_rgx_render_validate(bank,b) || !first_context_id || first_context_id>0xfffffffbU ||
         a04_rgx_fw_alias(out,sizeof(*out),bank->cpu,bank->bytes)) return 1;
     const a04_rgx_render_buffer all[]={b->pc,b->pd,b->pt,b->data};
     for (unsigned i=0;i<4;i++)
         if (a04_rgx_fw_alias(out,sizeof(*out),all[i].cpu,all[i].bytes)) return 1;
     a04_rgx_render_buffer bankCopy=*bank;a04_rgx_bif bifCopy=*b;bank=&bankCopy;b=&bifCopy;
-    /* Fixed allocations total <16KiB; preflight above precedes all writes. */
+    /* Fixed allocations total <32KiB; preflight above precedes all writes. */
     a04_rgx_fw_zero(bank->cpu,bank->bytes);
     a04_rgx_fw_zero(out,sizeof(*out));out->bank=*bank;out->bif=*b;
     a04_rgx_fw_pool pool={(unsigned char *)bank->cpu,bank->pa,bank->bytes,0,A04_RGX_RENDER_FW_OFFSET};
@@ -84,6 +85,18 @@ static inline int a04_rgx_render_build(a04_rgx_render_resources *out,
     out->control[2]->ui32WrapMask=A04_RGX_CLIENT_BYTES-1;
     gp->psFWMemContext=out->memory_addr;gp->eDM=0;
     gp->ui32ServerCommonContextID=first_context_id+2;
+    /* _Create3DTransferContext: standalone common context, own suspend
+     * state and framework. This is NOT an embedded render or GP context. */
+    RGXFWIF_DEV_VIRTADDR tq_address,tq_state,tq_rf;
+    out->tq=(RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_fw_alloc(&pool,sizeof(*out->tq),&tq_address);
+    (void)a04_rgx_fw_alloc(&pool,sizeof(RGXFWIF_3DCTX_STATE)+4*sizeof(uint32_t),&tq_state);
+    (void)a04_rgx_fw_alloc(&pool,sizeof(A04_RGX_RF_CMD),&tq_rf);
+    out->control[3]=(RGXFWIF_CCCB_CTL *)a04_rgx_fw_alloc(&pool,sizeof(RGXFWIF_CCCB_CTL),&out->tq->psCCBCtl);
+    out->commands[3]=(unsigned char *)a04_rgx_fw_alloc(&pool,A04_RGX_CLIENT_BYTES,&out->tq->psCCB);
+    out->control[3]->ui32WrapMask=A04_RGX_CLIENT_BYTES-1;
+    out->tq->psFWMemContext=out->memory_addr;out->tq->psContextState=tq_state;
+    out->tq->psRFCmd=tq_rf;out->tq->eDM=3;out->tq->ui32Priority=1;
+    out->tq->ui32ServerCommonContextID=first_context_id+3;
     out->used=pool.used;
     return a04_rgx_bif_build(b);
 }
@@ -115,9 +128,14 @@ enum {
     A04_RENDER_GP=A04_RENDER_SYNC+64,
     A04_RENDER_GPCTL=a04_rgx_render_align64(A04_RENDER_GP+sizeof(RGXFWIF_FWCOMMONCONTEXT)),
     A04_RENDER_GPCCB=a04_rgx_render_align64(A04_RENDER_GPCTL+16),
-    A04_RENDER_USED=A04_RENDER_GPCCB+4096
+    A04_RENDER_TQ=A04_RENDER_GPCCB+4096,
+    A04_RENDER_TQSTATE=a04_rgx_render_align64(A04_RENDER_TQ+sizeof(RGXFWIF_FWCOMMONCONTEXT)),
+    A04_RENDER_TQRF=a04_rgx_render_align64(A04_RENDER_TQSTATE+sizeof(RGXFWIF_3DCTX_STATE)+16),
+    A04_RENDER_TQCTL=a04_rgx_render_align64(A04_RENDER_TQRF+sizeof(A04_RGX_RF_CMD)),
+    A04_RENDER_TQCCB=a04_rgx_render_align64(A04_RENDER_TQCTL+16),
+    A04_RENDER_USED=A04_RENDER_TQCCB+4096
 };
-static_assert(A04_RENDER_USED<16384,"bounded context bank");
+static_assert(A04_RENDER_USED<32768,"bounded context bank");
 static inline bool a04_rgx_render_view_valid(const a04_rgx_render_resources *r)
 {
     if (!r || a04_rgx_render_validate(&r->bank,&r->bif) || r->used!=A04_RENDER_USED) return false;
@@ -134,6 +152,13 @@ static inline bool a04_rgx_render_view_valid(const a04_rgx_render_resources *r)
         r->gp->psCCB.ui32Addr!=0xc0080000+A04_RENDER_GPCCB ||
         r->gp->psFWMemContext.ui32Addr!=r->memory_addr.ui32Addr ||
         r->gp->psContextState.ui32Addr || r->gp->psRFCmd.ui32Addr) return false;
+    if ((void *)r->tq!=base+A04_RENDER_TQ || (void *)r->control[3]!=base+A04_RENDER_TQCTL ||
+        r->commands[3]!=base+A04_RENDER_TQCCB || r->tq->eDM!=3 ||
+        r->tq->psCCBCtl.ui32Addr!=0xc0080000+A04_RENDER_TQCTL ||
+        r->tq->psCCB.ui32Addr!=0xc0080000+A04_RENDER_TQCCB ||
+        r->tq->psFWMemContext.ui32Addr!=r->memory_addr.ui32Addr ||
+        r->tq->psContextState.ui32Addr!=0xc0080000+A04_RENDER_TQSTATE ||
+        r->tq->psRFCmd.ui32Addr!=0xc0080000+A04_RENDER_TQRF) return false;
     if (r->memory->sPCDevPAddr.uiAddr!=r->bif.pc.pa) return false;
     for (unsigned n=0;n<2;n++) {
         auto c=n?&r->context->s3DContext:&r->context->sTAContext;
@@ -146,15 +171,15 @@ static inline bool a04_rgx_render_view_valid(const a04_rgx_render_resources *r)
     }
     return true;
 }
-static inline unsigned a04_rgx_render_index(unsigned dm) {return dm==0?2U:(dm==3?1U:0U);}
-static inline RGXFWIF_FWCOMMONCONTEXT *a04_rgx_render_context(const a04_rgx_render_resources *r,unsigned dm)
-{return dm==0?r->gp:(dm==3?&r->context->s3DContext:&r->context->sTAContext);}
-struct a04_rgx_render_ring_state {uint32_t write[3],sequence;bool poisoned;};
+static inline unsigned a04_rgx_render_index(unsigned dm,bool transfer=false) {return transfer?3U:(dm==0?2U:(dm==3?1U:0U));}
+static inline RGXFWIF_FWCOMMONCONTEXT *a04_rgx_render_context(const a04_rgx_render_resources *r,unsigned dm,bool transfer=false)
+{return transfer?r->tq:(dm==0?r->gp:(dm==3?&r->context->s3DContext:&r->context->sTAContext));}
+struct a04_rgx_render_ring_state {uint32_t write[4],sequence;bool poisoned;};
 /* Prepares typed KICK + client bytes, no MMIO. Caller reserves a KCCB slot
  * FIRST under the sole producer lock. Once published, pin resources until
  * actual device shutdown/drain proof. No context/command pointer arguments. */
 static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_render_ring_state *state,
-                                      unsigned dm,RGXFWIF_KCCB_CMD *kick,uint32_t priority=0xffffffffU)
+                                      unsigned dm,RGXFWIF_KCCB_CMD *kick,uint32_t priority=0xffffffffU,bool transfer=false)
 {
     if (!state || !kick || (dm!=0 && dm!=2 && dm!=3) || !a04_rgx_render_view_valid(r) ||
         state->poisoned || !state->sequence || state->sequence==0xffffffffU) return 1;
@@ -166,9 +191,10 @@ static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_rend
     if (a04_rgx_fw_alias(kick,sizeof(*kick),state,sizeof(*state)) ||
         a04_rgx_fw_alias(kick,sizeof(*kick),r,sizeof(*r)) ||
         a04_rgx_fw_alias(state,sizeof(*state),r,sizeof(*r))) return 1;
+    if (transfer && (dm!=3 || priority==0xffffffffU)) return 1; /* task not validated yet */
     bool changePriority=priority!=0xffffffffU;
     if (changePriority && ((dm!=2 && dm!=3) || priority>1)) return 1;
-    unsigned n=a04_rgx_render_index(dm);auto c=a04_rgx_render_context(r,dm);
+    unsigned n=a04_rgx_render_index(dm,transfer);auto c=a04_rgx_render_context(r,dm,transfer);
     auto ctl=(volatile RGXFWIF_CCCB_CTL *)r->control[n];uint32_t at=state->write[n];
     if (ctl->ui32WrapMask!=4095 || at>4095 || (at&7) || ctl->ui32ReadOffset!=at ||
         ctl->ui32DepOffset>4095 || (ctl->ui32DepOffset&7) || ctl->ui32WriteOffset!=at || 4096-at<40) return 2;

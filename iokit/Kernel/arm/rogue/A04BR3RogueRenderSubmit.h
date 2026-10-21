@@ -17,20 +17,20 @@ struct a04_rgx_render_observation {
     uint32_t dm,polls,kread,kwrite,kexpected,cread,cwrite,cdep,cexpected;
     uint32_t ufo,expected,fread,fwrite,ftype,flags,priority;
     uint32_t runPrev,runNext,waitPrev,waitNext,kexecuted,tracePointer,power,hwr,fwfaults;
-    uint32_t startedTime,priorityExpected,prioritySequence;
+    uint32_t startedTime,priorityExpected,prioritySequence,transfer;
     uint64_t idleTime;
 };
 static inline void a04_rgx_render_observe(a04_rgx_render_observation *out,
     const a04_rgx_render_resources *r,const a04_rgx_render_ring_state *state,
-    a04_rgx_fw_runtime *kernel,unsigned dm,unsigned polls,unsigned next,uint32_t priority=0xffffffffU)
+    a04_rgx_fw_runtime *kernel,unsigned dm,unsigned polls,unsigned next,uint32_t priority=0xffffffffU,bool transfer=false)
 {
     if (!out || out->valid) return;
-    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[a04_rgx_render_index(dm)];
-    auto context=(volatile RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_render_context(r,dm);
-    out->dm=dm;out->polls=polls;
+    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[a04_rgx_render_index(dm,transfer)];
+    auto context=(volatile RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_render_context(r,dm,transfer);
+    out->transfer=transfer;out->dm=dm;out->polls=polls;
     out->kread=kernel->kctl->ui32ReadOffset;out->kwrite=kernel->kctl->ui32WriteOffset;out->kexpected=next;
     out->cread=client->ui32ReadOffset;out->cwrite=client->ui32WriteOffset;out->cdep=client->ui32DepOffset;
-    out->cexpected=state->write[a04_rgx_render_index(dm)];out->ufo=*r->sync;out->expected=state->sequence;
+    out->cexpected=state->write[a04_rgx_render_index(dm,transfer)];out->ufo=*r->sync;out->expected=state->sequence;
     out->fread=kernel->fctl->ui32ReadOffset;out->fwrite=kernel->fctl->ui32WriteOffset;
     out->ftype=0xffffffffU;
     auto fcommands=(volatile RGXFWIF_FWCCB_CMD *)a04_rgx_command_memory(kernel,
@@ -53,11 +53,12 @@ static inline void a04_rgx_render_observe(a04_rgx_render_observation *out,
 }
 static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
     a04_rgx_render_ring_state *state,a04_rgx_fw_runtime *kernel,
-    const a04_rgx_command_io *io,unsigned dm,a04_rgx_render_observation *observation=nullptr,uint32_t priority=0xffffffffU)
+    const a04_rgx_command_io *io,unsigned dm,a04_rgx_render_observation *observation=nullptr,uint32_t priority=0xffffffffU,bool transfer=false)
 {
     if (!r || !state || !kernel || !io || !io->acquire || !io->publish || !io->kick ||
         !io->wait_us || !kernel->init || !a04_rgx_render_view_valid(r) ||
         (dm!=0 && dm!=2 && dm!=3) || state->sequence>=0xfffffffeU) return A04_CCB_INPUT;
+    if (transfer && (dm!=3 || priority==0xffffffffU)) return A04_CCB_INPUT;
     bool changePriority=priority!=0xffffffffU;
     if (changePriority && ((dm!=2 && dm!=3) || priority>1)) return A04_CCB_INPUT;
     if (state->poisoned) return A04_CCB_OFFLINE;
@@ -104,29 +105,29 @@ static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
     if (fctl->ui32ReadOffset!=fctl->ui32WriteOffset) return A04_CCB_FW_REQUEST;
     RGXFWIF_KCCB_CMD kick;
     ++state->sequence;
-    int error=a04_rgx_render_update(r,state,dm,&kick,priority);
+    int error=a04_rgx_render_update(r,state,dm,&kick,priority,transfer);
     if (error) {--state->sequence;return error==2?A04_CCB_BUSY:A04_CCB_INPUT;}
     commands[write]=kick;
     io->publish(io->context);
     ctl->ui32WriteOffset=next;(void)ctl->ui32WriteOffset;
     io->publish(io->context);
     io->kick(io->context,0xb00,0x10);
-    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[a04_rgx_render_index(dm)];
+    auto client=(volatile RGXFWIF_CCCB_CTL *)r->control[a04_rgx_render_index(dm,transfer)];
     for (unsigned i=0;i<10000;i++) {
         io->acquire(io->context);
         uint32_t value=*r->sync,kread=ctl->ui32ReadOffset,cread=client->ui32ReadOffset;
         if (kread>127 || cread>4095 || (cread&7) || (!changePriority && value && value!=state->sequence) ||
             ctl->ui32WriteOffset!=next || ctl->ui32WrapMask!=127 || ctl->ui32CmdSize!=56 ||
             client->ui32WrapMask!=4095 || client->ui32WriteOffset>4095 ||
-            (client->ui32WriteOffset&7) || client->ui32DepOffset>4095 || (client->ui32DepOffset&7)) {a04_rgx_render_observe(observation,r,state,kernel,dm,i+1,next,priority);state->poisoned=true;return A04_CCB_CORRUPT;}
-        auto context=(volatile RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_render_context(r,dm);
+            (client->ui32WriteOffset&7) || client->ui32DepOffset>4095 || (client->ui32DepOffset&7)) {a04_rgx_render_observe(observation,r,state,kernel,dm,i+1,next,priority,transfer);state->poisoned=true;return A04_CCB_CORRUPT;}
+        auto context=(volatile RGXFWIF_FWCOMMONCONTEXT *)a04_rgx_render_context(r,dm,transfer);
         bool response=changePriority?context->ui32Priority==priority:value==state->sequence;
-        if (response && kread==next && cread==state->write[a04_rgx_render_index(dm)] &&
-            client->ui32WriteOffset==state->write[a04_rgx_render_index(dm)]) return A04_CCB_OK;
+        if (response && kread==next && cread==state->write[a04_rgx_render_index(dm,transfer)] &&
+            client->ui32WriteOffset==state->write[a04_rgx_render_index(dm,transfer)]) return A04_CCB_OK;
         io->wait_us(io->context,10);
     }
     io->acquire(io->context);
-    a04_rgx_render_observe(observation,r,state,kernel,dm,10000,next,priority);
+    a04_rgx_render_observe(observation,r,state,kernel,dm,10000,next,priority,transfer);
     state->poisoned=true;return A04_CCB_TIMEOUT;
 }
 #endif
