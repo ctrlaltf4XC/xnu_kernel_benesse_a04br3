@@ -80,7 +80,14 @@ A04BR3PlatformExpert::getProductName(char *name, int maxLength)
 	if (name == NULL || maxLength <= 0) {
 		return false;
 	}
-	strlcpy(name, "Benesse TAB-A04-BR3", (size_t)maxLength);
+	/*
+	 * MobileGestalt derives DeviceClass from the hw.product prefix. An
+	 * unrecognized prefix falls back to iPod; this board is a tablet.
+	 * Keep a distinct port product, not an Apple model identifier. The ADT
+	 * model (and inherited hw.machine) remains Benesse TAB-A04-BR3, while
+	 * hw.target remains a04br3 for board-specific driver selection.
+	 */
+	strlcpy(name, "iPad-A04BR3", (size_t)maxLength);
 	return true;
 }
 #endif /* A04BR3 */
