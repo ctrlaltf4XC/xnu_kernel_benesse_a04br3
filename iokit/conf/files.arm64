@@ -29,3 +29,5 @@ iokit/Kernel/arm/hid/IOHIDEventServiceUserClient.cpp optional iokitcpp
 iokit/Kernel/arm/rogue/A04BR3RogueGPU.cpp optional iokitcpp
 
 iokit/Kernel/arm/sdio/A04BR3SDIO.cpp optional iokitcpp
+
+iokit/Kernel/arm/network/A04BR3BSDNetwork.cpp optional iokitcpp
