@@ -1485,6 +1485,15 @@ ttioctl_locked(struct tty *tp, u_long cmd, caddr_t data, int flag, proc_t p)
 		break;
 	}
 	case TIOCSTAT:                  /* simulate control-T */
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+        /* Explicit root requests retain bring-up sampling when the UART
+         * command transport disables IEXTEN/ISIG. Queue only under tty lock;
+         * the existing worker owns enablement, rate and lifetime limits. */
+        if (kauth_cred_issuser(kauth_cred_get())) {
+            extern void a04br3_sample_request(void);
+            a04br3_sample_request();
+        }
+#endif
 		ttyinfo_locked(tp);
 		break;
 	case TIOCSWINSZ:                /* set window size */

@@ -30,7 +30,7 @@ sample_proc(proc_t p, __unused void *arg)
     char name[32];
     /* proc_name copies p_comm, truncated to 16 chars: com.apple.datami. */
     strlcpy(name, proc_best_name(p), sizeof(name));
-    if (strcmp(name, "launchd") && strcmp(name, "backboardd") &&
+    if (strcmp(name, "launchd") && strcmp(name, "launchd.a04br3") && strcmp(name, "backboardd") &&
         strcmp(name, "SpringBoard") && strcmp(name, "Setup") && strcmp(name, "wifid") &&
         strcmp(name, "kbd") && strcmp(name, "configd") && strcmp(name, "logd") &&
         strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
@@ -53,7 +53,7 @@ sample_thread(__unused void *arg, __unused wait_result_t wr)
     unsigned uart = 0, elapsed = 0, next = 120, rounds = 0, manual = 0, last = 0;
     PE_parse_boot_argn("a04br3.sample_uart", &uart, sizeof(uart));
     __atomic_store_n(&request_enabled, uart == 1, __ATOMIC_RELEASE);
-    if (uart == 1) printf("A04BR3_SAMPLE UART: Ctrl-T requests a snapshot (10s rate limit, 16 requests)\n");
+    if (uart == 1) printf("A04BR3_SAMPLE UART: Ctrl-T or root TIOCSTAT requests a snapshot (10s rate limit, 16 requests)\n");
     for (;;) {
         (void)tsleep(&chan, PZERO, "a04sample", hz);
         elapsed++;
