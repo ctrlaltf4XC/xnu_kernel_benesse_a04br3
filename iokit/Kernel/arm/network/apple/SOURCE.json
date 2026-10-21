@@ -30,7 +30,7 @@
       "path": "IOEthernetInterface.cpp",
       "sha256": "1339d99dbf4a7190a5b5afa0c433d0dc1eefa1e581fbfc821f085c66e2bf0a64",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IOEthernetInterface.cpp",
-      "vendored_sha256": "4fdd1e74694a9011b06ff581a8aa3925450c17f079792f573dfadc32750b8b14"
+      "vendored_sha256": "ebd1981fdcf5d7fd9da910d7f914d38bef9d30be69f91f205174947f2a9ed40f"
     },
     {
       "path": "IOEthernetInterface.h",
@@ -120,7 +120,7 @@
       "path": "IONetworkInterface.cpp",
       "sha256": "b2cf42f7c621e0709d679ac599a3778983de5c72e42afcd90bd4d4b6d93b500a",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkInterface.cpp",
-      "vendored_sha256": "0b8d24410f7be898206100d6011053df21f7d40cc24736a6f918d3e532bde0a7"
+      "vendored_sha256": "f61ad5cb8672009954b4fd52ac25800c5a577adf31b69399d3d90890730adbd1"
     },
     {
       "path": "IONetworkInterface.h",
@@ -201,5 +201,5 @@
       "vendored_sha256": "f2192a69dc33cdcac2e025fd545b92e1499e058bd5343a668c3a7ed0f44a6b0d"
     }
   ],
-  "modifications": "IOKit/network/*.h include spellings changed to same-directory quoted headers for reproducible in-tree compile; logic unchanged"
+  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained."
 }

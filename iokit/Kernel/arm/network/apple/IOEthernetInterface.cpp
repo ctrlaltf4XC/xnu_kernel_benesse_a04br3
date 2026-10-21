@@ -49,7 +49,8 @@ extern "C" {
 #include <net/if_arp.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
-#include <net/dlil.h>
+/* XNU8796: DLIL is accessed through net/kpi_interface.h; the private
+ * dlil implementation header imports unexported scheduler internals. */
 #include <net/bpf.h>
 #include <netinet/if_ether.h>
 #include <sys/sockio.h>

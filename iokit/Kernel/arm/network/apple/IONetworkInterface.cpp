@@ -36,7 +36,8 @@ extern "C" {
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/if_media.h>
-#include <net/dlil.h>
+/* XNU8796: DLIL is accessed through net/kpi_interface.h; the private
+ * dlil implementation header imports unexported scheduler internals. */
 #include <net/if_dl.h>
 #include <net/kpi_interface.h>
 #include <net/ethernet.h>
@@ -3469,12 +3470,12 @@ IOReturn IONetworkInterface::reportDatapathIssue(
     errno_t error;
 
     // SHA-1 hash of com.apple.iokit.IONetworkingFamily
-    static const uint8_t modid[DLIL_MODIDLEN] = {
+    static const uint8_t modid[IFNET_MODIDLEN] = {
         0xe3, 0x26, 0x1e, 0x7d, 0xf2, 0x15, 0xf1, 0x3d, 0x9d, 0x9d,
         0xbc, 0x1f, 0x75, 0x4d, 0xa5, 0xa4, 0x1c, 0xac, 0x2a, 0xab };
 
     union {
-        uint8_t     errorData[ DLIL_MODARGLEN ];
+        uint8_t     errorData[ IFNET_MODARGLEN ];
         IOReturn    errorCode;
     } issueInfo;
 
