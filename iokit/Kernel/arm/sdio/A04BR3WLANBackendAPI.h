@@ -60,6 +60,12 @@ int a04br3_wlan_join(a04_wlan_service,unsigned index,unsigned secured);
 /* Open-only admission; generation+index+identity validated atomically with
  * station_select. No cached index race and no association-success return. */
 int a04br3_wlan_join_target(a04_wlan_service,const struct a04_wlan_join_target *);
+/* Open-only SET22 admission. Real deauth TX_DONE precedes associated teardown.
+ * Scan/data/key work in flight is rejected, never erased to claim completion.
+ * Completed teardown quarantines indices and allocates a distinct context;
+ * ENOSPC is explicit after device resource budget, no silent index recycling.
+ */
+int a04br3_wlan_disassociate(a04_wlan_service);
 /* Only actual association permits this peer/observed-IE snapshot. */
 int a04br3_wlan_current_record(a04_wlan_service,struct a04_wlan_scan_record *);
 int a04br3_wlan_eapol(a04_wlan_service,const void *ethernet,unsigned bytes);

@@ -12,7 +12,7 @@ static inline int a04_wlan_join_target_check(const struct a04_wlan_runtime *r,
  if(!r->configured || !r->admin || r->failed || !r->station.configured ||
     r->station.failed || r->station.join.failed)return ENETDOWN;
  if(t->generation!=r->scan_generation)return ESTALE;
- if(r->station.selected || r->station.scan.pending)return EBUSY;
+ if(r->teardown.pending || r->station.selected || r->station.scan.pending)return EBUSY;
  if(!r->station.scan.complete)return EAGAIN;
  if(r->scan_count>16 || t->index>=r->scan_count)return ENOENT;
  const struct a04_wlan_ap *a=&r->scan[t->index];

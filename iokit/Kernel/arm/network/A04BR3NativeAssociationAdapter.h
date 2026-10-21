@@ -27,6 +27,13 @@ static inline int a04_assoc_provider_set(IOService *provider,uint32_t value,cons
  if(work)IOFree(work,sizeof(*work));
  a04br3_wlan_release_backend(provider);return error;
 }
+/* Original native SetWithIOCTL case22 with NULL args leaves value/len/pointer
+ * zero. Reason-dictionary carrier8 and all other forms remain unsupported. */
+static inline int a04_assoc_provider_disassociate(IOService *provider,uint32_t value,const void *in,uint32_t bytes){
+ if(value || bytes || in)return EOPNOTSUPP;
+ if(!provider)return ENXIO;
+ return a04br3_wlan_disassociate(provider);
+}
 /* BSD gate may be held by the caller; no SDIO lock is held on entry.
  * acquire_backend adds one provider reference, not a held lock. state() and
  * current_record() separately take/release transportLock; current_record

@@ -4,11 +4,12 @@
  */
 #ifndef A04BR3_WLAN_RUNTIME_H
 #define A04BR3_WLAN_RUNTIME_H
-#include "A04BR3WLANData.h"
+#include "A04BR3WLANTeardown.h"
 #include "A04BR3WLANScanSnapshot.h"
 enum { A04_WLAN_DELIVERY_NONE=0,A04_WLAN_DELIVERY_ETHERNET=1,A04_WLAN_DELIVERY_EAPOL=2 };
 struct a04_wlan_runtime {
  struct a04_wlan_station station;struct a04_wlan_security security;
+ struct a04_wlan_teardown teardown;
  struct a04_wlan_data_state data;struct a04_wlan_slots slots;
  struct a04_wlan_ap scan[16];unsigned scan_count,scan_dropped;
  struct a04_wlan_scan_extra scan_extra[16];
@@ -139,6 +140,19 @@ static inline int a04_wlan_runtime_event(struct a04_wlan_runtime *r,struct a04_w
   for(unsigned i=0;i<6;i++)r->mac[i]=mac[i];
   r->mac_valid=1;r->cap_pending=0;return a04_wlan_runtime_configure(r,h,now);
  }
+ if(a04_wlan_teardown_retired(&r->teardown,v)){r->unknown++;return 0;}
+ if(r->teardown.pending){
+  if(v->id==0x0f){int result=a04_wlan_teardown_event(&r->teardown,&r->station,h,v,now);
+   if(result)return a04_wlan_runtime_fail(r,h,result);
+   r->scan_count=0;r->scan_completed_us=0;return 0;}
+  /* Do not advance the canceled auth/STA machine while deauth is on air. */
+  if(v->id==0x0c || v->id==0x10){
+   if((v->id==0x0c && (v->length!=8 || v->payload[6]!=r->station.local.sta || v->payload[7]!=r->station.local.bss || !a04_wlan_equal(v->payload,r->station.ap.mac,6))) ||
+      (v->id==0x10 && (v->length!=16 || v->payload[0]!=r->station.local.bss || v->payload[1]!=r->station.channel.token)))
+    return a04_wlan_runtime_fail(r,h,A04_WLAN_SEQUENCE);
+   r->unknown++;return 0;
+  }
+ }
  if(v->id==0x0f && r->data.pending)return a04_wlan_data_tx_event(h,&r->station,&r->security,&r->data,v,now);
  if(v->id==0x24 && r->security.ptk_pending)return a04_wlan_security_key_event(&r->security,&r->station,v,now);
  unsigned was_scan=r->station.scan.pending;
@@ -152,6 +166,7 @@ static inline int a04_wlan_runtime_step(struct a04_wlan_runtime *r,struct a04_wl
  if(!r || !h || !r->begun || r->failed || h->failed)return A04_WLAN_STATE;
  r->delivery_kind=r->delivery_length=0;r->delivery=0;
  if(r->cap_pending && now>=r->cap_deadline)return a04_wlan_runtime_fail(r,h,A04_WLAN_TIMEOUT);
+ if(r->teardown.pending && now>=r->teardown.deadline_us)return a04_wlan_runtime_fail(r,h,A04_WLAN_TIMEOUT);
  uint32_t status=0;int e=a04_wlan_interrupt_status(h,&status);
  if(!e && (status&1))e=a04_wlan_resources(h);
  if(e)return a04_wlan_runtime_fail(r,h,e);
@@ -174,6 +189,7 @@ static inline int a04_wlan_runtime_step(struct a04_wlan_runtime *r,struct a04_wl
     }else if(!e)e=A04_WLAN_FORMAT;
    }else r->scan_dropped++;
   }else if(e==A04_WLAN_UNSUPPORTED || e==A04_WLAN_FORMAT || e==A04_WLAN_STATUS)e=0;
+ }else if(r->teardown.pending){r->unknown++;e=0;
  }else if(r->station.sta_active && (a04_wmt_le16(h->rx+2)>>13)==2){
   struct a04_wlan_ethernet packet;e=a04_wlan_ethernet_rx(&r->station,&r->security,h->rx,h->rx_length,&packet);
   if(!e){r->frames++;r->delivery=packet.data;r->delivery_length=packet.length;

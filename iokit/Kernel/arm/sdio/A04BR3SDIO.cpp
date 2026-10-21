@@ -123,13 +123,13 @@ class A04BR3SDIO : public IOService {
   for(unsigned step=0;!r->failed && step<8;step++){
    uint64_t now=liveNow();e=a04_wlan_runtime_step(r,wlanHost,now,client.verify,client.context);
    bool empty=(e==A04_WLAN_PENDING);if(empty)e=0;
-   if(!e && r->station.selected && r->station.grant_ms && !r->station.channel_pending && r->station.join.phase==0)
+   if(!e && !r->teardown.pending && r->station.selected && r->station.grant_ms && !r->station.channel_pending && r->station.join.phase==0)
     e=a04_wlan_station_auth(&r->station,wlanHost,now);
-   if(!e && r->station.join.phase==2){unsigned bytes=0;const uint8_t *rsn=r->station.secured?a04_wlan_rsn_selected(&bytes):nullptr;
+   if(!e && !r->teardown.pending && r->station.join.phase==2){unsigned bytes=0;const uint8_t *rsn=r->station.secured?a04_wlan_rsn_selected(&bytes):nullptr;
     e=a04_wlan_station_assoc(&r->station,wlanHost,r->station.ap.capability,10,rsn,bytes,now);}
-   if(!e && r->station.sta_active && r->station.secured && !r->security.enabled)
+   if(!e && !r->teardown.pending && r->station.sta_active && r->station.secured && !r->security.enabled)
     e=a04_wlan_security_begin(&r->security,&r->station,now,now+10000000);
-   if(!e && live->count && !r->data.pending){
+   if(!e && !r->teardown.pending && live->count && !r->data.pending){
     unsigned at=live->head;uint64_t until=now+900000;
     if(r->security.enabled && until>r->security.deadline_us)until=r->security.deadline_us;
     e=a04_wlan_ethernet_send(wlanHost,&r->station,&r->security,&r->data,live->queue[at].data,live->queue[at].bytes,client.verify,client.context,now,until);
@@ -171,10 +171,10 @@ class A04BR3SDIO : public IOService {
    out->control_ready=s->networkInitialized && !s->liveStopping && r->configured && !r->failed;
    out->radio_enabled=r->admin && out->control_ready;
    out->station_phase=out->control_ready?a04_network_phase_from_station(&r->station):A04_NET_PHASE_UNKNOWN;
-   out->join_state=out->control_ready?a04_network_join_from_station(&r->station):A04_NET_JOIN_UNKNOWN;
+   out->join_state=out->control_ready && !r->teardown.pending?a04_network_join_from_station(&r->station):A04_NET_JOIN_UNKNOWN;
    out->permitted_channels=out->control_ready?r->station.local.permitted_channels:0;
    out->mac_valid=r->mac_valid;bcopy(r->mac,out->mac,6);out->associated=r->station.sta_active && r->station.join.phase==4 && !r->failed;
-   out->datapath_ready=out->control_ready && out->associated && s->nativeClient.packet && a04_wlan_port_allowed(&r->station,&r->security,0);
+   out->datapath_ready=out->control_ready && !r->teardown.pending && out->associated && s->nativeClient.packet && a04_wlan_port_allowed(&r->station,&r->security,0);
   }IOLockUnlock(s->transportLock);return 0;
  }
  static int backendGet(void *p,uint32_t type,uint32_t value,void *buf,uint32_t *n){return ((A04BR3SDIO *)p)->nativeDispatch(false,type,value,buf,n);}
@@ -195,7 +195,7 @@ class A04BR3SDIO : public IOService {
   if(!live || liveStopping || live->runtime.failed || !live->runtime.admin || n<14 || n>1514)return ENXIO;
   if(live->count==8)return ENOBUFS;
   unsigned eapol=a04_wlan_be16((const uint8_t *)bytes+12)==0x888e;
-  if(!a04_wlan_port_allowed(&live->runtime.station,&live->runtime.security,eapol))return ENETDOWN;
+  if(live->runtime.teardown.pending || !a04_wlan_port_allowed(&live->runtime.station,&live->runtime.security,eapol))return ENETDOWN;
   unsigned at=(live->head+live->count)%8;bcopy(bytes,live->queue[at].data,n);live->queue[at].bytes=n;live->count++;scheduleLive();return 0;
  }
  static int backendTransmit(void *p,void *packet){
@@ -203,7 +203,7 @@ class A04BR3SDIO : public IOService {
   A04BR3SDIO *s=(A04BR3SDIO *)p;mbuf_t m=(mbuf_t)packet;size_t n=mbuf_pkthdr_len(m);
   if(n<14 || n>1514)return EMSGSIZE;
   IOLockLock(s->transportLock);int e=ENXIO;
-  if(s->live && !s->liveStopping && !s->live->runtime.failed && s->live->runtime.admin && s->live->count<8 && a04_wlan_port_allowed(&s->live->runtime.station,&s->live->runtime.security,0)){
+  if(s->live && !s->liveStopping && !s->live->runtime.failed && s->live->runtime.admin && !s->live->runtime.teardown.pending && s->live->count<8 && a04_wlan_port_allowed(&s->live->runtime.station,&s->live->runtime.security,0)){
    unsigned at=(s->live->head+s->live->count)%8;e=mbuf_copydata(m,0,n,s->live->queue[at].data);
    if(!e){s->live->queue[at].bytes=(unsigned)n;s->live->count++;s->scheduleLive();}
   }else if(s->live && s->live->count==8)e=ENOBUFS;
@@ -233,7 +233,7 @@ public:
   if(mode>A04_WLAN_SCAN_ACTIVE)return EINVAL;
   IOLockLock(transportLock);int e=0;
   if(!live || liveStopping || live->runtime.failed)e=ENXIO;
-  else if(live->runtime.station.scan.pending || live->runtime.station.selected)e=EBUSY;
+  else if(live->runtime.teardown.pending || live->runtime.station.scan.pending || live->runtime.station.selected)e=EBUSY;
   else{int wire=a04_wlan_runtime_scan_mode(&live->runtime,wlanHost,liveNow(),mode);
    if(wire && wlanHost->failed)a04_wlan_runtime_fail(&live->runtime,wlanHost,wire);
    e=wire?(wire==A04_WLAN_UNSUPPORTED?EOPNOTSUPP:(wire==A04_WLAN_ARGUMENT?EINVAL:EIO)):0;
@@ -280,7 +280,7 @@ public:
  }
  int currentRecord(struct a04_wlan_scan_record *out){
   if(!out)return EINVAL;
-  IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_current_record(&live->runtime,out);
+  IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:(live->runtime.teardown.pending?EAGAIN:a04_wlan_current_record(&live->runtime,out));
   IOLockUnlock(transportLock);return e;
  }
  int requestJoinTarget(const struct a04_wlan_join_target *target){
@@ -297,6 +297,22 @@ public:
   }IOLockUnlock(transportLock);return e;
  }
  int sendEAPOL(const void *p,unsigned n){if(!p || n<14 || a04_wlan_be16((const uint8_t *)p+12)!=0x888e)return EINVAL;IOLockLock(transportLock);int e=queuePacket(p,n);IOLockUnlock(transportLock);return e;}
+ int requestDisassociate(){
+  IOLockLock(transportLock);int e=ENXIO;
+  if(live && !liveStopping && networkInitialized && wlanHost){
+   auto *r=&live->runtime;
+   if(!r->configured || !r->admin || r->failed)e=ENETDOWN;
+   else e=a04_wlan_teardown_begin(&r->teardown,&r->station,&r->security,&r->data,&r->slots,wlanHost,liveNow());
+   if(!e || wlanHost->failed){
+    /* Only admitted cancellation (or poisoned transport) owns queue disposal.
+     * Never leave plaintext/security frames reachable by the next session. */
+    for(unsigned i=0;i<8;i++){a04_wlan_secret_clear(live->queue[i].data,sizeof(live->queue[i].data));live->queue[i].bytes=0;}
+    live->head=live->count=0;
+   }
+   if(wlanHost->failed)a04_wlan_runtime_fail(r,wlanHost,wlanHost->failed);
+   if(!e){if(!r->teardown.pending){r->scan_count=0;r->scan_completed_us=0;}scheduleLive();}
+  }IOLockUnlock(transportLock);return e;
+ }
  int installKey(unsigned pairwise,unsigned id,const uint8_t *key,const uint8_t *rsc){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_security_install(&live->runtime.security,&live->runtime.station,wlanHost,pairwise,id,key,rsc,liveNow());if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
  int authorize(int result){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_security_authorize(&live->runtime.security,result,liveNow());if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
 private:
@@ -669,3 +685,5 @@ extern "C" int a04br3_wlan_scan_mode(IOService *p,unsigned mode,unsigned *accept
  if(!acceptedGeneration)return EINVAL;
  *acceptedGeneration=0;auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->requestScanMode(mode,acceptedGeneration):ENXIO;
 }
+
+extern "C" int a04br3_wlan_disassociate(IOService *p){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->requestDisassociate():ENXIO;}

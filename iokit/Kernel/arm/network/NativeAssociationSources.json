@@ -1,5 +1,5 @@
 {
-  "scope": "Source-built native SET20 strict592/open-only admission, GET21 result, GET103 actual current network. No secure key/supplicant or successful disassociation22.",
+  "scope": "Source-built native SET20 strict592/open-only admission, GET21 result, GET103 actual current network. Separate open SET22 teardown subset documented in NativeTeardownSources.json.",
   "artifact": {
     "original_io80211_sha256": "d7620894ad830fffd8f4a5489cc5a89564ce2b30b62ee90ca3e5bbe062eeb851",
     "focused_elf_sha256": "5ad1a0f267e55da17d4af357d19c10c23ac3893f03e2c1c7633d1e8c93062093",
@@ -40,7 +40,7 @@
   "implementation_credit": "Original board adapter implementation; no third-party association implementation copied. Existing MT6630 station parser/event source is reused without firmware ABI changes; Apple original code is inspected only as retained evidence.",
   "limitations": [
     "Native secure/WEP/WPA/private-MAC/unknown-extension requests deliberately unsupported; key3/EAPOL/native supplicant owned by separate integration phase.",
-    "Disassociation22 remains EOPNOTSUPP: native carrier is known but validated firmware/session teardown/cancellation not implemented; never fake a disconnected state or success.",
+    "Open SET22 is a separate bounded teardown/admission subset; see NativeTeardownSources.json. Secure/key/data-inflight cancellation remains unsupported; no firmware completion invented.",
     "GET103 preserves timestamp/RCPI of actual selected-peer observation, not a claimed new measurement. Missing/oversize/invalid metadata causes explicit failure.",
     "No actual hardware SET20/open association/GET103 verified. Full SDK compilation remains parent gate."
   ],

@@ -73,9 +73,10 @@ class A04BR3NativeNetwork : public IOService {
         a04br3_wlan_release_backend(self->backendProvider);return error;
     }
     static int set(void *context,uint32_t type,uint32_t value,const void *in,uint32_t bytes){
-        if(type!=10 && type!=19 && type!=20)return EOPNOTSUPP;
+        if(type!=10 && type!=19 && type!=20 && type!=22)return EOPNOTSUPP;
         auto *self=(A04BR3NativeNetwork *)context;
         if(!self->backendProvider)return ENXIO;
+        if(type==22)return a04_assoc_provider_disassociate(self->backendProvider,value,in,bytes);
         if(type==20)return a04_assoc_provider_set(self->backendProvider,value,in,bytes);
         if(type==19){
             a04_network_backend backend={};
