@@ -113,20 +113,20 @@ private:
         IOLockUnlock(bridgeLock);
         return error;
     }
-    int submitRenderUpdate(uint32_t dm) {
+    int submitRenderUpdate(uint32_t dm,uint32_t priority=0xffffffffU) {
         if (!bridgeLock) return A04_CCB_OFFLINE;
         if (!IOLockTryLock(bridgeLock)) return A04_CCB_BUSY;
         a04_rgx_command_io io={this,commandPublish,commandAcquire,fwWrite32,fwWait};
         uint64_t timerBefore=fwRead64(this,0x160); /* pinned RGX_CR_TIMER */
-        int error=bridgeOnline?runtime.renderUpdate(render,dm,io):A04_CCB_OFFLINE;
+        int error=bridgeOnline?runtime.renderUpdate(render,dm,io,priority):A04_CCB_OFFLINE;
         uint64_t timerAfter=fwRead64(this,0x160);
         const auto &s=render.observation();
         if (error && s.valid && !renderReported) {
             renderReported=true;
             IOLog("A04BR3 GPU: render terminal DM=%u polls=%u KCCB r/w/expected=%u/%u/%u client r/w/dep/expected=%u/%u/%u/%u UFO=%u expected=%u\n",
                 s.dm,s.polls,s.kread,s.kwrite,s.kexpected,s.cread,s.cwrite,s.cdep,s.cexpected,s.ufo,s.expected);
-            IOLog("A04BR3 GPU: render FWCCB r/w/type=%u/%u/0x%x context flags=0x%x priority=%u run=0x%x/0x%x wait=0x%x/0x%x\n",
-                s.fread,s.fwrite,s.ftype,s.flags,s.priority,s.runPrev,s.runNext,s.waitPrev,s.waitNext);
+            IOLog("A04BR3 GPU: render FWCCB r/w/type=%u/%u/0x%x context flags=0x%x priority=%u expected=%u seq=%u run=0x%x/0x%x wait=0x%x/0x%x\n",
+                s.fread,s.fwrite,s.ftype,s.flags,s.priority,s.priorityExpected,s.prioritySequence,s.runPrev,s.runNext,s.waitPrev,s.waitNext);
             IOLog("A04BR3 GPU: render FW executed=%u traceptr=%u power=%u HWR=0x%x faults=%u startedTime=%u idleTime=0x%llx CRtimer=0x%llx/0x%llx; terminal snapshot only, no replay\n",
                 s.kexecuted,s.tracePointer,s.power,s.hwr,s.fwfaults,s.startedTime,
                 (unsigned long long)s.idleTime,(unsigned long long)timerBefore,(unsigned long long)timerAfter);
@@ -134,8 +134,8 @@ private:
         IOLockUnlock(bridgeLock);
         return error;
     }
-    void verifyRenderBridge() {
-        if (!render.view()) return;
+    uint32_t verifyRenderBridge() {
+        if (!render.view()) return 0;
         uint32_t verified=0;
         /* Only the matching DDK GP KickSync contract is established for a
          * payload-free NULL+UPDATE. Failed DM2 standalone UPDATE is not
@@ -154,6 +154,26 @@ private:
             verified|=1U<<dm;
         }
         setProperty("FirmwareRenderUpdateVerifiedDMs",(uint64_t)verified,32);
+        return verified;
+    }
+    void verifyPriorityBridge() {
+        uint32_t verified=0;
+        /* rgxta3d.c SetRenderContextPriorityKM explicitly calls the same
+         * ContextSetPriority for TA then3D. No NULL task on either domain. */
+        for (uint32_t dm=2;dm<=3;dm++) {
+            for (uint32_t priority=0;priority<=1;priority++) {
+                int error=submitRenderUpdate(dm,priority);
+                setProperty("FirmwarePriorityResult",(uint64_t)error,32);
+                IOLog("A04BR3 GPU: client PRIORITY/KICK DM=%u target=%u result=%d; FW priority + KCCB/client read-offset required, no UFO/draw proof\n",dm,priority,error);
+                if (error) {setProperty("FirmwarePriorityVerifiedDMs",(uint64_t)verified,32);return;}
+            }
+            int error=submitFence(dm);
+            setProperty("FirmwarePriorityPostFenceResult",(uint64_t)error,32);
+            IOLog("A04BR3 GPU: post-PRIORITY SYNC DM=%u result=%d\n",dm,error);
+            if (error) break;
+            verified|=1U<<dm;
+        }
+        setProperty("FirmwarePriorityVerifiedDMs",(uint64_t)verified,32);
     }
     uint32_t verifyCommandBridge() {
         const uint32_t domains[]={A04_RGX_DM_GP,A04_RGX_DM_TA,A04_RGX_DM_3D};
@@ -231,7 +251,7 @@ private:
         setProperty("BringupStage","firmware-ready");
         IOLog("A04BR3 GPU: FW ready=1 ABI/DDK/BVNC verified; IRQ=0x%x; no acceleration bridge\n",fwRead32(this,0x8a8));
         bridgeOnline=true;
-        if (verifyCommandBridge()==0xd) verifyRenderBridge();
+        if (verifyCommandBridge()==0xd && verifyRenderBridge()==1) verifyPriorityBridge();
     }
     void stageBootFirmware() {
         DTEntry map=nullptr;

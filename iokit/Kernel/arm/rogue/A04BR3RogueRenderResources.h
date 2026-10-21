@@ -14,7 +14,7 @@
 static constexpr uint64_t A04_RGX_RENDER_SCRATCH_VA=0x65c0000000ULL; /* rgxheapconfig.h BRN65273 */
 enum {A04_RGX_RENDER_BANK_BYTES=65536,A04_RGX_RENDER_FW_OFFSET=0x80000,
       A04_RGX_CLIENT_BYTES=4096,A04_RGX_CLIENT_NULL=0x2abc80cf,
-      A04_RGX_CLIENT_UPDATE=0x2abc00d6,
+      A04_RGX_CLIENT_UPDATE=0x2abc00d6,A04_RGX_CLIENT_PRIORITY=0x2abc00d9,
       A04_RGX_CLIENT_PADDING=0x2abc00dd};
 struct a04_rgx_render_resources {
     a04_rgx_render_buffer bank;
@@ -154,7 +154,7 @@ struct a04_rgx_render_ring_state {uint32_t write[3],sequence;bool poisoned;};
  * FIRST under the sole producer lock. Once published, pin resources until
  * actual device shutdown/drain proof. No context/command pointer arguments. */
 static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_render_ring_state *state,
-                                      unsigned dm,RGXFWIF_KCCB_CMD *kick)
+                                      unsigned dm,RGXFWIF_KCCB_CMD *kick,uint32_t priority=0xffffffffU)
 {
     if (!state || !kick || (dm!=0 && dm!=2 && dm!=3) || !a04_rgx_render_view_valid(r) ||
         state->poisoned || !state->sequence || state->sequence==0xffffffffU) return 1;
@@ -166,11 +166,16 @@ static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_rend
     if (a04_rgx_fw_alias(kick,sizeof(*kick),state,sizeof(*state)) ||
         a04_rgx_fw_alias(kick,sizeof(*kick),r,sizeof(*r)) ||
         a04_rgx_fw_alias(state,sizeof(*state),r,sizeof(*r))) return 1;
+    bool changePriority=priority!=0xffffffffU;
+    if (changePriority && ((dm!=2 && dm!=3) || priority>1)) return 1;
     unsigned n=a04_rgx_render_index(dm);auto c=a04_rgx_render_context(r,dm);
     auto ctl=(volatile RGXFWIF_CCCB_CTL *)r->control[n];uint32_t at=state->write[n];
     if (ctl->ui32WrapMask!=4095 || at>4095 || (at&7) || ctl->ui32ReadOffset!=at ||
         ctl->ui32DepOffset>4095 || (ctl->ui32DepOffset&7) || ctl->ui32WriteOffset!=at || 4096-at<40) return 2;
     RGXFWIF_CCB_CMD_HEADER header={};header.eCmdType=A04_RGX_CLIENT_UPDATE;header.ui32CmdSize=8;
+    /* rgxfwutils.c ContextSetPriority: aligned8 payload4 =>48 bytes.
+     * For this diagnostic constrain input to0/1, require an actual change. */
+    if (changePriority && ((volatile RGXFWIF_FWCOMMONCONTEXT *)c)->ui32Priority==priority) return 1;
     unsigned commandBytes=dm==0?88U:48U;
     if (at+commandBytes+40>4096) {
         RGXFWIF_CCB_CMD_HEADER pad={};pad.eCmdType=A04_RGX_CLIENT_PADDING;pad.ui32CmdSize=4096-at-40;
@@ -186,9 +191,15 @@ static inline int a04_rgx_render_update(a04_rgx_render_resources *r,a04_rgx_rend
         *(RGXFWIF_CCB_CMD_HEADER *)(r->commands[n]+at)=nullCmd;
         updateAt+=40;
     }
+    if (changePriority) header.eCmdType=A04_RGX_CLIENT_PRIORITY;
     *(RGXFWIF_CCB_CMD_HEADER *)(r->commands[n]+updateAt)=header;
     auto ufo=(RGXFWIF_UFO *)(r->commands[n]+updateAt+40);
-    ufo->puiAddrUFO=r->sync_addr;ufo->ui32Value=state->sequence;*r->sync=0;
+    if (changePriority) {
+        /* Priority payload is4 bytes plus4 zero padding. No UFO write and no
+         * UPDATE concatenation: exact ContextSetPriority standalone packet. */
+        a04_rgx_fw_zero(ufo,8);
+        ((RGXFWIF_CMD_PRIORITY *)ufo)->ui32Priority=priority;
+    } else {ufo->puiAddrUFO=r->sync_addr;ufo->ui32Value=state->sequence;*r->sync=0;}
     RGXFWIF_KCCB_CMD cmd={};cmd.eCmdType=RGXFWIF_KCCB_CMD_KICK;cmd.eDM=dm;
     cmd.uCmdData.sCmdKickData.psContext.ui32Addr=a04_rgx_render_fw_address(r,c);
     cmd.uCmdData.sCmdKickData.ui32CWoffUpdate=at+commandBytes;*kick=cmd;

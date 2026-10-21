@@ -1,5 +1,5 @@
 {
-  "status": "GP-only native KickSync context NULL+UPDATE/KCCB KICK candidate and one terminal snapshot; 32 host tests/ARM64 compile pass, physical candidate untested; previous DM2 standalone UPDATE timed out on40907a9",
+  "status": "NEW TA/3D standalone PRIORITY0/1 client execution candidate; 33 host tests/ARM64 compile pass, physical PRIORITY candidate untested. GP native NULL/UPDATE confirmed separately on7fe9; no drawn pixels.",
   "ddk": "Imagination/MediaTek m1.11ED5425693, MT8167 user config, BVNC22.40.54.30",
   "source_sha256": {
     "hwdefs/km/rgxmmudefs_km.h": "bfedc5799e2b57b27cece82d3cd882c557f44ce3356895c9ffa5d7471cdffd28",
@@ -37,24 +37,26 @@
     "test_rogue_render_memory.py",
     "test_rogue_runtime.py: actual Runtime + RenderMemory + typed submit against simulated FW, offline/invalidDM/reentrant/bounded timeout/corrupt/poison and pinned ownership",
     "test_rogue_boot_firmware.py: actual CPP with owner/runtime shims, cold/prepare/pin ordering, shared service lock, fallback, baseline gate, stop and byte accounting",
-    "test_rogue_runtime_compile.py: full production CPP/headers and original ARM instructions target compile, not XNU link"
+    "test_rogue_runtime_compile.py: full production CPP/headers and original ARM instructions target compile, not XNU link",
+    "test_rogue_priority.py: standalone native PRIORITY bytes, two-DM changed priority and independent consumption checks; wrap, invalid inputs, timeout/partial response/terminal preservation; no UFO writes"
   ],
   "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE",
   "hardware_baseline": {
-    "source": "user40907a9; integration/wlan-native-scan-first-boot.txt baseline528176210 lines167-173",
-    "observed": "cold context prepared1, FWready, SYNC DM0/2/3 result0; DM2 standalone client UPDATE/KICK timeout4. No previous consumption/UFO/FWCCB snapshot, so exact hardware cause undetermined."
+    "source": "integration/wlan-bsd-registration-first-boot.txt, initialboot offset528674225, lines170-174; user kernel7fe9",
+    "observed": "Baseline KCCB SYNC DM0/2/3 result0; native GP context UPDATE/KICK DM0 result0 and post-UPDATE SYNC0 result0 on hardware. This is firmware context/UFO execution, no BIF pixel/render proof."
   },
   "integration_implemented": [
     "GPU.cpp owns render after Memory/Runtime; prepareCold before Runtime.prepare, pin before Runtime.start, reset render before runtime/base; five additional owned allocations total143360bytes",
     "Allocation failure preserves FW/SYNC baseline; no new required boot arguments or user command ABI",
-    "Baseline GP/TA/3D SYNC verified mask0xd required; boot now exercises only separate GP common context NULL40+UPDATE48 -> KCCB KICK DM0 -> post-SYNC DM0. Success mask1. TA/3D standalone UPDATE helper unchanged48bytes, not automatically boot-executed after physical failure.",
+    "Baseline SYNC0/2/3 mask0xd -> GP native NULL/UPDATE then GP SYNC (mask1). NEW: TA/3D standalone PRIORITY0 then1, post-SYNC perDM; mask0xc only if all succeed. TA/3D bare UPDATE stays disabled at boot.",
     "Runtime.renderUpdate accepts typed owner/private layout; shared commandBusy and bridgeLock; timeout/corrupt poisons common transport. Terminal observation retained before poison; one three-line UART report under bridgeLock, no replay.",
     "GP success requires exact own UFO + KCCB read + client read; post-UPDATE GP SYNC additionally required. Fixed10000 polls*10us unchanged; failures retain/quarantine all DMA resources."
   ],
   "limits": [
-    "Actual40907a9 DM2 timeout cause cannot be inferred from result4 without consumption/UFO/FWCCB data. GP-only standard sync packet replaces unproven TA/3D boot experiment; this is not a claim of fixing/proving TA/3D firmware execution.",
-    "Physical GP client NULL/UPDATE response, BIF hardware translation and rasterization remain unverified; parent builds/boots.",
-    "No invented TA/3D task/shader bytes; TA/3D NULL support not established by pinned source. No timeout increase/retry. Rendering targets/freelists/shader packets and iOS bridge remain future work."
+    "GP NULL/UPDATE and post-SYNC are now hardware-confirmed on7fe9. New TA/3D PRIORITY candidate remains untested physically; no drawn pixels or acceleration bridge.",
+    "40907a9 DM2 standalone UPDATE timed out; not replayed and not treated as resolved by PRIORITY. GP NULL not applied to TA/3D.",
+    "Matching DDK accepts opaque TA/3D/transfer task bytes; no guessed task/shader/zero-register packet is constructed. Actual transfer208byte payload mapping and EOT/PDS/USC producer prerequisites are still under parent analysis.",
+    "Parent notes Mesa FLAGS_FILL skips fragment shader but still requires USC EOT BO plus PDS pixel-event program; do not infer zero shader/EOT bytes are valid. No Mesa modern stream ABI reused."
   ],
   "gp_source_contract": {
     "context": "rgxkicksync.c134-146: FWCommonContextAllocate DM_GP priority0, NULL context state and framework; separate common context, memory context supplied",
@@ -66,5 +68,17 @@
     "context flags/priority/run/wait nodes; bounded owned trace KCCB executed/trace pointer/power/HWR/faults; INIT started timestamp, FW idle time and RGX_CR_TIMER0x160 before/after",
     "Only terminal timeout/corrupt observation, no pointer-following or FWCCB consumption; driver logs three lines once. Main and render are normal-NC; acquire barrier before observation. Concurrent fields are observational, not an atomic firmware freeze."
   ],
-  "tests_result": "32 tests PASS in7.676s; ASan/UBSan, exact original DDK NULL opcode/header ABI, 600 mixed pure-helper ring submissions/wrap, GP terminal FWCCB/time snapshot/no replay, actual Runtime+owner and full ARM64 CPP compile; not full XNU link or hardware validation"
+  "tests_result": "33 tests PASS in8.714s; ASan/UBSan; original DDK PRIORITY opcode/payload/alignment ABI; 400 TA/3D priority roundtrips with ring wrap; partial response (priority only, KCCB only, consumed but stale priority), corruption/timeout/no replay; unchanged UFO sentinel; real Runtime/owner simulation and full original ARM64 CPP target compile. Not full XNU link or hardware.",
+  "hardware_previous": {
+    "source": "user40907a9; integration/wlan-native-scan-first-boot.txt baseline528176210 lines167-173",
+    "observed": "cold context prepared1, FWready, SYNC DM0/2/3 result0; DM2 standalone client UPDATE/KICK timeout4. No previous consumption/UFO/FWCCB snapshot, so exact hardware cause undetermined."
+  },
+  "new_candidate": {
+    "physical_status": "UNTESTED; must not be conflated with GP7fe9 confirmation",
+    "entry": "GPU.cpp verifyPriorityBridge only after all baseline SYNCs and GP context/UFO/post-SYNC succeeded",
+    "contract": "rgxta3d.c4917-4948 SetRenderContextPriorityKM calls ContextSetPriority explicitly for TA then3D; rgxfwutils.c5360-5412 emits standalone PRIORITY40byte header + aligned8byte priority payload then KCCB KICK. No NULL or TA/3D task payload.",
+    "test_sequence": "TA priority1->0->1 then TA SYNC; 3D priority1->0->1 then3D SYNC; each target must differ from current FW-owned value; fixed10000x10us max per command, no replay",
+    "success": "FW priority equals requested0/1 AND exact KCCB read plus client read/write consumption. No priority-field writes by CPU after cold initialization. PriorityVerifiedDMs0xc additionally requires both post-SYNCs; not a UFO or draw claim.",
+    "safety": "Existing bridgeLock/atomic commandBusy, poison/quarantine, cold-only mappings and allocation count unchanged; terminal observation includes requested priority and FW sequence, no inferred sequence-count behavior."
+  }
 }

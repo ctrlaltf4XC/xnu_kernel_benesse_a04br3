@@ -74,9 +74,9 @@ public:
     /* Trusted parent integration must verify FW ready/ABI and hold the same
      * KCCB/power mutex as GP SYNC + stop. This method never changes BIF MMIO.
      * The kernel view is the real Runtime layout, not a userspace descriptor. */
-    int update(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io,unsigned dm) {
+    int update(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io,unsigned dm,uint32_t priority=0xffffffffU) {
         if(!mapped || !pinned)return A04_CCB_OFFLINE;
-        return a04_rgx_render_submit_update(&resources,&state,&kernel,&io,dm,&terminal);
+        return a04_rgx_render_submit_update(&resources,&state,&kernel,&io,dm,&terminal,priority);
     }
     const a04_rgx_render_observation &observation() const {return terminal;}
     const a04_rgx_render_resources *view() const {return mapped?&resources:nullptr;}
