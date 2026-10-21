@@ -8,11 +8,13 @@
 #include <sys/systm.h>
 #include <sys/errno.h>
 #include <kern/thread.h>
+#include <kern/sched_prim.h>
 #include <kern/clock.h>
 #include <mach/mach_types.h>
 #include <pexpert/pexpert.h>
 #include "a04br3_touch_protocol.h"
 extern vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
+extern kern_return_t thread_terminate(thread_t);
 extern void a04br3_hid_touch(int,int,int,int);
 void a04br3_touch_init(void);
 static vm_offset_t bus,gpio,top,infra,pwrap;
@@ -47,7 +49,7 @@ static int transfer(int read,unsigned char *data,unsigned len){
 static int command(unsigned char c){return transfer(0,&c,1);}
 static int measure(unsigned set,unsigned op,unsigned wait,unsigned *value){unsigned char b[2];int e=command((unsigned char)set);if(e)return e;delay(wait);e=command((unsigned char)op);if(e)return e;e=transfer(1,b,2);if(!e)*value=a04br3_touch_adc(b[0],b[1]);return e;}
 static void touch_thread(void *arg,wait_result_t result){
-    (void)arg;(void)result;int e=power_on();if(e){printf("A04BR3 TOUCH: VGP1 1.8V error=%d\n",e);thread_terminate_self();}
+    (void)arg;(void)result;int e=power_on();if(e){printf("A04BR3 TOUCH: VGP1 1.8V error=%d\n",e);(void)thread_terminate(current_thread());return;}
     /* GPIO58/59 ALT1; GPIO8 input. Only the specified fields are changed. */
     for(unsigned pin=58;pin<=59;pin++){unsigned off=0x300+(pin/5)*0x10,shift=(pin%5)*3;wr(gpio,off,(rd(gpio,off)&~(7u<<shift))|(1u<<shift));}
     wr(gpio,0x300+0x10,(rd(gpio,0x310)&~(7u<<9)));wr(gpio,0x08,1u<<8);
@@ -56,7 +58,7 @@ static void touch_thread(void *arg,wait_result_t result){
     iw(0x50,1);iw(0x40,3);iw(0x54,0);iw(0x70,4);iw(0x20,0x73f);iw(0x48,0);iw(0x28,0x8001);
     e=command(0x50);if(!e)e=command(0xb0);if(!e)e=command(0);
     printf("A04BR3 TOUCH: BU21025 i2c0@48 init=%d timing=0x%x irq=%u\n",e,iread(0x20),(rd(gpio,0x200)>>8)&1);
-    if(e)thread_terminate_self();
+    if(e){(void)thread_terminate(current_thread());return;}
     unsigned lastx=0,lasty=0,failures=0;int down=0;
     for(;;){
         if(!down && (rd(gpio,0x200)&(1u<<8))){pause_ms(20);continue;}
