@@ -24,7 +24,7 @@ int main(void){
  struct a04_rgx_fw_runtime r;
  assert(!a04_rgx_fw_runtime_init(&r,mainbuf,0x80000000,cfg,0x81000000,26000000));
  assert((void*)r.init==cfg && !r.init->bFirmwareStarted && !r.init->sRGXCompChecks.bUpdated);
- assert(r.main.used==90112 && r.config.used==sizeof(RGXFWIF_INIT));
+ assert(r.main.used==90176 && r.config.used==sizeof(RGXFWIF_INIT));
  assert(r.init->sOSConfig.ui32Addr && r.init->sTraceBufCtl.ui32Addr && r.init->sHWPerfCtl.ui32Addr);
  assert(fw(&r,r.init->sOSConfig.ui32Addr)==r.osconfig);
  assert(fw(&r,r.init->sTraceBufCtl.ui32Addr)==r.trace);
@@ -72,14 +72,15 @@ int main(void){
 #include <assert.h>
 using IOByteCount=uint64_t;using vm_offset_t=uintptr_t;
 static int kernel_task=0;
-enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,kIOReturnSuccess=0};
+enum {A04_TEST_MAIN_BYTES=0x40000,kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,kIOMapWriteCombineCache=0x400,kIOReturnSuccess=0};
 class IOBufferMemoryDescriptor;
 static IOBufferMemoryDescriptor *retained[128];
 static unsigned descriptors,attempts,live,completed,cleaned;static int allocFault;
 class IOBufferMemoryDescriptor {
 public:
  void *cpu;uint64_t size,pa;unsigned id;
- static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(int,unsigned,uint64_t size,uint64_t){
+ static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(int,unsigned options,uint64_t size,uint64_t){
+  assert(((options&kIOMapWriteCombineCache)!=0)==(size==A04_TEST_MAIN_BYTES));
   unsigned slot=attempts++;
   if(allocFault==(int)slot+1)return nullptr;
   auto b=new IOBufferMemoryDescriptor;b->id=descriptors++;assert(b->id<128);
@@ -139,6 +140,32 @@ static uint32_t shared(void *,uint32_t address){
  }
  return active->readShared(address);
 }
+static unsigned commandKicks,commandWaits;static bool commandAnswer=true;
+static void *commandMemory(uint32_t address) {
+ assert(address>=0xc0040000 && address<0xc0080000);
+ return (char*)retained[descriptors-3]->cpu+(address-0xc0040000);
+}
+static void publishCommand(void *);
+static void acquireCommand(void *){}
+static void kickCommand(void *,uint32_t at,uint32_t value) {
+ assert(at==0xb00 && value==0x10);++commandKicks;
+}
+static void waitCommand(void *,uint32_t us) {
+ assert(us==10);++commandWaits;
+ if(!commandAnswer)return;
+ auto init=active->init();
+ auto ctl=(RGXFWIF_CCB_CTL*)commandMemory(init->psKernelCCBCtl.ui32Addr);
+ auto commands=(RGXFWIF_KCCB_CMD*)commandMemory(init->psKernelCCB.ui32Addr);
+ auto &cmd=commands[ctl->ui32ReadOffset];
+ assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_SYNC && cmd.eDM==3);
+ *(uint32_t*)commandMemory(cmd.uCmdData.sSyncData.sSyncObjDevVAddr.ui32Addr)=cmd.uCmdData.sSyncData.uiUpdateVal;
+ ctl->ui32ReadOffset=ctl->ui32WriteOffset;
+}
+static a04_rgx_command_io commandIO={nullptr,publishCommand,acquireCommand,kickCommand,waitCommand};
+static void publishCommand(void *) {
+ /* Reentrant producer cannot interleave a second command. */
+ assert(active->fence(3,commandIO)==A04_CCB_BUSY);
+}
 int main(){
  for(allocFault=1;allocFault<=3;allocFault++) {
   attempts=0;A04BR3RogueMemory source;A04BR3RogueRuntime runtime;
@@ -159,8 +186,15 @@ int main(){
   int result=runtime.start(source,io);
   assert(released && source.owned && writes);
   if(failure==1)assert(waited==1000009); /* exact finite MTK 1s poll, plus startup waits and recovery reset */
-  if(!failure)assert(result==0 && runtime.ready()==1);
-  else {assert(result!=0);assert(regs[0x100/8]==0x100000000ULL);}
+  if(!failure){assert(result==0 && runtime.ready()==1);
+   assert(runtime.fence(4,commandIO)==A04_CCB_INPUT && !commandKicks);
+   assert(runtime.fence(3,commandIO)==A04_CCB_OK && commandKicks==1 && commandWaits==1);
+   commandAnswer=false;commandWaits=0;
+   assert(runtime.fence(3,commandIO)==A04_CCB_TIMEOUT && commandKicks==2 && commandWaits==10000);
+   assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE && commandKicks==2);
+  }
+  else {assert(result!=0);assert(regs[0x100/8]==0x100000000ULL);
+   assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE);}
   assert(!runtime.prepare(source,26000000));
   runtime.reset();assert(live==pinned); /* never free fabric-visible resources */
  }

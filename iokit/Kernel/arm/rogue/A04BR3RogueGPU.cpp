@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
  * PowerVR Rogue kernel transport bring-up; not a rendering accelerator yet.
- * No user GPU mappings or command submission. Source-owned firmware runtime
+ * No user GPU mappings or rendering command submission. Source-owned firmware runtime
  * is started only from the explicitly supplied matching boot payload.
  */
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
+#include <IOKit/IOLocks.h>
+#include <arm/machine_routines.h>
 #include <pexpert/pexpert.h>
 #include <pexpert/device_tree.h>
 #include <pexpert/arm64/boot.h>
@@ -30,7 +32,34 @@ class A04BR3RogueGPU : public IOService {
     OSDeclareDefaultStructors(A04BR3RogueGPU);
 public:
     bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+    using IOService::callPlatformFunction;
+    /* Kernel rendering coordinator fence entry. param1 is the scalar DM
+     * (0 GP,2 TA,3 3D); all other parameters must be null. Synchronous,
+     * thread context only; no userspace ABI, command memory or output pointer.
+     * Success means only that this DM executed an owned SYNC, not a render.
+     */
+    IOReturn callPlatformFunction(const OSSymbol *name,bool wait,
+        void *domain,void *p2,void *p3,void *p4) APPLE_KEXT_OVERRIDE {
+        if (!name) return kIOReturnBadArgument;
+        if (!name->isEqualTo("A04BR3RogueFence"))
+            return IOService::callPlatformFunction(name,wait,domain,p2,p3,p4);
+        uintptr_t dm=(uintptr_t)domain;
+        if (p2 || p3 || p4 || (dm!=0 && dm!=2 && dm!=3)) return kIOReturnBadArgument;
+        if (ml_at_interrupt_context()) return kIOReturnNotPermitted;
+        int error=submitFence((uint32_t)dm);
+        if (!error) return kIOReturnSuccess;
+        if (error==A04_CCB_TIMEOUT) return kIOReturnTimeout;
+        if (error==A04_CCB_BUSY || error==A04_CCB_FULL) return kIOReturnBusy;
+        if (error==A04_CCB_OFFLINE) return kIOReturnNotReady;
+        return kIOReturnError;
+    }
+    void free() APPLE_KEXT_OVERRIDE {
+        if (bridgeLock) {IOLockFree(bridgeLock);bridgeLock=nullptr;}
+        IOService::free();
+    }
     void stop(IOService *provider) APPLE_KEXT_OVERRIDE {
+        if (bridgeLock) IOLockLock(bridgeLock);
+        bridgeOnline=false;
         setProperty("FirmwareRunning",kOSBooleanFalse);
         __atomic_store_n(&a04_rogue_irq_core,(vm_offset_t)0,__ATOMIC_RELEASE);
         if (core && attempted) {
@@ -38,13 +67,16 @@ public:
             __asm__ volatile("dsb sy":::"memory");
             (void)*(volatile uint64_t *)(core+0x100);
         }
-        runtime.reset();memory.reset();IOService::stop(provider);
+        runtime.reset();memory.reset();
+        if (bridgeLock) IOLockUnlock(bridgeLock);
+        IOService::stop(provider);
     }
 private:
     A04BR3RogueMemory memory;
     A04BR3RogueRuntime runtime;
     vm_offset_t core=0,gic=0;
     bool attempted=false;
+    IOLock *bridgeLock=nullptr;bool bridgeOnline=false;
     static uint32_t fwRead32(void *p,uint32_t offset) {
         A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
         uint32_t value=*(volatile uint32_t *)(s->core+offset);
@@ -69,11 +101,35 @@ private:
     static uint32_t fwShared(void *p,uint32_t physical) {
         return ((A04BR3RogueGPU *)p)->runtime.readShared(physical);
     }
+    static void commandPublish(void *) {__asm__ volatile("dsb sy":::"memory");}
+    static void commandAcquire(void *) {__asm__ volatile("dmb oshld":::"memory");}
+    int submitFence(uint32_t dm) {
+        if (!bridgeLock) return A04_CCB_OFFLINE;
+        if (!IOLockTryLock(bridgeLock)) return A04_CCB_BUSY;
+        a04_rgx_command_io io={this,commandPublish,commandAcquire,fwWrite32,fwWait};
+        int error=bridgeOnline?runtime.fence(dm,io):A04_CCB_OFFLINE;
+        IOLockUnlock(bridgeLock);
+        return error;
+    }
+    void verifyCommandBridge() {
+        const uint32_t domains[]={A04_RGX_DM_GP,A04_RGX_DM_TA,A04_RGX_DM_3D};
+        uint32_t verified=0;
+        for (unsigned i=0;i<3;i++) {
+            int error=submitFence(domains[i]);
+            setProperty("FirmwareFenceResult",(uint64_t)error,32);
+            IOLog("A04BR3 GPU: KCCB SYNC DM=%u result=%d; FW UFO + read-offset required, no rendering submitted\n",domains[i],error);
+            if (error) break;
+            verified|=1U<<domains[i];
+        }
+        setProperty("FirmwareFenceVerifiedDMs",(uint64_t)verified,32);
+    }
     void startFirmware() {
         unsigned enabled=1;
         PE_parse_boot_argn("a04br3.gpu_start",&enabled,sizeof(enabled));
         if (enabled!=1) return;
         if (!core) return;
+        if (!bridgeLock) bridgeLock=IOLockAlloc();
+        if (!bridgeLock) {setProperty("BringupStage","firmware-bridge-lock-failed");return;}
         /* Original mt8167.dtsi: GIC_SPI185 => INTID217, level low. Keep it
          * masked for the polling boot route; the current SLEH panics on SPIs.
          * This write owns exactly one bit and never consumes GICC_IAR. */
@@ -121,6 +177,8 @@ private:
         setProperty("FirmwareRunning",kOSBooleanTrue);
         setProperty("BringupStage","firmware-ready");
         IOLog("A04BR3 GPU: FW ready=1 ABI/DDK/BVNC verified; IRQ=0x%x; no acceleration bridge\n",fwRead32(this,0x8a8));
+        bridgeOnline=true;
+        verifyCommandBridge();
     }
     void stageBootFirmware() {
         DTEntry map=nullptr;

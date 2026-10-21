@@ -8,7 +8,7 @@
     "drivers/clk/mediatek/clk-mt8167.c",
     "arch/arm64/boot/dts/mediatek/mt8167.dtsi"
   ],
-  "status": "CPU staging hardware verified; first native firmware runtime candidate, startup and rendering still unverified",
+  "status": "User verified native FW ready/ABI/DDK/BVNC on hardware1de70c2; bounded KCCB GP/TA/3D SYNC and kernel fence bridge are host-tested candidates, hardware response/rendering unverified",
   "ddk_root": "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693",
   "ddk_reference_paths": [
     "hwdefs/km/cores/rgxcore_km_22.40.54.30.h",
@@ -31,5 +31,20 @@
     "file": "A04BR3RogueDDKABI.h",
     "license": "Original Imagination Dual MIT/GPLv2 text retained; MIT option selected",
     "regeneration": "build-support/tests/test_rogue_runtime_abi.py validates declarations and host/ARM64/MIPS32 layout"
+  },
+  "command_transport": {
+    "file": "A04BR3RogueCommand.h",
+    "source_functions": [
+      "rgxfwutils.c:RGXWaitForFWOp",
+      "rgxfwutils.c:RGXSendCommandRaw",
+      "rgxfwutils.c:__MTSScheduleWrite"
+    ],
+    "constants": [
+      "rgx_common.h:RGXFWIF_DM_GP/TA/3D",
+      "rgx_cr_defs_km.h:RGX_CR_MTS_SCHEDULE/TASK_COUNTED"
+    ],
+    "abi": "Existing generated MIT-selected RGXFWIF_KCCB_CMD/CCB_CTL/SYNC_DATA; no new binary-derived declarations",
+    "cpu_coherency": "IOBufferMemoryDescriptor kIOMapWriteCombineCache -> IOMemoryDescriptor VM_WIMG_WCOMB -> arm pmap CACHE_ATTRINDX_WRITECOMB -> MAIR_WRITECOMB 0x44 normal NC; live mixed-writer CCB controls never cache-cleaned",
+    "bridge": "IOService callPlatformFunction A04BR3RogueFence, scalar param1 DM0/2/3, other parameters null, thread-only, try-lock, bounded100ms, no IOUserClient or rendering KICK"
   }
 }

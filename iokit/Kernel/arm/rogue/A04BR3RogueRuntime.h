@@ -9,12 +9,15 @@
 #include "A04BR3RogueMemory.h"
 #include "A04BR3RogueRuntimeLayout.h"
 #include "A04BR3RogueStartupExecutor.h"
+#include "A04BR3RogueCommand.h"
 class A04BR3RogueRuntime {
     IOBufferMemoryDescriptor *buffers[3]={};
     bool prepared[3]={};bool mapped=false,pinned=false;
     void *baseCPU[3]={};uint64_t basePA[3]={};
     void *cpu[3]={};uint64_t pa[3]={};
     a04_rgx_fw_runtime layout={};
+    a04_rgx_command_state commandState={};
+    unsigned commandBusy=0;bool firmwareOnline=false;
     static unsigned bytes(unsigned i) {
         return i==0?A04_RGX_MAIN_BYTES:(i==1?A04_RGX_CONFIG_BYTES:0x4000);
     }
@@ -24,6 +27,7 @@ public:
     A04BR3RogueRuntime()=default;
     ~A04BR3RogueRuntime(){reset();}
     void reset() {
+        firmwareOnline=false;
         if (mapped && !pinned) {
             uint32_t *table=(uint32_t *)baseCPU[0];
             for (unsigned n=0;n<0x19000/4096;n++) table[n]&=~4U;
@@ -49,7 +53,8 @@ public:
         if (!source.stagedMemory(baseCPU,basePA)) return false;
         for (unsigned i=0;i<3;i++) {
             buffers[i]=IOBufferMemoryDescriptor::inTaskWithPhysicalMask(kernel_task,
-                kIODirectionInOut|kIOMemoryPhysicallyContiguous|kIOMemoryMapperNone,
+                kIODirectionInOut|kIOMemoryPhysicallyContiguous|kIOMemoryMapperNone|
+                (i==0?kIOMapWriteCombineCache:0),
                 bytes(i),i==2?0xffffc000ULL:0xfffff000ULL);
             if (!buffers[i] || buffers[i]->prepare()!=kIOReturnSuccess) { reset();return false; }
             prepared[i]=true;
@@ -77,7 +82,9 @@ public:
             a04_rgx_fw_runtime_map((uint32_t *)baseCPU[0],8192,pa[0],pa[1])) { reset();return false; }
         mapped=true;
         for (unsigned n=0;n<0x19000/4096;n++) table[n]|=4U;
-        for (unsigned i=0;i<3;i++) flush_dcache((vm_offset_t)cpu[i],bytes(i),0);
+        /* Main runtime uses normal noncache CPU memory: no cache-line sharing
+         * hazards on live CCB controls/UFOs. Config remains read-only on CPU. */
+        for (unsigned i=1;i<3;i++) flush_dcache((vm_offset_t)cpu[i],bytes(i),0);
         flush_dcache((vm_offset_t)baseCPU[0],0x8000,0);
         __asm__ volatile("dsb sy":::"memory");
         return true;
@@ -141,6 +148,17 @@ public:
             (void)io.read64(io.context,0x100);
             io.wait_us(io.context,3);
         }
+        firmwareOnline=!error;
+        return error;
+    }
+    /* Trusted kernel fence bridge for GP/TA/3D. No arbitrary KICK payloads.
+     * Caller must keep power fixed and serialize service stop with this call. */
+    int fence(uint32_t dm,const a04_rgx_command_io &io) {
+        unsigned expected=0;
+        if (!__atomic_compare_exchange_n(&commandBusy,&expected,1,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))
+            return A04_CCB_BUSY;
+        int error=firmwareOnline?a04_rgx_command_fence(&layout,&commandState,&io,dm,10000,10):A04_CCB_OFFLINE;
+        __atomic_store_n(&commandBusy,0,__ATOMIC_RELEASE);
         return error;
     }
     const RGXFWIF_INIT *init() const {return layout.init;}

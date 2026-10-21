@@ -25,7 +25,10 @@ struct a04_rgx_fw_runtime {
     RGXFWIF_OS_CONFIG *osconfig;
     RGXFWIF_HWRINFOBUF *hwr;
     RGXFWIF_CCB_CTL *kctl,*fctl;
+    RGXFWIF_KCCB_CMD *kcommands;
     uint32_t *power_sync;
+    uint32_t *command_sync;
+    RGXFWIF_DEV_VIRTADDR command_sync_addr;
 };
 static inline void *a04_rgx_fw_alloc(struct a04_rgx_fw_pool *pool,uint32_t bytes,
                                     RGXFWIF_DEV_VIRTADDR *firmware)
@@ -85,6 +88,8 @@ static inline int a04_rgx_fw_runtime_init(struct a04_rgx_fw_runtime *out,
                       sizeof(RGXFWIF_KCCB_CMD),&out->kctl) ||
         a04_rgx_fw_ccb(&out->main,&init->psFirmwareCCBCtl,&init->psFirmwareCCB,32,
                       sizeof(RGXFWIF_FWCCB_CMD),&out->fctl)) return 2;
+    out->kcommands=(RGXFWIF_KCCB_CMD *)(out->main.cpu+
+        init->psKernelCCB.ui32Addr-(0xc0000000U+A04_RGX_MAIN_OFFSET));
     RGXFWIF_CCB_CTL *checkpoint;
     if (a04_rgx_fw_ccb(&out->main,&init->psCheckpointCCBCtl,&init->psCheckpointCCB,1024,
                       sizeof(PRGXFWIF_UFO_ADDR),&checkpoint)) return 2;
@@ -107,6 +112,9 @@ static inline int a04_rgx_fw_runtime_init(struct a04_rgx_fw_runtime *out,
     out->main.used=(out->main.used+4095U)&~4095U;
     if (!a04_rgx_fw_alloc(&out->main,4096,&address)) return 2;
     init->sFaultPhysAddr.uiAddr=main_pa+address.ui32Addr-(0xc0000000U+A04_RGX_MAIN_OFFSET);
+    /* Separate owned UFO, never reuse the firmware power-management sync. */
+    out->command_sync=(uint32_t *)a04_rgx_fw_alloc(&out->main,64,&out->command_sync_addr);
+    if (!out->command_sync) return 2;
     /* BRN65273 is present on 22.40.54.30. */
     init->sPDSExecBase.uiAddr=0xa800000000ULL;init->sUSCExecBase.uiAddr=0xba00000000ULL;
     init->ui32HWRDebugDumpLimit=99999;

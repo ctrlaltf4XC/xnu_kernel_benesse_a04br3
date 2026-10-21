@@ -27,6 +27,9 @@ using vm_offset_t=uintptr_t;using vm_size_t=uintptr_t;
 static void IODelay(unsigned) {}
 static void IOLog(const char *,...) {}
 ''')
+            (root/'IOKit/IOLocks.h').write_text('struct IOLock {};\nstatic IOLock *IOLockAlloc(){return new IOLock;}\nstatic void IOLockFree(IOLock *p){delete p;}\nstatic void IOLockLock(IOLock *){}\nstatic bool IOLockTryLock(IOLock *){return true;}\nstatic void IOLockUnlock(IOLock *){}\n')
+            (root/'arm').mkdir(exist_ok=True)
+            (root/'arm/machine_routines.h').write_text('static bool inInterrupt;\nstatic bool ml_at_interrupt_context(){return inInterrupt;}\n')
             (root/'IOKit/IOService.h').write_text(r'''
 #define OSDeclareDefaultStructors(c)
 #define OSDefineMetaClassAndStructors(c,b)
@@ -35,8 +38,15 @@ static const void *kOSBooleanFalse=(void *)1;
 static const void *kOSBooleanTrue=(void *)2;
 static char payloadStatus[64],bringupStage[64];
 static uint64_t stageResult;static unsigned runningFalse,runningTrue;
-class IOService {
+using IOReturn=int;
+ enum {kIOReturnSuccess=0,kIOReturnBadArgument=1,kIOReturnNotPermitted=2,kIOReturnTimeout=3,
+       kIOReturnBusy=4,kIOReturnNotReady=5,kIOReturnError=6};
+ class OSSymbol {const char *s;public:OSSymbol(const char *p):s(p){}
+ bool isEqualTo(const char *p)const{return !strcmp(s,p);}};
+ class IOService {
 public:
+ virtual void free(){}
+ virtual IOReturn callPlatformFunction(const OSSymbol *,bool,void *,void *,void *,void *){return 99;}
  virtual bool start(IOService *) { return true; }
  virtual void stop(IOService *) {}
  void registerService() {}
@@ -85,12 +95,15 @@ public:
             (root/'A04BR3RogueRuntime.h').write_text(r'''
 #include "A04BR3RogueRuntimeLayout.h"
 #include "A04BR3RogueStartupExecutor.h"
+#include "A04BR3RogueCommand.h"
+static unsigned fenceCalls,lastDM;static int fenceError;
 static unsigned runtimePrepares,runtimeStarts;static bool prepareOK=true;static int startError;
 class A04BR3RogueRuntime {
 public:
  void reset(){}
  bool prepare(A04BR3RogueMemory &,uint32_t){++runtimePrepares;return prepareOK;}
  int start(A04BR3RogueMemory &,const a04_rgx_exec_io &){++runtimeStarts;return startError;}
+ int fence(uint32_t dm,const a04_rgx_command_io &){++fenceCalls;lastDM=dm;return fenceError;}
  uint32_t readShared(uint32_t){return 0;}
  uint32_t ready(){return 0;}
 };
@@ -140,6 +153,7 @@ static void initialize() {
  ba={0x60000000,0x18000000,0x61014000};PE_state.bootArgs=&ba;
  absentMap=absentAsset=absentKernel=badTranslation=zeroTranslation=hasRAMDisk=false;
  stages=resets=stageError=translations=runningFalse=runningTrue=0;stageResult=99;
+ fenceCalls=lastDM=0;fenceError=0;inInterrupt=false;
  autoStart=runtimePrepares=runtimeStarts=0;prepareOK=true;startError=0;
  memset(gicMemory,0,sizeof(gicMemory));memset(coreMemory,0,sizeof(coreMemory));
  memset(topMemory,0,sizeof(topMemory));topMemory[0]=4U<<8;topMemory[1]=8U<<8;
@@ -182,12 +196,27 @@ int main() {
  initialize();autoStart=1;gpu.core=(vm_offset_t)coreMemory;gpu.stageBootFirmware();
  assert(runtimePrepares==1 && runtimeStarts==1 && runningTrue==1);
  assert(!strcmp(bringupStage,"firmware-ready"));
+ assert(fenceCalls==3 && lastDM==3);
+ assert(gpu.callPlatformFunction(nullptr,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnBadArgument);
+ OSSymbol fenceName("A04BR3RogueFence"),otherName("unknown");
+ assert(gpu.callPlatformFunction(&otherName,false,nullptr,nullptr,nullptr,nullptr)==99);
+ assert(gpu.callPlatformFunction(&fenceName,false,(void*)4,nullptr,nullptr,nullptr)==kIOReturnBadArgument);
+ assert(gpu.callPlatformFunction(&fenceName,false,nullptr,(void*)1,nullptr,nullptr)==kIOReturnBadArgument);
+ inInterrupt=true;
+ assert(gpu.callPlatformFunction(&fenceName,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnNotPermitted);
+ assert(fenceCalls==3);inInterrupt=false;
+ assert(gpu.callPlatformFunction(&fenceName,false,(void*)2,nullptr,nullptr,nullptr)==0 && lastDM==2);
+ fenceError=A04_CCB_TIMEOUT;
+ assert(gpu.callPlatformFunction(&fenceName,false,(void*)3,nullptr,nullptr,nullptr)==kIOReturnTimeout);
+ fenceError=A04_CCB_CORRUPT;
+ assert(gpu.callPlatformFunction(&fenceName,false,(void*)3,nullptr,nullptr,nullptr)==kIOReturnError);
  assert(gicMemory[(0x180+6*4)/4]==(1U<<25));
  assert(!gicMemory[(0x100+6*4)/4]); /* no CPU SPI enable */
  coreMemory[0x8a8/4]=1;
  assert(!a04br3_rogue_irq_dispatch(216));assert(a04br3_rogue_irq_dispatch(217));
  assert(coreMemory[0x8b0/4]==1);
  gpu.stop(nullptr);assert(!a04br3_rogue_irq_dispatch(217));
+ assert(gpu.callPlatformFunction(&fenceName,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnNotReady);
  initialize();autoStart=1;prepareOK=false;gpu.stageBootFirmware();
  assert(runtimePrepares==1 && !runtimeStarts && !runningTrue);
  initialize();autoStart=1;gicMemory[(0x100+6*4)/4]=1U<<25;gpu.stageBootFirmware();
@@ -199,7 +228,7 @@ int main() {
   gpu.stageBootFirmware();assert(!runtimePrepares && !runtimeStarts && !runningTrue);
   assert(!strcmp(bringupStage,"firmware-clock-readback-failed"));
  }
-
+ gpu.free();
 }
 ''')
             exe=root/'test'

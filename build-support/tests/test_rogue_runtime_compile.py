@@ -27,12 +27,21 @@ extern "C" void bcopy(const void *,void *,size_t);
 extern "C" void IODelay(unsigned);
 extern "C" void IOLog(const char *,...) __attribute__((format(printf,1,2)));
 ''')
+            (p/'IOKit/IOLocks.h').write_text('struct IOLock {};\nstatic IOLock *IOLockAlloc(){return new IOLock;}\nstatic void IOLockFree(IOLock *p){delete p;}\nstatic void IOLockLock(IOLock *){}\nstatic bool IOLockTryLock(IOLock *){return true;}\nstatic void IOLockUnlock(IOLock *){}\n')
+            (p/'arm').mkdir(exist_ok=True)
+            (p/'arm/machine_routines.h').write_text('static bool inInterrupt;\nstatic bool ml_at_interrupt_context(){return inInterrupt;}\n')
             (p/'IOKit/IOService.h').write_text('''#pragma once
 #define OSDeclareDefaultStructors(c)
 #define OSDefineMetaClassAndStructors(c,b)
 #define APPLE_KEXT_OVERRIDE override
 struct OSBoolean;extern OSBoolean *kOSBooleanFalse,*kOSBooleanTrue;
-class IOService {public:
+using IOReturn=int;
+ enum {kIOReturnSuccess=0,kIOReturnBadArgument=1,kIOReturnNotPermitted=2,kIOReturnTimeout=3,
+       kIOReturnBusy=4,kIOReturnNotReady=5,kIOReturnError=6};
+ class OSSymbol {public:bool isEqualTo(const char *)const;};
+ class IOService {public:
+ virtual void free();
+ virtual IOReturn callPlatformFunction(const OSSymbol *,bool,void *,void *,void *,void *);
  virtual ~IOService();virtual bool start(IOService *);virtual void stop(IOService *);
  bool setProperty(const char *,const char *);
  bool setProperty(const char *,OSBoolean *);
@@ -44,7 +53,7 @@ class IOService {public:
 #include <IOKit/IOLib.h>
 using IOByteCount=uint64_t;
 extern void *kernel_task;
-enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,kIOReturnSuccess=0};
+enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,kIOMapWriteCombineCache=0x400};
 class IOBufferMemoryDescriptor {public:
  static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(void *,unsigned,uint64_t,uint64_t);
  int prepare();void complete();void release();
