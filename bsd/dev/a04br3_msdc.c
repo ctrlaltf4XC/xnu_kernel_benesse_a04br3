@@ -12,6 +12,7 @@
 #include <sys/disk.h>
 #include <sys/uio.h>
 #include <kern/locks.h>
+#include <kern/kalloc.h>
 #include <miscfs/devfs/devfs.h>
 #include <kern/clock.h>
 #include <mach/mach_time.h>
@@ -21,6 +22,7 @@
 #include <vm/pmap.h>
 #include <arm/machine_routines.h>
 #include "a04br3_msdc_dma.h"
+#include "a04br3_wlan_nvram.h"
 extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
 /* Same BSD-side declaration as memdev.c. */
 extern ppnum_t pmap_find_phys(pmap_t map, addr64_t va);
@@ -235,6 +237,7 @@ static uint32_t header_crc(const uint8_t *p, unsigned size) {
 }
 static uint32_t disk_sectors;
 static uint32_t root_first,root_sectors;
+static uint32_t nvram_first,nvram_sectors;
 static dev_t root_device;
 static unsigned write_enabled,cache_enabled;
 /* Never expose full-disk writes, including GPT, LK or boot partitions. */
@@ -435,6 +438,20 @@ static int find_root_partition(const uint8_t header[512],uint32_t sectors) {
         for (unsigned j=0;j<8;j++) crc=(crc>>1)^(0xedb88320u & (0u-(crc&1u)));
     }
     if (~crc!=expected) return EINVAL;
+    /* Discover original per-device NVRAM by the CRC-verified GPT name. No
+     * fixed LBA, image input, extraction step, or write access is introduced. */
+    static const char nvname[]="nvram";
+    uint32_t nvfirst=0,nvcount=0;
+    for(unsigned i=0;i<count;i++) {
+        const uint8_t *e=entries+i*size;unsigned n=0;
+        while(n<sizeof(nvname)-1 && e[56+n*2]==nvname[n] && !e[57+n*2])n++;
+        if(n!=sizeof(nvname)-1 || e[56+n*2] || e[57+n*2])continue;
+        uint64_t first=le64(e+32),last=le64(e+40);
+        if(nvcount || first<first_usable || last>last_usable || first>last || last>=sectors ||
+           (last-first+1)>0x4000000u/512)return EINVAL;
+        nvfirst=(uint32_t)first;nvcount=(uint32_t)(last-first+1);
+    }
+    nvram_first=nvfirst;nvram_sectors=nvcount;
     static const char wanted[]="userdata";
     for (unsigned i=0;i<count;i++) {
         const uint8_t *e=entries+i*size;unsigned n=0;
@@ -451,6 +468,38 @@ int a04br3_emmc_rootdev(dev_t *dev);
 int a04br3_emmc_rootdev(dev_t *dev) {
     if (!root_sectors || !root_device) return ENXIO;
     *dev=root_device;return 0;
+}
+/* Runtime calibration consumer; all reads remain inside the discovered
+ * NVRAM partition and share the existing MSDC lock with root filesystem IO. */
+static int nvram_read_bytes(void *context,uint32_t offset,void *out,unsigned count)
+{
+    (void)context;
+    uint8_t sector[512];uint8_t *destination=out;
+    uint64_t size=(uint64_t)nvram_sectors*512;
+    if(offset>size || count>size-offset)return EINVAL;
+    while(count){
+        unsigned within=offset&511u,n=512-within;if(n>count)n=count;
+        uint32_t block=offset/512;
+        if(block>=nvram_sectors || nvram_first>=disk_sectors || block>=disk_sectors-nvram_first)return EINVAL;
+        int error=read_block(17,nvram_first+block,sector);if(error)return error;
+        memcpy(destination,sector+within,n);destination+=n;offset+=n;count-=n;
+    }
+    return 0;
+}
+int a04br3_wlan_read_calibration(void *bytes,unsigned capacity);
+int a04br3_wlan_read_calibration(void *bytes,unsigned capacity)
+{
+    if(!bytes || capacity!=512)return EINVAL;
+    if(!root_device || !nvram_sectors || nvram_sectors>0x4000000u/512)return ENXIO;
+    struct a04_nvram_work *work=kalloc_type(struct a04_nvram_work,Z_WAITOK|Z_ZERO);
+    if(!work)return ENOMEM;
+    const struct a04_nvram_reader reader={NULL,nvram_sectors*512,nvram_read_bytes};
+    lck_mtx_lock(&msdc_lock);
+    int error=a04_nvram_wifi(&reader,work,bytes);
+    lck_mtx_unlock(&msdc_lock);
+    bzero(work,sizeof(*work));kfree_type(struct a04_nvram_work,work);
+    printf("A04BR3 WLAN: runtime NVRAM calibration read=%d bytes=%u; no disk writes\n",error,error?0u:512u);
+    return error;
 }
 extern void a04br3_sample_start(void);
 void a04br3_msdc_probe(void);

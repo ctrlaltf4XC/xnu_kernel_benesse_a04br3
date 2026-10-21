@@ -269,3 +269,18 @@ MT6630 WLAN MTKW and command/HIF formats derive from the pinned board gen3
 source listed in sdio/UPSTREAM.json. The BSD adapter uses existing XNU DLIL/KPI
 and Apple IONetworkingFamily references identified in network/SOURCES.json;
 no private Apple driver implementation or firmware bytes are copied into it.
+
+Original runtime NVRAM lookup in bsd/dev/a04br3_wlan_nvram.h uses on-device
+MTK GPT format observations from the board BSP libnvram.so (SHA256
+ e83de14b19063924fbe615a1bc191eda4a21de89a9eb56faef86ed73c1f47407),
+provided by android_vendor_benesse_a04br3 at
+0c756f413e7011231c8fb793af0930311023f68d. REA identified
+NVM_GetDeviceInfo at0x10e3d8 (GPT erase/write sizes0x20000/0x200),
+NVM_RestoreFromBinRegion_OneFile at0x113b40 (triple bad-block bitmap and
+AllMap/AllFile), NVM_CheckData_OneFile at0x1135f0 (whole-file checksum),
+and NVM_ComputeCheckNo at0x114688 (record checksum). Independent bounded
+C implementation; no decompiled source or proprietary binary is redistributed.
+The original WIFI512 layout is CFG_Wifi_File.h from the pinned board gen3
+source above. The prebuilt image reads the current device's GPT nvram partition
+at runtime; recipients need no extraction, calibration file, setup or rebuild.
+No per-device MAC/calibration bytes or backup image are included in source.
