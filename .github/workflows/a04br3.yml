@@ -10,6 +10,10 @@ on:
         description: Maximum SSH repair window in minutes (1 to 300)
         type: number
         default: 180
+      defer_initial_build:
+        description: Start SSH first for an optional validated work-cache restore
+        type: boolean
+        default: false
 permissions:
   contents: read
   statuses: write
@@ -20,6 +24,12 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
     steps:
+      - name: Validate deferred build mode
+        if: ${{ inputs.defer_initial_build }}
+        env:
+          KEEP_SSH: ${{ inputs.keep_ssh }}
+        run: |
+          test "$KEEP_SSH" = true || { echo 'Deferred build requires keep_ssh'; exit 2; }
       - name: Copy this source revision without Git history
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,12 +61,13 @@ jobs:
           PYTHON
       - name: Build committed source and declared dependencies
         id: kernel
+        if: ${{ !inputs.defer_initial_build }}
         continue-on-error: true
         run: |
           set -euo pipefail
           python3 source/build-support/build.py --out "$PWD/out/kernel" --install-kdk 2>&1 | tee out/build.log
       - name: Preserve build products and logs
-        if: always()
+        if: ${{ always() && !inputs.defer_initial_build }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: a04br3-kernel-${{ github.sha }}
