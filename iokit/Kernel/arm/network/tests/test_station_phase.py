@@ -33,6 +33,7 @@ int main(){
   code=r'''
 #include "A04BR3StationPhase.h"
 #include "../sdio/A04BR3WLANRuntime.h"
+#include "../sdio/A04BR3WLANNetworkProfile.h"
 #include <assert.h>
 #include <strings.h>
 #include <errno.h>

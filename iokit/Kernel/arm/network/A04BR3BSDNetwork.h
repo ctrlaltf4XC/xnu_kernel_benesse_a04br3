@@ -29,6 +29,9 @@ public:
     ifnet_t ifnet() const { return interface; } /* borrowed; owner serialized */
     int dispatch(unsigned long command,void *data);
     int refresh();
+    /* Snapshot only: current admin/link publication for this exact session.
+     * Does not publish/promote flags or grant a port; no lock spans clients. */
+    int publishedLink(uint64_t associationGeneration);
     int scanCompleted(); /* caller must have observed real matching FW completion */
     int detach();
     bool isDetached();

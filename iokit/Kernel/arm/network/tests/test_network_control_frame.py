@@ -118,7 +118,7 @@ class ControlFrame(unittest.TestCase):
         runtime=(ROOT/'A04BR3NetworkRuntime.cpp').read_text();runtime=runtime[runtime.index('int a04br3_network_control_input('):]
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory);(p/'stub.h').write_text(base.STUB)
-            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
+            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/net_kev.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
                 f=p/name;f.parent.mkdir(parents=True,exist_ok=True);f.write_text('#include "stub.h"\n')
             (p/'driver.cpp').write_bytes((ROOT/'A04BR3BSDNetwork.cpp').read_bytes())
             legacy=base.CASE;end=legacy.rfind('}');legacy=legacy[:end]+'return 0;\n'+legacy[end:]

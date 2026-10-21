@@ -23,6 +23,7 @@ public:
     SInt32 performCommand(IONetworkController *,unsigned long,void *,void *) APPLE_KEXT_OVERRIDE;
     int shutdownBackend();
     int refreshBackend(){ return network.refresh(); }
+    int publishedLink(uint64_t generation){ return network.publishedLink(generation); }
     int scanCompleted(){ return network.scanCompleted(); }
     int receive(mbuf_t m){ return network.input(m); }
 };
@@ -46,6 +47,7 @@ public:
     IOReturn disable(IONetworkInterface *) APPLE_KEXT_OVERRIDE;
     int shutdownBackend();
     int refreshBackend();
+    int publishedLink(uint64_t generation);
     int scanCompleted();
     int receive(mbuf_t); /* consumes real DLIL-formatted mbuf, including failures */
 };

@@ -115,6 +115,10 @@ class A04BR3NativeNetwork : public IOService {
         a04br3_wlan_release_backend(self->backendProvider);
         if(e || state.association_generation!=epoch || !state.auth_profile_valid || state.auth_upper!=8 ||
             !state.authorized || !a04_network_data_ready(&state))return e?e:ENETDOWN;
+        // A successful refresh can mean correctly DOWN (admin cancel), not
+        // LINK_ON. Require this generation's actual publication before even a
+        // duplicate completion may be acknowledged. No gate across clients.
+        e=self->controller->publishedLink(epoch);if(e)return e;
         if(epoch==self->authenticatedEpoch)return 0;
         // Actual interface->controller->SDIO provider tree, matching native
         // eapolclient's two-parent IOGeneralInterest endpoint. Never from SET.

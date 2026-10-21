@@ -149,6 +149,11 @@ int IO80211Controller::refreshBackend()
     auto *child=OSDynamicCast(IO80211Interface,interface);
     return child?child->refreshBackend():ENXIO;
 }
+int IO80211Controller::publishedLink(uint64_t generation)
+{
+    auto *child=OSDynamicCast(IO80211Interface,interface);
+    return child?child->publishedLink(generation):ENXIO;
+}
 int IO80211Controller::scanCompleted()
 {
     auto *child=OSDynamicCast(IO80211Interface,interface);

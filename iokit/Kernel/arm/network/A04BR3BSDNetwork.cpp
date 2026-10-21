@@ -274,6 +274,27 @@ int A04BR3BSDNetwork::refresh()
     IOLockUnlock(gate);return EAGAIN;
 }
 
+/* Crypto completion is not upper-link completion. A concurrent admin-down,
+ * publication failure or replacement association must not satisfy the native
+ * authentication interest. Snapshot the bridge's own actual publication as
+ * well as the current backend; never promote flags from authorized alone. */
+int A04BR3BSDNetwork::publishedLink(uint64_t generation)
+{
+    if(!generation)return EINVAL;
+    if(!gate)return ENXIO;
+    IOLockLock(gate);
+    int error=0;
+    if(!interface || stopping || !admin || linkPublishing || !linkReported ||
+        linkGeneration!=generation ||
+        (ifnet_flags(interface)&(IFF_UP|IFF_RUNNING))!=(IFF_UP|IFF_RUNNING))error=ENETDOWN;
+    if(!error){
+        a04_network_state state={};error=snapshot(&state);
+        if(!error && (state.association_generation!=generation ||
+            !a04_network_data_ready(&state) || !backend.native_get || !backend.transmit))error=ENETDOWN;
+    }
+    IOLockUnlock(gate);return error;
+}
+
 errno_t A04BR3BSDNetwork::output(ifnet_t ifp,mbuf_t packet)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);
