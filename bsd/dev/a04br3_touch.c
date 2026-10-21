@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
  * TAB-A04-BR3 BU21025 single-contact input, polled PIO (no DMA/IRQ).
  * Register/protocol facts: board Linux BU21025 driver (SANYO TST, 2017),
- * MT8167 i2c-mt65xx, MT6392 regulator table; EDK2 MT8167 PWRAP map.
+ * MT8167 i2c-mt65xx, MT6392 regulator and mtk-pmic-wrap tables.
  * New bounded implementation. No Linux driver code is linked into XNU.
  */
 #if defined(ARM64_BOARD_CONFIG_A04BR3)
@@ -25,10 +25,12 @@ static void wr(vm_offset_t b,unsigned o,uint32_t v){*(volatile uint32_t *)(b+o)=
 static uint16_t iread(unsigned o){uint16_t v=*(volatile uint16_t *)(bus+o);__asm__ volatile("dmb oshld":::"memory");return v;}
 static void iw(unsigned o,uint16_t v){*(volatile uint16_t *)(bus+o)=v;__asm__ volatile("dsb oshst":::"memory");}
 static void pause_ms(unsigned ms){uint64_t deadline;clock_interval_to_deadline(ms,NSEC_PER_MSEC,&deadline);assert_wait_deadline(&sleep_chan,THREAD_UNINT,deadline);thread_block(THREAD_CONTINUE_NULL);}
-static int pw_wait(unsigned fsm){for(unsigned n=0;n<1000;n++){if(((rd(pwrap,0xc24)>>16)&7)==fsm)return 0;delay(10);}return ETIMEDOUT;}
-static int pw_read(unsigned addr,uint16_t *value){int e=pw_wait(0);if(e)return e;wr(pwrap,0x9c,(addr>>1)<<16);e=pw_wait(6);if(e)return e;*value=(uint16_t)rd(pwrap,0xc24);wr(pwrap,0xc28,1);return pw_wait(0);}
-static int pw_write(unsigned addr,uint16_t value){int e=pw_wait(0);if(e)return e;wr(pwrap,0x9c,0x80000000|((addr>>1)<<16)|value);return pw_wait(0);}
-static int power_on(void){uint16_t v;int e;if(rd(pwrap,0xa0)!=1)return ENXIO;
+static int pw_wait(unsigned fsm){for(unsigned n=0;n<1000;n++){if(((rd(pwrap,0xa4)>>16)&7)==fsm)return 0;delay(10);}return ETIMEDOUT;}
+static int pw_read(unsigned addr,uint16_t *value){int e=pw_wait(0);if(e)return e;wr(pwrap,0xa0,(addr>>1)<<16);e=pw_wait(6);if(e)return e;*value=(uint16_t)rd(pwrap,0xa4);wr(pwrap,0xa8,1);return pw_wait(0);}
+static int pw_write(unsigned addr,uint16_t value){int e=pw_wait(0);if(e)return e;wr(pwrap,0xa0,0x80000000|((addr>>1)<<16)|value);return pw_wait(0);}
+static int power_on(void){uint16_t v;int e;uint32_t init=rd(pwrap,0x9c);
+    printf("A04BR3 TOUCH: PWRAP init=0x%x status=0x%x\n",init,rd(pwrap,0xa4));
+    if(!(init&1))return ENXIO;
     e=pw_read(0x530,&v);if(e)return e;e=pw_write(0x530,(uint16_t)((v&~0xe0)|0x60));if(e)return e;
     e=pw_read(0x50a,&v);if(e)return e;e=pw_write(0x50a,v|0x8000);if(e)return e;
     pause_ms(20);e=pw_read(0x530,&v);if(e)return e;return (v&0xe0)==0x60?0:EIO;

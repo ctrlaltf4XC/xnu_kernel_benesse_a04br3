@@ -221,6 +221,7 @@ from the board Linux source revision eb47f42e1f84fe5716ef239620725f82718a620a:
 `drivers/input/touchscreen/mediatek/BU21025/bu21025.c` (SANYO Techno Solutions
 Tottori, 2017; Hirotomo Ozaki adjustments 2018; GPLv2), `i2c-mt65xx.c`,
 `pinctrl-mt8167.c`, `clk-mt8167.c`, `mt6392-regulator.c`, and `a04br3.dts`.
-No Linux driver source is linked into this kernel. EDK2 MT8167 PWRAP register
-layout is from mouseos/edk2-mtk revision1982d888c765f5b12f6e0dce71f1ed8bc92ac50b.
+No Linux driver source is linked into this kernel. The active PWRAP register layout is the mt8167_regs table in the same
+Linux revision (INIT_DONE2=0x9c, CMD=0xa0, RDATA=0xa4, VLDCLR=0xa8).
+The EDK2 MT8167 table was examined but its different offsets are not used.
 The driver configures only I2C0, GPIO8/58/59 and the board VGP1 1.8V rail.
