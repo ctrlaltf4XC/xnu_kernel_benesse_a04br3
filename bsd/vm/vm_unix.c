@@ -1817,7 +1817,37 @@ out:
 	*ret = error;
 	return error;
 }
-#endif /* !XNU_TARGET_OS_OSX */
+#elif defined(ARM64_BOARD_CONFIG_A04BR3)
+/*
+ * A04BR3 uses the OSX kernel configuration with iOS userland. The native
+ * memory-maintenance daemon requests pid_hibernate(-2), a compressor sweep,
+ * independently of per-process freezing. Use the same real VM operation as
+ * the non-OSX implementation without enabling the unsupported freezer ABI.
+ * Narrow this system-wide operation to root and retain the native MAC check.
+ * Unsupported operations/features return an honest errno, not fake success.
+ */
+kern_return_t
+pid_hibernate(struct proc *p __unused, struct pid_hibernate_args *args, int *ret)
+{
+	int error = 0;
+
+	if (!kauth_cred_issuser(kauth_cred_get())) {
+		error = EPERM;
+	} else if (args->pid != -2) {
+		error = ENOTSUP;
+#if CONFIG_MACF
+	} else if (mac_proc_check_suspend_resume(PROC_NULL, MAC_PROC_CHECK_HIBERNATE)) {
+		error = EPERM;
+#endif
+	} else if (!VM_CONFIG_COMPRESSOR_IS_PRESENT) {
+		error = ENOTSUP;
+	} else {
+		vm_pageout_anonymous_pages();
+	}
+	*ret = error;
+	return error;
+}
+#endif /* !XNU_TARGET_OS_OSX / ARM64_BOARD_CONFIG_A04BR3 */
 
 #if SOCKETS
 int
