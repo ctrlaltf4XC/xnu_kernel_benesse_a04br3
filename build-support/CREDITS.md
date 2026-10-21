@@ -226,3 +226,9 @@ Linux revision (base 0x1000f000 from mt8167.dtsi; INIT_DONE2=0x9c,
 CMD=0xa0, RDATA=0xa4, VLDCLR=0xa8).
 The EDK2 MT8167 table was examined but its different offsets are not used.
 The driver configures only I2C0, GPIO8/58/59 and the board VGP1 1.8V rail.
+
+Board keypad mapping uses a04br3.dts and MediaTek mt8167/hal_kpd register
+definitions from the same board Linux revision: mem1 bit0 is Linux115
+(volume up), bit1 Linux102 (Home). The polling implementation is new.
+Touch calibration bounds (raw X150..3950/Y320..3830) derive from two passes
+of physical-corner taps captured in the project UART on 2026-10-21.

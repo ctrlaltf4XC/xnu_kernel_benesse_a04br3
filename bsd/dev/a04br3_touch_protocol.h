@@ -13,7 +13,11 @@ static int a04br3_touch_point(unsigned x,unsigned y,unsigned z,unsigned *px,unsi
     int64_t resistance=(int64_t)((730*x)/4096)*((4096000/z)-1000)-
         (int64_t)(1000-(y*1000)/4096)*305;
     if(resistance>900000)return -1;
-    *px=((4095-y)*800)/4096;*py=(x*1280)/4096;
+    /* Measured physical corner bounds, 2026-10-21 (two passes). */
+    int cx=(int)x-150,cy=(int)y-320;
+    if(cx<0)cx=0;else if(cx>3800)cx=3800;
+    if(cy<0)cy=0;else if(cy>3510)cy=3510;
+    *px=((3510-cy)*799)/3510;*py=(cx*1279)/3800;
     return 1;
 }
 #endif

@@ -632,6 +632,8 @@ void IOHIDEventServiceUserClient::enqueueEventGated( IOHIDEvent * event)
         _lastEventTime = mach_continuous_time();
         _lastEventType = event->getType();
         Boolean result = _queue->enqueueEvent(event);
+        if (_eventCount <= 8) IOLog("A04BR3 HID: queue event=%llu type=%u accepted=%u dropped=%llu\n",
+            (unsigned long long)_eventCount, (unsigned)event->getType(), (unsigned)result, (unsigned long long)_droppedEventCount);
         if (result == false) {
             _lastDroppedEventTime = _lastEventTime;
             ++_droppedEventCount;

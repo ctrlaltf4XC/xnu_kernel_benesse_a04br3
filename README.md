@@ -463,3 +463,10 @@ checks follow the board panel's RX/RY values. Coordinates map the landscape
 raw panel to the existing portrait framebuffer. Initial orientation and input
 operation require real-device validation; compiling this code is not proof of
 working touch. No synthetic Home press or migration-complete flag is enabled.
+
+The board keypad publishes its existing Home (matrix bit1) and volume-up
+(bit0) through a separate HID consumer-control service. The power button and
+PMIC long-press reset configuration are not changed. No automatic Home press
+is injected. Current corner calibration expands the measured sensor range
+to the full framebuffer and clamps samples outside it. Initial HID queue
+acceptance is logged to distinguish measured input from userland delivery.

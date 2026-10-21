@@ -1,3 +1,4 @@
+extern "C" void a04br3_keys_init(void);
 extern "C" void a04br3_touch_init(void);
 /*
  * A04BR3: HID event services for the iOS userland (backboardd's HID event
@@ -385,6 +386,7 @@ A04BR3HIDButtons::start(IOService *provider)
 	gA04BR3Buttons = this;
 	registerService();
 	IOLog("A04BR3 HID: buttons registered (test every %u s)\n", fTestSecs);
+	a04br3_keys_init();
 	return true;
 }
 
@@ -465,6 +467,8 @@ A04BR3HIDTouch::touch(int finger, bool down, int x, int y)
 		return;
 	}
 	collection->setIntegerValue(kIOHIDEventFieldDigitizerCollection, TRUE);
+	collection->setIntegerValue(kIOHIDEventFieldDigitizerIsDisplayIntegrated, TRUE);
+	collection->setIntegerValue(kIOHIDEventFieldIsBuiltIn, TRUE);
 
 	UInt32 cmask = 0;
 	for (int i = 0; i < A04BR3_TOUCH_FINGERS; i++) {

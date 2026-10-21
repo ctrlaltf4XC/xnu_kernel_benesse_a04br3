@@ -16,9 +16,12 @@ int main(void){
  assert(a04br3_touch_point(2048,2048,4095,&x,&y)==0);
  assert(a04br3_touch_point(4096,0,100,&x,&y)==-1);
  assert(a04br3_touch_point(4095,2048,6,&x,&y)==-1);
- assert(a04br3_touch_point(2048,2048,2048,&x,&y)==1 && x==399 && y==640);
+ assert(a04br3_touch_point(2048,2048,2048,&x,&y)==1 && x==405 && y==638);
  assert(a04br3_touch_point(0,0,3000,&x,&y)==1 && x==799 && y==0);
  assert(a04br3_touch_point(4095,4095,3000,&x,&y)==1 && x==0 && y==1279);
+ assert(a04br3_touch_point(150,320,200,&x,&y)==1 && x==799 && y==0);
+ assert(a04br3_touch_point(3950,3830,2300,&x,&y)==1 && x==0 && y==1279);
+ assert(a04br3_touch_point(148,3830,192,&x,&y)==1 && x==0 && y==0);
  return 0;
 }
 '''
