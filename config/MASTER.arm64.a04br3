@@ -48,7 +48,13 @@
 #else /*!(SOC_CONFIG_t8020 || SOC_IS_VIRTUALIZED)*/
 #  HIBERNATION =    [ ]
 #endif /*SOC_CONFIG_t8020 || SOC_IS_VIRTUALIZED*/
-#  IOKIT_BASE =     [ iokit iokitcpp no_kernel_hid config_sleep iokitstats HIBERNATION ]
+# A04BR3 uses built-in board drivers/personalities, not a userspace kext/dext
+# loader. Select XNU's static IOKit mode, also used by MASTER.arm64.bcm2837
+# and MASTER.arm64.BridgeOS. The implementation in IOStartIOKit.cpp,
+# IOService.cpp and OSKext.cpp owns the matching/resource/request lifecycle;
+# do not synthesize a daemon check-in or force the registry quiet.
+# Revisit this option if a real userspace extension loader is introduced.
+#  IOKIT_BASE =     [ iokit iokitcpp no_kextd no_kernel_hid config_sleep iokitstats HIBERNATION ]
 #  IOKIT_RELEASE =  [ IOKIT_BASE ]
 #  IOKIT_DEV =      [ IOKIT_BASE iotracking ]
 #  IOKIT_DEBUG =    [ IOKIT_BASE iotracking ]
