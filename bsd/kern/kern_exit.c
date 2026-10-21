@@ -1904,11 +1904,14 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
 #if defined(A04BR3)
         /* Capture the actual exiting thread, not an earlier live sample.
          * Limit UART overhead and never dereference user stack directly. */
-        static unsigned a04br3_crash_count[2];
-        unsigned a04br3_crash_bucket = !strcmp(p->p_name, "mediaserverd") ? 1 : 0;
+        /* assetsd has its own two captures; never spend Setup's shared budget. */
+        static unsigned a04br3_crash_count[3];
+        unsigned a04br3_crash_bucket = !strcmp(p->p_name, "assetsd") ? 2 :
+            !strcmp(p->p_name, "mediaserverd") ? 1 : 0;
         if (p == current_proc() &&
             (!strcmp(p->p_name, "SpringBoard") || !strcmp(p->p_name, "backboardd") ||
              !strcmp(p->p_name, "lsd") || !strcmp(p->p_name, "mediaserverd") ||
+             !strcmp(p->p_name, "assetsd") ||
              !strcmp(p->p_name,"installd") || !strcmp(p->p_name,"installcoordinationd") ||
              !strcmp(p->p_name,"locationd") || !strcmp(p->p_name,"Setup") || strnstr(p->p_name, "datamigrat", sizeof(p->p_name))) &&
             os_atomic_inc_orig(&a04br3_crash_count[a04br3_crash_bucket], relaxed) <
