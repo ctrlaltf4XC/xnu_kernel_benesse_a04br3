@@ -1,10 +1,10 @@
 {
   "github_repository": "mouseos/xnu_device_benesse_a04br3",
   "repository": "https://github.com/mouseos/xnu_device_benesse_a04br3",
-  "commit": "de66e045ad7a5217b0765d949c6ceaaa53fad9c6",
+  "commit": "459a99bda87bec9f06f98c5a2c7a6787bc2b123e",
   "files": {
-    "tools/uart-console.c": "caf3b7b2f0a850314b3f7bf87cc49343ad79a5cc0264513299ad0447a283b3a6",
-    "tools/uart-libSystem.tbd": "db8d6afcf58c56c47e5708f99fd1b5274d3c134e30a6584a2a8bb1744d746250",
+    "tools/uart-console.c": "b181f29e655e93599fc9cd28ca52117dc692683bba5c231cb223ab8a61d914b7",
+    "tools/uart-libSystem.tbd": "846eed71f936f7dc86ed0ec4ddebb177dba29d40a47f10d49335a2159923935e",
     "tools/build-uart-console.sh": "8f820d7f10ad367b40857b976680665d6bbaeb4a0b10ade063a1bae7c39858b4"
   }
 }

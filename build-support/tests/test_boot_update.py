@@ -107,9 +107,11 @@ static void make_image(void){
 }
 static void digest(uint8_t out[32]){SHA256(image,sizeof(image),out);}
 static void start(void){
+ assert(a04br3_boot_rx_interval_ms()==16);
  assert(boot_open(0,FWRITE,0,&rootproc)==0);
  struct a04_boot_begin b={.image_bytes=sizeof(image)};digest(b.sha256);
  assert(boot_ioctl(0,A04_BOOT_BEGIN,(char *)&b,FWRITE,&rootproc)==0);
+ assert(a04br3_boot_rx_interval_ms()==1);
  assert(!writes);
 }
 static void upload(void){
@@ -136,6 +138,7 @@ int main(void){
  reset();assert(boot_open(0,FWRITE,0,&other)==EPERM);start();assert(boot_open(0,FWRITE,0,&rootproc)==EBUSY);
  assert(boot_commit()==EINVAL && !writes);upload();
  assert(boot_commit()==0 && writes==3 && reads==3 && flushes==2 && boot_flags==A04_BOOT_VERIFIED);
+ assert(a04br3_boot_rx_interval_ms()==16);
  assert(!memcmp(disk+boot_first*512,image,sizeof(image)));
  assert(!disk[boot_first*512-1] && !disk[boot_first*512+sizeof(image)]);
  assert(boot_commit()==EINVAL);reset();start();upload();boot_digest[0]^=1;
@@ -154,6 +157,7 @@ int main(void){
  assert(boot_ioctl(0,A04_BOOT_COMMIT,0,FWRITE,&other)==EPERM);active=&rootproc;
  assert(boot_ioctl(0,A04_BOOT_COMMIT,0,0,&rootproc)==EBADF);
  assert(boot_ioctl(0,A04_BOOT_ABORT,0,FWRITE,&rootproc)==0 && !boot_stage && !writes);
+ assert(a04br3_boot_rx_interval_ms()==16);
  reset();allocfail=2;assert(boot_open(0,FWRITE,0,&rootproc)==0);
  struct a04_boot_begin b={.image_bytes=sizeof(image)};digest(b.sha256);
  assert(boot_ioctl(0,A04_BOOT_BEGIN,(char *)&b,FWRITE,&rootproc)==ENOMEM && !boot_stage);

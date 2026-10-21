@@ -291,7 +291,16 @@ static uint64_t boot_image_bytes,boot_staged;
 static uint8_t boot_digest[32];
 static uint32_t boot_flags;
 static int boot_opened;
+/* The polled console may burst faster only while a root-owned image is staged.
+ * No UART registers, divisor or hardware RX ownership changes here. */
+static unsigned boot_rx_fast;
+unsigned a04br3_boot_rx_interval_ms(void);
+unsigned a04br3_boot_rx_interval_ms(void) {
+    return __atomic_load_n(&boot_rx_fast,__ATOMIC_RELAXED) ? 1u : 16u;
+}
+
 static void boot_discard(void) {
+    __atomic_store_n(&boot_rx_fast,0,__ATOMIC_RELAXED);
     if(boot_stage)kmem_free(kernel_map,boot_stage,(vm_size_t)boot_image_bytes);
     if(boot_scratch)kmem_free(kernel_map,boot_scratch,65536);
     boot_stage=boot_scratch=0;boot_image_bytes=boot_staged=0;boot_flags=0;
@@ -352,6 +361,7 @@ static int boot_flush(int validate) {
 }
 static int boot_commit(void) {
     if(!boot_stage || boot_flags!=A04_BOOT_STAGING || boot_staged!=boot_image_bytes)return EINVAL;
+    __atomic_store_n(&boot_rx_fast,0,__ATOMIC_RELAXED);
     uint8_t digest[32];SHA256_CTX hash;
     SHA256_Init(&hash);SHA256_Update(&hash,(void *)boot_stage,(size_t)boot_image_bytes);
     SHA256_Final(digest,&hash);
@@ -393,7 +403,7 @@ static int boot_write(__unused dev_t dev,struct uio *uio,__unused int flags) {
         boot_staged+=(uint64_t)(before-uio_resid(uio));
     }
     /* Even a partially faulted copy is never eligible for COMMIT. */
-    if(error && boot_stage)boot_flags=A04_BOOT_FAILED;
+    if(error && boot_stage){boot_flags=A04_BOOT_FAILED;__atomic_store_n(&boot_rx_fast,0,__ATOMIC_RELAXED);}
     lck_mtx_unlock(&boot_lock);return error;
 }
 static int boot_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,int flag,struct proc *p) {
@@ -421,7 +431,8 @@ static int boot_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,int flag,struct
             kmem_free(kernel_map,stage,(vm_size_t)request->image_bytes);error=ENOMEM;break;
         }
         boot_stage=stage;boot_scratch=scratch;boot_image_bytes=request->image_bytes;
-        boot_staged=0;memcpy(boot_digest,request->sha256,32);boot_flags=A04_BOOT_STAGING;break;
+        boot_staged=0;memcpy(boot_digest,request->sha256,32);boot_flags=A04_BOOT_STAGING;
+        __atomic_store_n(&boot_rx_fast,1,__ATOMIC_RELAXED);break;
     }
     case A04_BOOT_COMMIT:
         error=(flag&FWRITE) ? boot_commit() : EBADF;break;

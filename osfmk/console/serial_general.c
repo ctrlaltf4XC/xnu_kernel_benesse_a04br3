@@ -32,6 +32,13 @@
  * @APPLE_FREE_COPYRIGHT@
  */
 
+#if defined(__arm64__)
+#include <pexpert/arm64/board_config.h>
+#endif
+#if defined(A04BR3)
+extern unsigned a04br3_boot_rx_interval_ms(void);
+#endif
+
 #include <kern/spl.h>
 #include <mach/std_types.h>
 #include <types.h>
@@ -89,7 +96,13 @@ serial_keyboard_poll(void)
 		cons_cinput((char)chr); /* Buffer up the character */
 	}
 
-	clock_interval_to_deadline(16, 1000000, &next); /* Get time of pop */
+    unsigned interval_ms = 16;
+#if defined(A04BR3)
+    /* Retain the existing sole RX consumer. A staged transfer needs enough
+     * FIFO drains for paced data; normal idle console keeps its old cadence. */
+    interval_ms = a04br3_boot_rx_interval_ms();
+#endif
+    clock_interval_to_deadline(interval_ms, 1000000, &next);
 
 	assert_wait_deadline((event_t)serial_keyboard_poll, THREAD_UNINT, next); /* Show we are "waiting" */
 	thread_block((thread_continue_t)serial_keyboard_poll); /* Wait for it */
