@@ -19,12 +19,14 @@ static void write_(void*p,unsigned b,unsigned o,uint32_t v){(void)p;assert(b<4&&
   if(!(v&0xf00) && fault==2)r[b][o/4]|=0xf000;
  }else if(b==A04_RGX_INFRA){r[b][o/4]=v;if(o==0x220 && fault!=3)r[b][0x228/4]=v;}
  else if(b==A04_RGX_MFG){assert(o==8&&v==15);assert(count==3);assert(order[0]==0x2c4&&order[1]==0x2c0&&order[2]==0x214);assert(!(r[1][0x228/4]&0x24));core_writes++;if(fault!=4)r[b][0]&=~v;}
- else {assert(b==A04_RGX_TOP && ((o==0x80&&v==4)||(o==0xb0&&v==0xc0)));}
+ else {assert(b==A04_RGX_TOP);if(o==0||o==4||o==0x40)r[b][o/4]=v;
+ else assert((o==0x80&&v==4)||(o==0xb0&&v==0xc0)||(o==0xa0&&v==0xc0)||(o==0x50&&v==4));}
 }
 static void delay_(void*p,unsigned us){(void)p;assert(us==10);assert(++delays<=30000);}
 static void reset(void){memset(r,0,sizeof(r));r[0][0x2c0/4]=r[0][0x214/4]=0xf12;r[0][0x2c4/4]=0x12;r[1][0x220/4]=r[1][0x228/4]=0x24;r[3][0]=15;count=core_writes=delays=0;}
 int main(void){struct a04_rgx_io io={0,read_,write_,delay_};
  reset();assert(a04_rgx_power_on(&io)==0&&core_writes==1&&count==3);
+ assert(((r[2][0]>>8)&7)==4&&((r[2][1]>>8)&63)==8&&!(r[2][0x40/4]&(15u<<18)));
  reset();fault=1;assert(a04_rgx_power_on(&io)==1&&core_writes==0&&delays==10000);
  reset();fault=2;assert(a04_rgx_power_on(&io)==2&&core_writes==0);
  reset();fault=3;assert(a04_rgx_power_on(&io)==3&&core_writes==0&&count==2);
