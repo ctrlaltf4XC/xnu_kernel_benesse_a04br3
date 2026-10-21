@@ -11,6 +11,8 @@
 #define A04_CONSOLE_TEMP ".launchd.a04br3.new"
 #define A04_CAPTURE_LEAF "a04-fb-capture"
 #define A04_CAPTURE_TEMP ".a04-fb-capture.new"
+#define A04_UI_TEST_LEAF "a04-ui-test"
+#define A04_UI_TEST_TEMP ".a04-ui-test.new"
 
 static int
 a04_console_regular(vnode_t vp, vfs_context_t ctx)
@@ -173,6 +175,11 @@ prepare_uart_console(void)
     int capture_error = a04_console_install_program(a04br3_fb_capture_payload,
         sizeof(a04br3_fb_capture_payload), A04_CAPTURE_LEAF, A04_CAPTURE_TEMP);
     if (capture_error) printf("A04BR3 ROOT: optional framebuffer capture installation failed error=%d\n", capture_error);
+#endif
+#if defined(A04BR3_UI_TEST_PAYLOAD_PRESENT)
+    int ui_error = a04_console_install_program(a04br3_ui_test_payload,
+        sizeof(a04br3_ui_test_payload), A04_UI_TEST_LEAF, A04_UI_TEST_TEMP);
+    if (ui_error) printf("A04BR3 ROOT: optional UI test installation failed error=%d\n", ui_error);
 #endif
     return 0;
 }

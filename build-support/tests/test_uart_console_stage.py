@@ -8,9 +8,10 @@ spec=importlib.util.spec_from_file_location('capture_stage',ROOT/'build-support/
 stage=importlib.util.module_from_spec(spec);spec.loader.exec_module(stage)
 
 class Staging(unittest.TestCase):
- def fixture(self,base,capture=True):
+ def fixture(self,base,capture=True,ui_test=False):
   src={'tools/uart-console.c':b'console source','tools/build-uart-console.sh':b'console build','tools/uart-libSystem.tbd':b'link stub'}
   if capture:src.update({name:('source '+name).encode() for name in stage.CAPTURE_FILES})
+  if ui_test:src.update({name:('source '+name).encode() for name in stage.UI_TEST_FILES})
   pin={'github_repository':'test/source','commit':'a'*40,'files':{k:hashlib.sha256(v).hexdigest() for k,v in src.items()}}
   (base/'uart-console-source.json').write_text(json.dumps(pin))
   work=base/'work';(work/'bsd/dev').mkdir(parents=True,exist_ok=True)
@@ -62,6 +63,41 @@ class Staging(unittest.TestCase):
    with tempfile.TemporaryDirectory() as d:
     base=Path(d);src,pin,work=self.fixture(base);target=work/'bsd/dev/a04br3_console_payload.inc';target.write_text('previous valid include')
     with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen',side_effect=self.fetch(src)),patch.object(stage.subprocess,'run',side_effect=self.builder([],fail=not bad,bad=bad)):
+     with self.assertRaises((ValueError,subprocess.CalledProcessError)):stage.stage_console(work,base/'cache')
+    self.assertEqual(target.read_text(),'previous valid include')
+    self.assertFalse((base/'cache'/('uart-console-'+pin['commit'])/'build.json').exists())
+ def test_optional_ui_program_cache_and_legacy_capture_independence(self):
+  for capture in (False,True):
+   with tempfile.TemporaryDirectory() as d:
+    base=Path(d);src,pin,work=self.fixture(base,capture,True);commands=[]
+    with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen',side_effect=self.fetch(src)),patch.object(stage.subprocess,'run',side_effect=self.builder(commands)):
+     result=stage.stage_console(work,base/'cache');count=2+int(capture)
+     self.assertEqual(len(commands),count);self.assertEqual(result['ui_test']['pin'],pin)
+     text=(work/'bsd/dev/a04br3_console_payload.inc').read_text()
+     self.assertIn('#define A04BR3_UI_TEST_PAYLOAD_PRESENT 1',text)
+     self.assertIn('a04br3_ui_test_payload[]',text)
+     self.assertEqual(stage.stage_console(work,base/'cache'),result);self.assertEqual(len(commands),count)
+     (base/'cache'/('uart-console-'+pin['commit'])/'a04-ui-test').write_bytes(b'tampered')
+     stage.stage_console(work,base/'cache');self.assertEqual(len(commands),count+1)
+     self.assertIn('build-a04-ui-test.sh',commands[-1][1])
+ def test_ui_partial_pin_and_failed_build_do_not_publish(self):
+  with tempfile.TemporaryDirectory() as d:
+   base=Path(d);src,pin,work=self.fixture(base,True,True)
+   del pin['files']['tools/build-a04-ui-test.sh'];(base/'uart-console-source.json').write_text(json.dumps(pin))
+   with patch.object(stage,'SUPPORT',base),patch.object(stage.subprocess,'run') as run:
+    with self.assertRaisesRegex(ValueError,'incomplete pinned UI'):stage.stage_console(work,base/'cache')
+    run.assert_not_called()
+  for invalid in (False,True):
+   with tempfile.TemporaryDirectory() as d:
+    base=Path(d);src,pin,work=self.fixture(base,True,True)
+    target=work/'bsd/dev/a04br3_console_payload.inc';target.write_text('previous valid include')
+    normal=self.builder([])
+    def builder(cmd,check):
+     if 'build-a04-ui-test.sh' in cmd[1]:
+      if invalid:Path(cmd[2]).write_bytes(b'bad binary');return
+      raise subprocess.CalledProcessError(1,cmd)
+     normal(cmd,check)
+    with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen',side_effect=self.fetch(src)),patch.object(stage.subprocess,'run',side_effect=builder):
      with self.assertRaises((ValueError,subprocess.CalledProcessError)):stage.stage_console(work,base/'cache')
     self.assertEqual(target.read_text(),'previous valid include')
     self.assertFalse((base/'cache'/('uart-console-'+pin['commit'])/'build.json').exists())

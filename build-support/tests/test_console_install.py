@@ -55,10 +55,10 @@ struct vnode_attr {unsigned mask,supported;uint64_t values[5];};
 typedef struct node {int dir,regular,uid,mode,links,mount,exists;unsigned bytes;unsigned char data[2048];} *vnode_t;
 typedef int vfs_context_t;
 struct componentname {int cn_nameiop,cn_flags,cn_context;char *cn_nameptr;int cn_namelen;};
-static struct node root,dirs[3],targets[2],temps[2];static vnode_t rootvnode=&root;
-static unsigned writes,renames,removes,enabled=1,corrupt_capture,partial_capture,unsafe_temp,unsafe_target;
-static const char *leaves[]={"launchd.a04br3","a04-fb-capture"};
-static int which(const char *path){return strstr(path,"a04-fb-capture")?1:0;}
+static struct node root,dirs[3],targets[3],temps[3];static vnode_t rootvnode=&root;
+static unsigned writes,renames,removes,enabled=1,corrupt_capture,partial_capture,unsafe_temp,unsafe_target,corrupt_ui,missing_ui;
+static const char *leaves[]={"launchd.a04br3","a04-fb-capture","a04-ui-test"};
+static int which(const char *path){return strstr(path,"a04-ui-test")?2:strstr(path,"a04-fb-capture")?1:0;}
 static vfs_context_t vfs_context_kernel(void){return 1;}
 static int vfs_context_ucred(int x){return x;}
 static int vfs_context_proc(int x){return x;}
@@ -77,7 +77,7 @@ static int vnode_lookup(const char *path,int flags,vnode_t *out,int ctx){
  (void)ctx;assert(flags==VNODE_LOOKUP_NOFOLLOW);
  const char *names[]={"/usr","/usr/appleinternal","/usr/appleinternal/sbin"};
  for(unsigned i=0;i<3;i++)if(!strcmp(path,names[i])){*out=dirs+i;return 0;}
- assert(!strncmp(path,"/usr/appleinternal/sbin/",24));*out=targets+which(path);return 0;
+ assert(!strncmp(path,"/usr/appleinternal/sbin/",24));if(which(path)==2&&missing_ui){*out=NULL;return ENOENT;}*out=targets+which(path);return 0;
 }
 static int vnode_open(const char *path,int flags,int mode,int unused,vnode_t *out,int ctx){
  (void)unused;(void)ctx;assert(flags==(FWRITE|O_CREAT|O_NOFOLLOW)&&mode==0600);
@@ -87,14 +87,14 @@ static int vnode_open(const char *path,int flags,int mode,int unused,vnode_t *ou
 static int vn_rdwr(int operation,vnode_t n,char *p,int count,off_t offset,int space,int flags,int cred,int *resid,int proc){
  (void)space;(void)flags;(void)cred;(void)proc;assert(count>=0&&offset>=0&&offset+count<=2048);
  *resid=0;if(operation==UIO_WRITE){writes++;memcpy(n->data+offset,p,count);n->bytes=(unsigned)(offset+count);if(n==temps+1&&partial_capture)*resid=1;}
- else{memcpy(p,n->data+offset,count);if(n==temps+1&&corrupt_capture)p[0]^=1;}return 0;
+ else{memcpy(p,n->data+offset,count);if((n==temps+1&&corrupt_capture)||(n==temps+2&&corrupt_ui))p[0]^=1;}return 0;
 }
 static int vn_close(vnode_t n,int flags,int ctx){(void)n;(void)flags;(void)ctx;return 0;}
 static void vnode_put(vnode_t n){(void)n;}
 static int sync_node(vnode_t n,int flags,int ctx){(void)n;(void)flags;(void)ctx;return 0;}
 #define VNOP_FSYNC sync_node
 static int rename_node(vnode_t p,vnode_t temp,struct componentname *from,vnode_t p2,vnode_t target,struct componentname *to,int ctx){
- (void)ctx;assert(p==dirs+2&&p2==p);unsigned i=target==targets+1;
+ (void)ctx;assert(p==dirs+2&&p2==p);unsigned i=(unsigned)which(to->cn_nameptr);assert(!target||target==targets+i);if(!target)target=targets+i;
  assert(temp==temps+i&&!strcmp(to->cn_nameptr,leaves[i]));
  assert(from->cn_nameptr[0]=='.'&&from->cn_nameiop==DELETE&&to->cn_nameiop==RENAME);
  *target=*temp;temp->exists=0;renames++;return 0;
@@ -107,10 +107,10 @@ static int remove_node(vnode_t p,vnode_t temp,struct componentname *cn,int flags
 static int PE_parse_boot_argn(const char *s,void *p,int bytes){(void)s;assert(bytes==sizeof(unsigned));*(unsigned *)p=enabled;return 1;}
 #include "HEADER"
 static void reset(void){
- writes=renames=removes=corrupt_capture=partial_capture=unsafe_temp=unsafe_target=0;enabled=1;
+ writes=renames=removes=corrupt_capture=partial_capture=unsafe_temp=unsafe_target=corrupt_ui=missing_ui=0;enabled=1;
  root.mount=1;
  for(unsigned i=0;i<3;i++)dirs[i]=(struct node){.dir=1,.uid=0,.mode=0755,.links=1,.mount=1};
- for(unsigned i=0;i<2;i++){
+ for(unsigned i=0;i<3;i++){
   targets[i]=(struct node){.regular=1,.uid=0,.mode=0755,.links=1,.mount=1,.exists=1,.bytes=3,.data={'o','l','d'}};
   temps[i]=(struct node){.regular=1,.uid=0,.mode=0600,.links=1,.mount=1};
  }
@@ -148,4 +148,27 @@ int main(void){
    subprocess.run(['clang','-std=c11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror',
                    '-fsanitize=address,undefined','-I',str(p),str(p/'legacy.c'),'-o',str(p/'legacy')],check=True)
    subprocess.run([str(p/'legacy')],check=True)
+   # Three independently renamed programs: an optional UI helper failure must
+   # preserve its old executable and leave console/capture installation valid.
+   (p/'a04br3_console_payload.inc').write_text('static const unsigned char a04br3_console_payload[700]={1,2,3};\n#define A04BR3_CAPTURE_PAYLOAD_PRESENT 1\nstatic const unsigned char a04br3_fb_capture_payload[1100]={4,5,6};\n#define A04BR3_UI_TEST_PAYLOAD_PRESENT 1\nstatic const unsigned char a04br3_ui_test_payload[900]={7,8,9};\n')
+   ui_source=source[:source.index('int main(void){')]+r'''int main(void){
+ reset();assert(prepare_uart_console()==0&&writes==3&&renames==3);
+ assert(targets[2].bytes==sizeof(a04br3_ui_test_payload)&&targets[2].mode==0755);
+ assert(!memcmp(targets[2].data,a04br3_ui_test_payload,targets[2].bytes));
+ reset();corrupt_ui=1;assert(prepare_uart_console()==0&&renames==2&&removes==1);
+ assert(targets[2].bytes==3&&!memcmp(targets[2].data,"old",3));
+ assert(targets[0].bytes==700&&targets[1].bytes==1100);
+ reset();temps[2].links=2;assert(prepare_uart_console()==0&&renames==2&&writes==2&&!removes);
+ assert(!memcmp(targets[2].data,"old",3));
+ reset();targets[2].links=2;assert(prepare_uart_console()==0&&renames==2&&writes==2);
+ assert(!memcmp(targets[2].data,"old",3));
+ reset();missing_ui=1;targets[2].exists=0;assert(prepare_uart_console()==0&&renames==3);
+ assert(targets[2].exists&&targets[2].bytes==900);
+ reset();enabled=0;assert(prepare_uart_console()==0&&!writes&&!renames);
+ return 0;}'''
+   (p/'ui.c').write_text(ui_source)
+   subprocess.run(['clang','-std=c11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror',
+                   '-fsanitize=address,undefined','-I',str(p),str(p/'ui.c'),'-o',str(p/'ui')],check=True)
+   subprocess.run([str(p/'ui')],check=True)
+
 if __name__=='__main__':unittest.main()
