@@ -140,7 +140,11 @@ int A04BR3BSDNetwork::scanCompleted()
     if(!error && (!interface || !a04_network_control_ready(&state)))error=ENETDOWN;
     ifnet_t ifp=interface;
     if(!error)error=ifnet_reference(ifp);
-    struct { struct kern_event_msg header; uint8_t tail[12]; } event={};
+    /* XNU's internal build opts into a zero-length/flexible event_data;
+     * external KPI consumers retain event_data[1]. Size the tail from the
+     * real header definition, keeping the same exact 24+16 wire message. */
+    struct { struct kern_event_msg header;
+        uint8_t tail[40-sizeof(struct kern_event_msg)]; } event={};
     static_assert(offsetof(struct kern_event_msg,event_data)==24,"native event header");
     static_assert(sizeof(event)==40,"native event payload is exact ifname16");
     event.header.total_size=sizeof(event);event.header.vendor_code=1;

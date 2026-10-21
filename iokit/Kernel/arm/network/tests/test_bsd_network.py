@@ -106,7 +106,17 @@ static int ifnet_set_mtu(ifnet_t,unsigned n){assert(n==1500);return failMtu;}
 static int ifnet_set_flags(ifnet_t p,unsigned v,unsigned mask){p->flags=(p->flags&~mask)|(v&mask);return failFlags;}
 static int ifnet_attach(ifnet_t p,const sockaddr_dl *a){assert(a->sdl_alen==6 && a->sdl_family==AF_LINK && !memcmp(LLADDR(a),p->init.uniqueid,6));if(failAttach)return failAttach;p->attached=true;return 0;}
 static int ifnet_release(ifnet_t p){assert(p->refs);p->refs--;if(p->refs)return 0;if(p==current)current=nullptr;if(p==pending)pending=nullptr;delete p;releaseCount++;return 0;}
-struct kern_event_msg {uint32_t total_size,vendor_code,kev_class,kev_subclass,id,event_code,event_data[1];};
+#ifndef A04_TEST_EVENT_WORDS
+#define A04_TEST_EVENT_WORDS 1
+#endif
+#if A04_TEST_EVENT_WORDS == 0
+#define A04_TEST_EVENT_ARRAY 0 /* GCC host ABI model of XNU flexible member: sizeof24, offset24 */
+#else
+#define A04_TEST_EVENT_ARRAY 1
+#endif
+struct kern_event_msg {uint32_t total_size,vendor_code,kev_class,kev_subclass,id,event_code,event_data[A04_TEST_EVENT_ARRAY];};
+static_assert(offsetof(kern_event_msg,event_data)==24,"both XNU event layouts share header offset");
+static_assert(sizeof(kern_event_msg)==24+4*A04_TEST_EVENT_WORDS,"exercise actual24 and legacy28 headers");
 static int baseEvents,scanEvents,eventError;static ifnet_t lastBaseIfnet;
 static int ifnet_event(ifnet_t p,kern_event_msg *e){
  assert(p && p==current && !heldLocks);lastBaseIfnet=p;baseEvents++;
@@ -304,7 +314,9 @@ class BSDNetwork(unittest.TestCase):
                 p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('#include "stub.h"\n')
             (root/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text())
             (root/'case.cpp').write_text(CASE);exe=root/'case'
-            subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I',str(root),'-I',str(SOURCE),str(root/'case.cpp'),'-o',str(exe)],check=True)
-            subprocess.run([str(exe)],check=True)
+            for words in (0,1):
+                with self.subTest(event_header_bytes=24+4*words):
+                    subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-DA04_TEST_EVENT_WORDS='+str(words),'-I',str(root),'-I',str(SOURCE),str(root/'case.cpp'),'-o',str(exe)],check=True)
+                    subprocess.run([str(exe)],check=True)
 
 if __name__=='__main__':unittest.main()

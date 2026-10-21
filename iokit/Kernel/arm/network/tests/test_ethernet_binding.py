@@ -274,8 +274,10 @@ class EthernetBinding(unittest.TestCase):
    for h in SOURCE.glob('*.h'):(p/h.name).write_text(h.read_text().replace('../sdio/','sdio/'))
    for name in ['A04BR3Ethernet.cpp','A04BR3NetworkRuntime.cpp']:(p/name).write_text((SOURCE/name).read_text())
    (p/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text());(p/'case.cpp').write_text(case)
-   subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I',str(p),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
-   subprocess.run([str(p/'case')],check=True)
+   for words in (0,1):
+    with self.subTest(event_header_bytes=24+4*words):
+     subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-DA04_TEST_EVENT_WORDS='+str(words),'-I',str(p),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
+     subprocess.run([str(p/'case')],check=True)
  def test_source_wireless_registration(self):
   # Genuine source-defined metaclasses, one functional implementation each;
   # not IOClass properties or guessed private Apple vtable declarations.
