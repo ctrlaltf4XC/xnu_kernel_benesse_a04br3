@@ -63,26 +63,33 @@ static int merge_existing_fairplay(vnode_t current,unsigned restore,vfs_context_
     vnode_t backup=NULLVP,temp=NULLVP;
     size_t live_len=0,original_len=0,merged_len=0;
     struct vnode_attr live_va,backup_va;
+    const char *stage="allocate";
     int error=ENOMEM;
     if(!live || !original || !merged)goto out;
+    stage="read active policy";
     error=fp_read(current,live,A04_FP_MAX_OUTPUT,&live_len,&live_va,ctx);
     if(error)goto out;
+    stage="lookup original policy";
     error=vnode_lookup(A04_FP_DIR "disabled.a04br3.original",VNODE_LOOKUP_NOFOLLOW,&backup,ctx);
     if(error==ENOENT){
         error=0;
         if(restore)goto out; /* No transaction owned by us to undo. */
         if(live_len>A04_FP_MAX_INPUT){error=EFBIG;goto out;}
+        stage="parse active policy";
         error=a04_bp_disable_fp(live,live_len,merged,A04_FP_MAX_OUTPUT,&merged_len);
-        if(error)goto out;
+        if(error){printf("A04BR3 ROOT: FairPlay policy parse error=%d bytes=%lu header=%02x%02x%02x%02x%02x%02x%02x%02x\n",error,(unsigned long)live_len,live_len>0?live[0]:0,live_len>1?live[1]:0,live_len>2?live[2]:0,live_len>3?live[3]:0,live_len>4?live[4]:0,live_len>5?live[5]:0,live_len>6?live[6]:0,live_len>7?live[7]:0);goto out;}
         if(live_len==merged_len && !memcmp(live,merged,live_len))goto out;
         memcpy(original,live,live_len);original_len=live_len;
+        stage="save original policy";
         error=fp_create(A04_FP_DIR "disabled.a04br3.original","disabled.a04br3.original",
             original,original_len,0600,0,&backup,ctx);
         if(error)goto out;
     }else{
         if(error)goto out;
+        stage="read original policy";
         error=fp_read(backup,original,A04_FP_MAX_INPUT,&original_len,&backup_va,ctx);
         if(error)goto out;
+        stage="parse original policy";
         error=a04_bp_disable_fp(original,original_len,merged,A04_FP_MAX_OUTPUT,&merged_len);
         if(error)goto out;
         int is_original=live_len==original_len && !memcmp(live,original,live_len);
@@ -91,11 +98,13 @@ static int merge_existing_fairplay(vnode_t current,unsigned restore,vfs_context_
         if(restore && is_original){error=fp_remove(backup,"disabled.a04br3.original",ctx);goto out;}
         if(!restore && is_merged)goto out;
     }
+    stage="write pending policy";
     error=fp_create(A04_FP_DIR "disabled.a04br3.pending","disabled.a04br3.pending",
         restore?original:merged,restore?original_len:merged_len,
         live_va.va_mode&0777,live_va.va_gid,&temp,ctx);
     if(error)goto out;
     extern int a04br3_fairplay_override_commit(void);
+    stage="commit pending policy";
     error=a04br3_fairplay_override_commit();
     if(error){int cleanup=fp_remove(temp,"disabled.a04br3.pending",ctx);if(cleanup)printf("A04BR3 ROOT: FairPlay pending cleanup error=%d\n",cleanup);}
     else if(restore)error=fp_remove(backup,"disabled.a04br3.original",ctx);
@@ -103,6 +112,7 @@ static int merge_existing_fairplay(vnode_t current,unsigned restore,vfs_context_
         restore?"restored":"merged",(unsigned long)live_len,
         (unsigned long)(restore?original_len:merged_len));
 out:
+    if(error)printf("A04BR3 ROOT: FairPlay transaction stage=%s error=%d\n",stage,error);
     if(temp!=NULLVP)vnode_put(temp);
     if(backup!=NULLVP)vnode_put(backup);
     if(live)kfree_data(live,A04_FP_MAX_OUTPUT);
