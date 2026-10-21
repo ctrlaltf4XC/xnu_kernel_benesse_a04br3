@@ -2,7 +2,8 @@
  * MT8167 inherited MSDC0 bounded read/write bring-up.
  * Adapted from mouseos EDK2 Mt8167Pkg/Drivers/EmmcBlockIoDxe,
  * and Platform/Benesse/A04BR3Pkg/Drivers/SdCardBlockIoDxe.
- * Optional writes are confined to GPT userdata; no clock/timing changes.
+ * Filesystem writes are confined to GPT userdata; a separate root-only boot
+ * staging cdev supports verified self-update. No clock/timing changes.
  */
 #if defined(ARM64_BOARD_CONFIG_A04BR3)
 #include <sys/systm.h>
@@ -11,6 +12,10 @@
 #include <sys/conf.h>
 #include <sys/disk.h>
 #include <sys/uio.h>
+#include <sys/proc.h>
+#include <sys/ioccom.h>
+#include <libkern/crypto/sha2.h>
+#include "a04br3_boot_update.h"
 #include <kern/locks.h>
 #include <kern/kalloc.h>
 #include <miscfs/devfs/devfs.h>
@@ -238,9 +243,12 @@ static uint32_t header_crc(const uint8_t *p, unsigned size) {
 static uint32_t disk_sectors;
 static uint32_t root_first,root_sectors;
 static uint32_t nvram_first,nvram_sectors;
+static uint32_t boot_first,boot_sectors,boot_gpt_lba;
+static unsigned boot_update_enabled;
 static dev_t root_device;
 static unsigned write_enabled,cache_enabled;
 /* Never expose full-disk writes, including GPT, LK or boot partitions. */
+static int flush_card_force(void);
 static int write_root_block(uint64_t block,const uint8_t sector[512]) {
     if (!write_enabled) return EROFS;
     if (block>=root_sectors || root_first>=disk_sectors ||
@@ -256,8 +264,11 @@ static int write_root_blocks(uint64_t block,const uint8_t *data,unsigned blocks)
     return write_blocks_raw(root_first+(uint32_t)block,data,blocks);
 }
 static int flush_card(void) {
+    return write_enabled ? flush_card_force() : 0;
+}
+static int flush_card_force(void) {
     uint32_t response;
-    if (!write_enabled || !cache_enabled) return 0;
+    if (!cache_enabled) return 0;
     int error=command(6,(3u<<24)|(32u<<16)|(1u<<8),0,&response);
     if (error) return error;
     uint64_t end=deadline();
@@ -272,6 +283,160 @@ static uint64_t read_bytes,read_ticks,read_requests;
 static uint64_t write_bytes,write_ticks,write_requests;
 static LCK_GRP_DECLARE(msdc_group,"a04br3_msdc");
 static LCK_MTX_DECLARE(msdc_lock,&msdc_group);
+/* Separate, exclusive root-only staging endpoint. Existing full disk/raw
+ * write policy is unchanged. boot_lock -> msdc_lock is the only lock order. */
+static LCK_MTX_DECLARE(boot_lock,&msdc_group);
+static vm_offset_t boot_stage,boot_scratch;
+static uint64_t boot_image_bytes,boot_staged;
+static uint8_t boot_digest[32];
+static uint32_t boot_flags;
+static int boot_opened;
+static void boot_discard(void) {
+    if(boot_stage)kmem_free(kernel_map,boot_stage,(vm_size_t)boot_image_bytes);
+    if(boot_scratch)kmem_free(kernel_map,boot_scratch,65536);
+    boot_stage=boot_scratch=0;boot_image_bytes=boot_staged=0;boot_flags=0;
+    bzero(boot_digest,sizeof(boot_digest));
+}
+static int boot_open(__unused dev_t dev,__unused int flags,__unused int type,struct proc *p) {
+    if(proc_suser(p))return EPERM;
+    lck_mtx_lock(&boot_lock);
+    int error=(!boot_sectors || !boot_update_enabled) ? ENXIO : boot_opened ? EBUSY : 0;
+    if(!error)boot_opened=1;
+    lck_mtx_unlock(&boot_lock);return error;
+}
+static int boot_close(__unused dev_t dev,__unused int flags,__unused int type,__unused struct proc *p) {
+    lck_mtx_lock(&boot_lock);boot_discard();boot_opened=0;
+    lck_mtx_unlock(&boot_lock);return 0;
+}
+/* Freshly re-read both CRCs before any flash write. The discovered partition
+ * must still be the exact same unique boot range used by INFO/BEGIN. */
+static int boot_parse_gpt(const uint8_t header[512],uint32_t sectors,uint32_t *first,uint32_t *count) {
+    static uint8_t entries[128*128];
+    uint32_t n=le32(header+80),size=le32(header+84);
+    uint64_t lba=le64(header+72);
+    if(n==0 || n>128 || size!=128 || lba>=sectors ||
+        (n*size+511)/512>sectors-lba)return EINVAL;
+    for(unsigned at=0;at<n*size;at+=512) {
+        int error=read_block(17,(uint32_t)lba+at/512,entries+at);if(error)return error;
+    }
+    return a04_boot_gpt(header,entries,sectors,first,count);
+}
+static int boot_revalidate_gpt(void) {
+    uint8_t header[512];uint32_t first=0,count=0;
+    int error=read_block(17,boot_gpt_lba,header);if(error)return error;
+    if(le64(header+24)!=boot_gpt_lba)return EINVAL;
+    error=boot_parse_gpt(header,disk_sectors,&first,&count);
+    return error ? error : first!=boot_first || count!=boot_sectors ? EINVAL : 0;
+}
+/* The caller has boot_lock. Controller ownership is bounded to one <=64KiB
+ * transfer so root filesystem progress is not blocked by the entire update. */
+static int boot_transfer(uint64_t offset,void *buffer,unsigned bytes,int writing) {
+    if(!bytes || bytes>65536 || (bytes&511u) || (offset&511u) ||
+        offset>(uint64_t)boot_sectors*512 || bytes>(uint64_t)boot_sectors*512-offset ||
+        boot_first>=disk_sectors || boot_sectors>disk_sectors-boot_first)return EINVAL;
+    lck_mtx_lock(&msdc_lock);
+    uint32_t cfg=rd(CFG),inten=rd(INTEN);
+    wr(INTEN,0);wr(CFG,cfg|(1u<<3));
+    int error=writing ? write_blocks_raw(boot_first+(uint32_t)(offset/512),buffer,bytes/512) :
+        read_blocks(17,boot_first+(uint32_t)(offset/512),buffer,bytes/512);
+    wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+    lck_mtx_unlock(&msdc_lock);return error;
+}
+static int boot_flush(int validate) {
+    lck_mtx_lock(&msdc_lock);
+    uint32_t cfg=rd(CFG),inten=rd(INTEN);
+    wr(INTEN,0);wr(CFG,cfg|(1u<<3));
+    int error=validate ? boot_revalidate_gpt() : flush_card_force();
+    wr(INTR,rd(INTR));wr(CFG,cfg);wr(INTEN,inten);
+    lck_mtx_unlock(&msdc_lock);return error;
+}
+static int boot_commit(void) {
+    if(!boot_stage || boot_flags!=A04_BOOT_STAGING || boot_staged!=boot_image_bytes)return EINVAL;
+    uint8_t digest[32];SHA256_CTX hash;
+    SHA256_Init(&hash);SHA256_Update(&hash,(void *)boot_stage,(size_t)boot_image_bytes);
+    SHA256_Final(digest,&hash);
+    int error=memcmp(digest,boot_digest,32) ? EINVAL :
+        a04_boot_image((void *)boot_stage,boot_image_bytes);
+    if(!error)error=boot_flush(1);
+    /* No write occurs before ALL of the above checks succeed. */
+    for(uint64_t at=0;!error && at<boot_image_bytes;) {
+        unsigned bytes=(unsigned)MIN(65536ULL,boot_image_bytes-at);
+        error=boot_transfer(at,(void *)(boot_stage+at),bytes,1);at+=bytes;
+    }
+    if(!error)error=boot_flush(0);
+    SHA256_Init(&hash);
+    for(uint64_t at=0;!error && at<boot_image_bytes;) {
+        unsigned bytes=(unsigned)MIN(65536ULL,boot_image_bytes-at);
+        error=boot_transfer(at,(void *)boot_scratch,bytes,0);
+        if(!error)SHA256_Update(&hash,(void *)boot_scratch,bytes);
+        at+=bytes;
+    }
+    SHA256_Final(digest,&hash);
+    if(!error && memcmp(digest,boot_digest,32))error=EIO;
+    if(!error)error=boot_flush(0);
+    boot_flags=error ? A04_BOOT_FAILED : A04_BOOT_VERIFIED;
+    printf("A04BR3 BOOT UPDATE: commit bytes=%llu result=%d verified=%u; no automatic reboot\n",
+        (unsigned long long)boot_image_bytes,error,error==0);
+    return error;
+}
+static int boot_write(__unused dev_t dev,struct uio *uio,__unused int flags) {
+    if(proc_suser(current_proc()))return EPERM;
+    lck_mtx_lock(&boot_lock);
+    int error=0;
+    if(!boot_opened || !boot_stage || boot_flags!=A04_BOOT_STAGING ||
+        uio_offset(uio)<0 || (uint64_t)uio_offset(uio)!=boot_staged ||
+        uio_resid(uio)<0 || (uint64_t)uio_resid(uio)>boot_image_bytes-boot_staged)error=EINVAL;
+    while(!error && uio_resid(uio)>0) {
+        int bytes=(int)MIN((uint64_t)uio_resid(uio),65536ULL);
+        user_ssize_t before=uio_resid(uio);
+        error=uiomove((caddr_t)(boot_stage+boot_staged),bytes,uio);
+        boot_staged+=(uint64_t)(before-uio_resid(uio));
+    }
+    /* Even a partially faulted copy is never eligible for COMMIT. */
+    if(error && boot_stage)boot_flags=A04_BOOT_FAILED;
+    lck_mtx_unlock(&boot_lock);return error;
+}
+static int boot_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,int flag,struct proc *p) {
+    if(proc_suser(p))return EPERM;
+    lck_mtx_lock(&boot_lock);int error=0;
+    if(!boot_opened){error=ENXIO;goto out;}
+    switch(cmd) {
+    case A04_BOOT_INFO: {
+        struct a04_boot_info *info=(void *)data;
+        *info=(struct a04_boot_info){A04_BOOT_VERSION,boot_flags,
+            (uint64_t)boot_sectors*512,boot_staged,boot_image_bytes};break;
+    }
+    case A04_BOOT_BEGIN: {
+        const struct a04_boot_begin *request=(void *)data;
+        if(!(flag&FWRITE)){error=EBADF;break;}
+        if(boot_stage){error=EBUSY;break;}
+        if(request->reserved || a04_boot_length(request->image_bytes,(uint64_t)boot_sectors*512)){
+            error=EINVAL;break;
+        }
+        vm_offset_t stage=0,scratch=0;
+        if(kmem_alloc(kernel_map,&stage,(vm_size_t)request->image_bytes,KMA_ZERO,VM_KERN_MEMORY_BSD)!=KERN_SUCCESS){
+            error=ENOMEM;break;
+        }
+        if(kmem_alloc(kernel_map,&scratch,65536,KMA_ZERO,VM_KERN_MEMORY_BSD)!=KERN_SUCCESS){
+            kmem_free(kernel_map,stage,(vm_size_t)request->image_bytes);error=ENOMEM;break;
+        }
+        boot_stage=stage;boot_scratch=scratch;boot_image_bytes=request->image_bytes;
+        boot_staged=0;memcpy(boot_digest,request->sha256,32);boot_flags=A04_BOOT_STAGING;break;
+    }
+    case A04_BOOT_COMMIT:
+        error=(flag&FWRITE) ? boot_commit() : EBADF;break;
+    case A04_BOOT_ABORT:
+        if(!(flag&FWRITE))error=EBADF;else boot_discard();break;
+    default:error=ENOTTY;break;
+    }
+out:
+    lck_mtx_unlock(&boot_lock);return error;
+}
+static const struct cdevsw boot_cdevsw = {
+    .d_open=boot_open,.d_close=boot_close,.d_read=eno_rdwrt,.d_write=boot_write,
+    .d_ioctl=boot_ioctl,.d_stop=eno_stop,.d_reset=eno_reset,.d_select=eno_select,
+    .d_mmap=eno_mmap,.d_strategy=eno_strat,.d_reserved_1=eno_getc,.d_reserved_2=eno_putc
+};
 static int disk_open(__unused dev_t dev,int flags,__unused int type,__unused struct proc *p) {
     if (!disk_sectors || minor(dev)>1 || (minor(dev)==1 && !root_sectors)) return ENXIO;
     return (flags&FWRITE) && (!write_enabled || minor(dev)!=1) ? EROFS : 0;
@@ -417,6 +582,12 @@ static int register_disk(uint32_t sectors) {
         if (!devfs_make_node(root_device,DEVFS_BLOCK,UID_ROOT,GID_OPERATOR,0440,"emmcroot0") ||
             !devfs_make_node(makedev(cmajor,1),DEVFS_CHAR,UID_ROOT,GID_OPERATOR,0440,"remmcroot0")) return ENXIO;
     }
+    if(boot_update_enabled && boot_sectors) {
+        int major=cdevsw_add(-1,&boot_cdevsw);
+        if(major<0 || !devfs_make_node(makedev(major,0),DEVFS_CHAR,UID_ROOT,GID_WHEEL,0600,"a04boot")) {
+            printf("A04BR3 BOOT UPDATE: device registration failed\n");
+        } else printf("A04BR3 BOOT UPDATE: /dev/a04boot root-only stage+verified commit; first=%u sectors=%u\n",boot_first,boot_sectors);
+    }
     printf("A04BR3 MSDC0: full disk read-only; userdata writes=%u cache=%u\n",write_enabled,cache_enabled);
     return 0;
 }
@@ -536,6 +707,14 @@ void a04br3_msdc_probe(void) {
         printf("A04BR3 MSDC0: GPT header CRC verified at LBA=%u entries_LBA=%llu count=%u size=%u\n",
             locations[i],le64(sector+72),le32(sector+80),le32(sector+84));
         error=find_root_partition(sector,sectors);
+        if(!error) {
+            boot_update_enabled=PE_parse_boot_argn("a04br3.boot_update",&enabled,sizeof(enabled)) && enabled==1;
+            if(boot_update_enabled) {
+                int be=boot_parse_gpt(sector,sectors,&boot_first,&boot_sectors);
+                if(!be)boot_gpt_lba=locations[i];
+                else {boot_first=boot_sectors=0;printf("A04BR3 BOOT UPDATE: unavailable GPT error=%d\n",be);}
+            }
+        }
         found=!error;break;
     }
     if (!error && !found) error=ENOENT;

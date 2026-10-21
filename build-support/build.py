@@ -64,6 +64,9 @@ def main():
                     copied_source_files=source_files(ROOT), source_sync_version=2,
                     dependency_source_sha256=dependency_source_digest())
     (out / 'build.json').write_text(json.dumps(metadata, indent=2) + '\n')
+    from uart_console import stage_console
+    metadata['uart_console'] = stage_console(work / 'xnu', work / 'generated-tools')
+    (out / 'build.json').write_text(json.dumps(metadata, indent=2) + '\n')
     env = dict(os.environ, KDKROOT=str(kdk))
     run(['bash', SUPPORT / 'driver.sh', work], env=env)
     kernel = work / 'fakeroot/System/Library/Kernels/kernel.development.a04br3'

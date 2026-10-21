@@ -103,6 +103,9 @@ def main():
     metadata['source_sync_version'] = 2
     metadata.update(source_commit=args.source_commit, incremental_base_commit=base)
     metadata_path.write_text(json.dumps(metadata, indent=2) + '\n')
+    from uart_console import stage_console
+    metadata['uart_console'] = stage_console(out / 'work/xnu', out / 'work/generated-tools')
+    metadata_path.write_text(json.dumps(metadata, indent=2) + '\n')
     subprocess.run(['bash', str(SUPPORT / 'driver.sh'), str(out / 'work')], check=True)
     kernel = out / 'work/fakeroot/System/Library/Kernels/kernel.development.a04br3'
     shutil.copyfile(kernel, out / kernel.name)
