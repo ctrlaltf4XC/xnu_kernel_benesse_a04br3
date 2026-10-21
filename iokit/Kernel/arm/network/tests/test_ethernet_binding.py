@@ -101,6 +101,8 @@ static void bindingCases(){
  realState.firmware_running=realState.control_ready=1;
  int error=99;auto *controller=a04br3_network_start(&provider,&b,&error);
  assert(controller && !error && current && childCount==3);
+ assert(dynamic_cast<IO80211Controller *>(controller));
+ assert(dynamic_cast<IO80211Interface *>(mockAttachedInterface));
  assert(current->refs==2); // one allocated ifnet: bridge ref + genuine base ref
  auto *actual=OSDynamicCast(A04BR3EthernetInterface,mockAttachedInterface);assert(actual);
  assert(actual->getIfnet()==current); // actual Apple getter sees private field
@@ -171,6 +173,25 @@ class EthernetBinding(unittest.TestCase):
    (p/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text());(p/'case.cpp').write_text(case)
    subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I',str(p),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
    subprocess.run([str(p/'case')],check=True)
+ def test_source_wireless_registration(self):
+  # Genuine source-defined metaclasses, one functional implementation each;
+  # not IOClass properties or guessed private Apple vtable declarations.
+  impl=(SOURCE/'A04BR3Ethernet.cpp').read_text()
+  header=(SOURCE/'A04BR3Ethernet.h').read_text()
+  for child,parent in [('IO80211Controller','IOEthernetController'),('IO80211Interface','IOEthernetInterface')]:
+   self.assertIn('class '+child+' : public '+parent,header)
+   declaration='OSDefineMetaClassAndStructors('+child+','+parent+')'
+   self.assertIn(declaration,impl)
+   definitions=[]
+   for f in SOURCE.parents[3].rglob('*.cpp'):
+    if declaration in f.read_text(errors='replace'):definitions.append(f)
+   self.assertEqual(definitions,[SOURCE/'A04BR3Ethernet.cpp'])
+  self.assertIn('return network.dispatch(command,arg1)',impl)
+  self.assertNotIn('setProperty("IOClass"',impl)
+  self.assertIn('static int set(void *,uint32_t,uint32_t,const void *,uint32_t){return EOPNOTSUPP;}',(SOURCE/'A04BR3NativeRendezvous.cpp').read_text())
+  files=(SOURCE.parents[2]/'conf/files.arm64').read_text()
+  self.assertEqual(files.count('network/A04BR3Ethernet.cpp'),1)
+  self.assertNotIn('IO80211Family',files)
  def test_pinned_provenance(self):
   manifest=json.loads((SOURCE/'apple/SOURCE.json').read_text())
   self.assertEqual(manifest['revision'],'bb910e2b458939f6b1f53c0fa6907f258b431ea4')

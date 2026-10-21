@@ -1,14 +1,16 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
  * Original A04 integration of pinned genuine Apple IONetworkingFamily classes.
- * No private IO80211 class/vtable identity or link result is impersonated.
+ * The controller is an original, functional source IO80211Controller for this
+ * board. It uses public Ethernet KPIs plus proven native BSD ioctl envelopes;
+ * no stock proprietary IO80211 vtable or user-client ABI is asserted.
  */
 #ifndef A04BR3_ETHERNET_H
 #define A04BR3_ETHERNET_H
 #include "apple/IOEthernetController.h"
 #include "apple/IOEthernetInterface.h"
 #include "A04BR3BSDNetwork.h"
-class A04BR3EthernetInterface : public IOEthernetInterface {
-    OSDeclareDefaultStructors(A04BR3EthernetInterface);
+class IO80211Interface : public IOEthernetInterface {
+    OSDeclareDefaultStructors(IO80211Interface);
     A04BR3BSDNetwork network;
     a04_network_backend backend;
     ifnet_t adopted=nullptr;
@@ -23,8 +25,8 @@ public:
     int refreshBackend(){ return network.refresh(); }
     int receive(mbuf_t m){ return network.input(m); }
 };
-class A04BR3EthernetController : public IOEthernetController {
-    OSDeclareDefaultStructors(A04BR3EthernetController);
+class IO80211Controller : public IOEthernetController {
+    OSDeclareDefaultStructors(IO80211Controller);
     a04_network_backend backend;
     IONetworkInterface *interface=nullptr;
     bool configured=false;
@@ -44,4 +46,8 @@ public:
     int refreshBackend();
     int receive(mbuf_t); /* consumes real DLIL-formatted mbuf, including failures */
 };
+/* Preserve the integration C++ type name while publishing the real controller
+ * metaclass implemented above. This is not an empty class-name shim. */
+using A04BR3EthernetController=IO80211Controller;
+using A04BR3EthernetInterface=IO80211Interface;
 #endif

@@ -110,7 +110,7 @@ static inline int a04_wlan_sta_encode(const struct a04_wlan_local *l,const struc
 }
 static inline int a04_wlan_set(struct a04_wlan_host *h,unsigned cid,const uint8_t *p,unsigned n,unsigned *seq){
  if(!h || !h->runtime || !h->ready || h->failed)return A04_WLAN_STATE;
- unsigned s=a04_wlan_sequence(h);int e=a04_wlan_command(h,cid,s,0x20,p,n);if(e)return e;
+ unsigned s=a04_wlan_sequence(h);int e=a04_wlan_command(h,cid,s,A04_WLAN_CMD_PACKET,p,n);if(e)return e;
  h->tx[6]=1;e=a04_wlan_send(h,n+8,1);if(!e && seq)*seq=s;return e;
 }
 static inline int a04_wlan_station_fail(struct a04_wlan_station *s,struct a04_wlan_host *h,int e){

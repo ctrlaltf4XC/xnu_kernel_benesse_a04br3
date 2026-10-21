@@ -23,7 +23,7 @@ int main(void){
  assert(a04_wmt_le16(p+112)==4 && !memcmp(p+114,ie,4));
  struct a04_wlan_scan_state s;memset(&s,0,sizeof(s));
  assert(!a04_wlan_scan_begin(&h,&s,&req) && s.pending && c.txs==1);
- assert(h.tx[4]==0x1a && h.tx[5]==0x20 && h.tx[6]==1 && h.tx[7]==1 && !memcmp(h.tx+8,p,n));
+ assert(h.tx[4]==0x1a && h.tx[5]==0xa0 && h.tx[6]==1 && h.tx[7]==1 && !memcmp(h.tx+8,p,n));
  uint8_t evt[24];memset(evt,0,sizeof(evt));a04_wmt_put16(evt,12);a04_wmt_put16(evt+2,0xe000);evt[4]=0x0d;evt[8]=43;
  struct a04_wlan_event v;assert(!a04_wlan_event_parse(evt,12,&v));
  assert(!a04_wlan_scan_done(&s,&v) && s.complete && !s.pending);

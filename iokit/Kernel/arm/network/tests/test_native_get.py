@@ -7,6 +7,7 @@ class NativeGET(unittest.TestCase):
   c=r'''
 #include "A04BR3NativeGET.h"
 #include <assert.h>
+#include <initializer_list>
 int main(){a04_network_state s={};uint8_t b[260];uint32_t n=sizeof(b);
 memset(b,0x55,sizeof(b));assert(a04_native_get(&s,19,0,b,&n)==ENETDOWN && b[0]==0x55);
 s.present=s.mac_valid=s.firmware_running=s.control_ready=1;s.mac[0]=2;
@@ -17,7 +18,14 @@ s.radio_enabled=0;n=24;assert(a04_native_get(&s,19,0,b,&n)==0 && b[8]==0);
 b[0]=2;n=24;assert(a04_native_get(&s,19,0,b,&n)==EINVAL && b[0]==2);
 n=260;memset(b,0x55,sizeof(b));assert(a04_native_get(&s,12,0,b,&n)==0 && n==13 && b[13]==0x55);for(unsigned i=0;i<13;i++)assert(!b[i]);n=260;assert(a04_native_get(&s,19,1,b,&n)==EOPNOTSUPP);
 memset(b,0x55,sizeof(b));n=260;assert(a04_native_get(&s,43,0,b,&n)==0 && n==256 && b[255]==0 && b[256]==0x55);
-assert(!strcmp((char *)b,"A04BR3 MT6630 source SDIO runtime"));return 0;}
+assert(!strcmp((char *)b,"A04BR3 MT6630 source SDIO runtime"));
+// Class conformance must not turn unsupported scan/association into success.
+for(unsigned type: {10u,11u,20u,0xffffffffu}){
+ memset(b,0x55,sizeof(b));n=sizeof(b);
+ assert(a04_native_get(&s,type,0,b,&n)==EOPNOTSUPP && n==sizeof(b));
+ for(unsigned i=0;i<sizeof(b);i++)assert(b[i]==0x55);
+}
+return 0;}
 '''
   with tempfile.TemporaryDirectory() as tmp:
    d=Path(tmp);(d/'test.cpp').write_text(c)

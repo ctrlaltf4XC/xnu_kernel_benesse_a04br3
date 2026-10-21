@@ -58,7 +58,7 @@ struct a04_wlan_scan_state {unsigned pending,sequence,bss,complete;int failed;};
 static inline int a04_wlan_scan_begin(struct a04_wlan_host *h,struct a04_wlan_scan_state *s,const struct a04_wlan_scan *request){
  if(!h || !s || !request || !h->runtime || s->pending || s->complete || s->failed)return A04_WLAN_STATE;
  uint8_t payload[714];unsigned n=0;int e=a04_wlan_scan_encode(request,payload,sizeof(payload),&n);if(e)return e;
- unsigned seq=a04_wlan_sequence(h);e=a04_wlan_command(h,0x1a,seq,0x20,payload,n);if(e)return e;
+ unsigned seq=a04_wlan_sequence(h);e=a04_wlan_command(h,0x1a,seq,A04_WLAN_CMD_PACKET,payload,n);if(e)return e;
  h->tx[6]=1;s->pending=1;s->sequence=request->sequence;s->bss=request->bss;
  e=a04_wlan_send(h,n+8,1);if(e)s->failed=e;return e;
 }
@@ -80,7 +80,7 @@ static inline int a04_wlan_channel_encode(const struct a04_wlan_channel *c,unsig
 static inline int a04_wlan_channel_send(struct a04_wlan_host *h,const struct a04_wlan_channel *c,unsigned abort){
  if(!h || !h->runtime)return A04_WLAN_STATE;
  uint8_t p[16];int e=a04_wlan_channel_encode(c,abort,p);if(e)return e;
- e=a04_wlan_command(h,0x1c,a04_wlan_sequence(h),0x20,p,16);if(e)return e;
+ e=a04_wlan_command(h,0x1c,a04_wlan_sequence(h),A04_WLAN_CMD_PACKET,p,16);if(e)return e;
  h->tx[6]=1;return a04_wlan_send(h,24,1);
 }
 static inline int a04_wlan_channel_grant(const struct a04_wlan_channel *c,const struct a04_wlan_event *v,unsigned *interval){

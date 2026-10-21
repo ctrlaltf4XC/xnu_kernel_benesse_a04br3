@@ -1,0 +1,63 @@
+{
+  "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3.git",
+  "revision": "eb47f42e1f84fe5716ef239620725f82718a620a",
+  "license": "GPL-2.0-only; original MediaTek2016 notices retained verbatim; original root COPYING included",
+  "purpose": "Checked-in original test declarations and final wire-header assignment, independent of sibling Android tree; no firmware or investigation logs",
+  "sources": [
+    {
+      "path": "modules/connectivity/wlan/core/gen3/include/nic_cmd_event.h",
+      "sha256": "1df8708ffe64ad5a71b773551c8e646c9e1853e49573affabf340c90a361e4ff"
+    },
+    {
+      "path": "modules/connectivity/wlan/core/gen3/nic/nic_tx.c",
+      "sha256": "fda24814fdfa6dc91c6284fd3efff5162d0bbcf2d216c0866cee64769154c32d"
+    },
+    {
+      "path": "COPYING",
+      "sha256": "af8067302947c01fd9eee72befa54c7e3ef8a48fecde7fd71277f2290b2bf0f7"
+    }
+  ],
+  "declaration_ranges": [
+    {
+      "name": "WIFI_CMD_T",
+      "start_line": 567,
+      "end_line": 576
+    },
+    {
+      "name": "EVENT_NIC_CAPABILITY_T",
+      "start_line": 786,
+      "end_line": 807
+    },
+    {
+      "name": "CMD_SET_BSS_RLM_PARAM_T",
+      "start_line": 1249,
+      "end_line": 1267
+    },
+    {
+      "name": "CMD_SET_BSS_INFO",
+      "start_line": 1269,
+      "end_line": 1293
+    },
+    {
+      "name": "CMD_UPDATE_STA_RECORD_T",
+      "start_line": 1303,
+      "end_line": 1366
+    },
+    {
+      "name": "CMD_802_11_KEY",
+      "start_line": 648,
+      "end_line": 662
+    },
+    {
+      "name": "CMD_BSS_ACTIVATE_CTRL",
+      "start_line": 1239,
+      "end_line": 1247
+    }
+  ],
+  "nic_tx_assignment_start_line": 1995,
+  "fixture_sha256": {
+    "COPYING": "af8067302947c01fd9eee72befa54c7e3ef8a48fecde7fd71277f2290b2bf0f7",
+    "nic_tx_command.inc": "c6f18d5514f09e9f3ed336a06035e00b0511550b924dff27aff76cdba85a2782",
+    "nic_cmd_event_fixture.h": "5e4210476cdac2d2fc2f314fca0e4376d1108e53d3c210924b3d0daa03229afb"
+  }
+}

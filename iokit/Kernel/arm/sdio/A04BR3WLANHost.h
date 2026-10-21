@@ -7,11 +7,13 @@
 #include "A04BR3WMTRoundtrip.h"
 enum { A04_WLAN_ARGUMENT=80,A04_WLAN_FORMAT=81,A04_WLAN_CRC=82,
  A04_WLAN_TIMEOUT=83,A04_WLAN_STATUS=84,A04_WLAN_SEQUENCE=85,
- A04_WLAN_CREDIT=86,A04_WLAN_STATE=87,A04_WLAN_UNSUPPORTED=88 };
+ A04_WLAN_CREDIT=86,A04_WLAN_STATE=87,A04_WLAN_UNSUPPORTED=88, A04_WLAN_CMD_PACKET=0xa0 };
 struct a04_wlan_host {
  struct a04_sdio_transport *transport;
  unsigned initialized,ready,sequence,cpu_free,cpu_used,cpu_done,ffa,tc0_free,tc0_used,tc0_done,runtime;
  uint32_t wcir,status,chlpcr;unsigned own_polls;int failed;
+ uint32_t wasr;int wasr_error;
+ unsigned last_cid,last_cmd_sequence,last_cmd_type,last_cmd_set,last_cmd_bytes;
  uint8_t tx[4608],rx[4608];unsigned rx_length,rx_port;
 };
 static inline int a04_wlan_fail(struct a04_wlan_host *h,int e){h->failed=e;h->transport->failed=e;return e;}
@@ -25,6 +27,8 @@ static inline int a04_wlan_write(struct a04_wlan_host *h,unsigned reg,uint32_t v
 }
 static inline int a04_wlan_host_open(struct a04_wlan_host *h,struct a04_sdio_transport *t){
  if(!h || !t || t->failed)return A04_WLAN_ARGUMENT;
+ h->wasr=0;h->wasr_error=0;h->status=0;
+ h->last_cid=h->last_cmd_sequence=h->last_cmd_type=h->last_cmd_set=h->last_cmd_bytes=0;
  h->transport=t;h->initialized=h->ready=h->sequence=0;h->failed=0;
  h->cpu_free=h->tc0_free=104;h->cpu_used=h->cpu_done=h->ffa=h->tc0_used=h->tc0_done=h->runtime=0;h->rx_length=h->own_polls=0;h->chlpcr=0;
  int e=a04_sdio_enable(t,1);if(e)return a04_wlan_fail(h,e);
@@ -46,6 +50,16 @@ static inline int a04_wlan_host_open(struct a04_wlan_host *h,struct a04_sdio_tra
  /* Polled, one RX packet at a time. WHISR read-clear, no enhanced aggregation. */
  if((e=a04_wlan_write(h,0xc,control&~((1u<<16)|(1u<<1)))))return e;
  h->initialized=1;return 0;
+}
+/* Native hal.h HAL_GET_ABNORMAL_INTERRUPT_REASON_CODE reads WASR0x20.
+ * Preserve WHISR and read one reason BEFORE poison disables further I/O. */
+static inline int a04_wlan_interrupt_status(struct a04_wlan_host *h,uint32_t *status){
+ int e=a04_wlan_read(h,0x10,status);if(e)return e;h->status=*status;
+ if(*status&0x80000040u){
+  h->wasr_error=a04_wlan_read(h,0x20,&h->wasr);
+  return a04_wlan_fail(h,A04_WLAN_STATUS);
+ }
+ return 0;
 }
 /* WTQCR read-clear counters: AC0 index0, FFA14, CPU15. Only our two
  * queues are supported. Never mint a credit from a TX-done without FFA. */
@@ -102,6 +116,9 @@ static inline int a04_wlan_send(struct a04_wlan_host *h,unsigned logical,unsigne
   * not acquire TC resources for scatter packets. Do not invent ACK/credits. */
  unsigned bus=(logical+3)&~3u;if(bus>512)bus=(bus+511)&~511u;
  for(unsigned i=logical;i<bus;i++)h->tx[i]=0;
+ if(a04_wmt_le16(h->tx+2)==0x8000 && h->tx[5]==A04_WLAN_CMD_PACKET){
+  h->last_cid=h->tx[4];h->last_cmd_type=h->tx[5];h->last_cmd_set=h->tx[6];h->last_cmd_sequence=h->tx[7];h->last_cmd_bytes=logical;
+ }
  int e=a04_sdio_transfer(h->transport,1,0x34,1,0,h->tx,bus);
  return e?a04_wlan_fail(h,e):0;
 }
@@ -129,7 +146,9 @@ static inline unsigned a04_wlan_sequence(struct a04_wlan_host *h){h->sequence=(h
 static inline int a04_wlan_command(struct a04_wlan_host *h,unsigned cid,unsigned seq,unsigned type,
  const uint8_t *p,unsigned n){
  if(!h || !h->initialized || h->failed || h->transport->failed)return A04_WLAN_STATE;
- if(cid>255 || seq>255 || type>255 || n>2048 || (!p&&n))return A04_WLAN_ARGUMENT;
+ /* nicTxCmd overwrites ucPktTypeID with CMD_PACKET_TYPE_ID=0xa0.
+  * WIFI_CMD_T comment saying0x20 is stale; reject it before bus access. */
+ if(cid>255 || seq>255 || type!=A04_WLAN_CMD_PACKET || n>2048 || (!p&&n))return A04_WLAN_ARGUMENT;
  a04_wmt_put16(h->tx,n+8);a04_wmt_put16(h->tx+2,0x8000);
  h->tx[4]=(uint8_t)cid;h->tx[5]=(uint8_t)type;h->tx[6]=0;h->tx[7]=(uint8_t)seq;
  for(unsigned i=0;i<n;i++)h->tx[8+i]=p[i];

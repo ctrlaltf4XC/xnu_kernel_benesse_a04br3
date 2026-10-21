@@ -12,6 +12,7 @@ struct a04_wlan_runtime {
  struct a04_wlan_ap scan[16];unsigned scan_count,scan_dropped;
  uint8_t calibration[512],mac[6];unsigned calibration_valid,calibration_sent,mac_valid,mac_source;
  unsigned begun,cap_pending,cap_sequence,configured,admin,scan_sequence,port;
+ unsigned phase,cap_received,last_event_id,last_event_sequence,last_event_bytes;
  unsigned firmware_product,firmware_version,rf_cal_fail,bb_cal_fail;
  uint64_t cap_deadline;unsigned events,frames,unknown,delivery_kind,delivery_length;
  const uint8_t *delivery;
@@ -36,18 +37,17 @@ static inline int a04_wlan_runtime_calibration(struct a04_wlan_runtime *r,const 
  * claimed return of init pages. Firmware NIC-resource query is a source stub. */
 static inline int a04_wlan_runtime_native_boundary(struct a04_wlan_host *h){
  if(!h || !h->ready || !(h->wcir&(1u<<21)) || h->runtime || h->failed)return A04_WLAN_STATE;
- uint32_t status=0;int e=a04_wlan_read(h,0x10,&status);if(e)return e;
- if(status&0x80000040u)return a04_wlan_fail(h,A04_WLAN_STATUS);
+ uint32_t status=0;int e=a04_wlan_interrupt_status(h,&status);if(e)return e;
  if(status&1)for(unsigned i=0;i<8;i++){uint32_t discarded=0;e=a04_wlan_read(h,0x130+4*i,&discarded);if(e)return e;}
  h->cpu_free=26;h->tc0_free=13;h->cpu_used=h->cpu_done=h->tc0_used=h->tc0_done=h->ffa=0;h->runtime=1;return 0;
 }
 static inline int a04_wlan_live_begin(struct a04_wlan_runtime *r,struct a04_wlan_host *h,uint64_t now){
  if(!r || !h || r->begun || r->failed || !r->calibration_valid || now>UINT64_MAX-1000000)return A04_WLAN_STATE;
- int e=a04_wlan_runtime_native_boundary(h);if(e)return a04_wlan_runtime_fail(r,h,e);
- r->begun=1;r->cap_sequence=a04_wlan_sequence(h);uint8_t query[116]={0};
+ r->phase=1;int e=a04_wlan_runtime_native_boundary(h);if(e)return a04_wlan_runtime_fail(r,h,e);
+ r->phase=2;r->begun=1;r->cap_sequence=a04_wlan_sequence(h);uint8_t query[116]={0};
  /* wlanQueryNicCapability CID80, query flag0, payload sizeof(event)=116,
   * response EID1 from RX1. Never confuse INIT CMD1 with runtime query80. */
- e=a04_wlan_command(h,0x80,r->cap_sequence,0x20,query,sizeof(query));
+ e=a04_wlan_command(h,0x80,r->cap_sequence,A04_WLAN_CMD_PACKET,query,sizeof(query));
  if(!e)e=a04_wlan_send(h,124,1);
  if(e)return a04_wlan_runtime_fail(r,h,e);
  r->cap_pending=1;r->cap_deadline=now+1000000;r->port=1;return 0;
@@ -69,24 +69,24 @@ static inline int a04_wlan_runtime_scan(struct a04_wlan_runtime *r,struct a04_wl
  request.sequence=(++r->scan_sequence)&255;request.bss=r->station.local.bss;
  request.min_dwell=50;request.dwell=100;request.timeout=3000;request.channel_type=4;
  request.channels=channels;request.channel_count=13; /* passive0, probe0 */
- int e=a04_wlan_station_scan(&r->station,h,&request,now,now+5000000);
+ r->phase=12;int e=a04_wlan_station_scan(&r->station,h,&request,now,now+5000000);
  if(!e){r->scan_count=r->scan_dropped=0;}return e;
 }
 static inline int a04_wlan_runtime_configure(struct a04_wlan_runtime *r,struct a04_wlan_host *h,uint64_t now){
  if(!r || !r->mac_valid || !r->calibration_valid || r->configured || r->failed)return A04_WLAN_STATE;
- const uint8_t *nv=r->calibration;int e=a04_wlan_set(h,0x24,nv+12,40,0);
+ r->phase=4;const uint8_t *nv=r->calibration;int e=a04_wlan_set(h,0x24,nv+12,40,0);
  /* Original 512 byte variant: preserve original efuse and optional RSSI/edge
   * settings, no PCC extension or generated calibration bytes. */
- if(!e && nv[83]){uint8_t offset[12]={1};for(unsigned i=0;i<3;i++)offset[1+i]=nv[80+i];offset[4]=nv[84];e=a04_wlan_set(h,0x41,offset,12,0);}
- if(!e && nv[266])e=a04_wlan_set(h,0x43,nv+264,2,0);
+ if(!e && nv[83]){r->phase=5;uint8_t offset[12]={1};for(unsigned i=0;i<3;i++)offset[1+i]=nv[80+i];offset[4]=nv[84];e=a04_wlan_set(h,0x41,offset,12,0);}
+ if(!e && nv[266]){r->phase=6;e=a04_wlan_set(h,0x43,nv+264,2,0);}
  uint8_t domain[56];a04_wlan_default_domain(domain,1);
- if(!e)e=a04_wlan_set(h,0x0f,domain,56,0);
- a04_wlan_default_domain(domain,0);if(!e)e=a04_wlan_set(h,0x0f,domain,56,0);
- if(!e && nv[198]){uint8_t edge[4]={nv[199],nv[200],nv[201],0};e=a04_wlan_set(h,0x36,edge,4,0);}
- if(!e)e=a04_wlan_set(h,0x48,nv,512,0);
+ if(!e){r->phase=7;e=a04_wlan_set(h,0x0f,domain,56,0);}
+ a04_wlan_default_domain(domain,0);if(!e){r->phase=8;e=a04_wlan_set(h,0x0f,domain,56,0);}
+ if(!e && nv[198]){r->phase=9;uint8_t edge[4]={nv[199],nv[200],nv[201],0};e=a04_wlan_set(h,0x36,edge,4,0);}
+ if(!e){r->phase=10;e=a04_wlan_set(h,0x48,nv,512,0);}
  if(e)return a04_wlan_runtime_fail(r,h,e);
  r->calibration_sent=1;
- struct a04_wlan_local local;
+ r->phase=11;struct a04_wlan_local local;
  /* Default native domain permits1..13; live candidate deliberately restricts
   * host to passive first. No active scan/association permission is invented. */
  e=a04_wlan_slots_take(&r->slots,r->mac,0x3ffe,0,&local);
@@ -96,10 +96,10 @@ static inline int a04_wlan_runtime_configure(struct a04_wlan_runtime *r,struct a
 }
 static inline int a04_wlan_runtime_event(struct a04_wlan_runtime *r,struct a04_wlan_host *h,
  const struct a04_wlan_event *v,uint64_t now){
- r->events++;
+ r->events++;r->last_event_id=v->id;r->last_event_sequence=v->sequence;r->last_event_bytes=v->length;
  if(r->cap_pending && v->id==1){
   if(v->sequence!=r->cap_sequence || v->length!=116)return a04_wlan_runtime_fail(r,h,A04_WLAN_SEQUENCE);
-  r->firmware_product=a04_wmt_le16(v->payload);r->firmware_version=a04_wmt_le16(v->payload+2);
+  r->phase=3;r->cap_received=1;r->firmware_product=a04_wmt_le16(v->payload);r->firmware_version=a04_wmt_le16(v->payload+2);
   r->rf_cal_fail=v->payload[18];r->bb_cal_fail=v->payload[19];
   const uint8_t *mac=v->payload+8;r->mac_source=1;
   if(!a04_wlan_mac_valid(mac)){mac=r->calibration+4;r->mac_source=2;}
@@ -120,8 +120,7 @@ static inline int a04_wlan_runtime_step(struct a04_wlan_runtime *r,struct a04_wl
  if(!r || !h || !r->begun || r->failed || h->failed)return A04_WLAN_STATE;
  r->delivery_kind=r->delivery_length=0;r->delivery=0;
  if(r->cap_pending && now>=r->cap_deadline)return a04_wlan_runtime_fail(r,h,A04_WLAN_TIMEOUT);
- uint32_t status=0;int e=a04_wlan_read(h,0x10,&status);
- if(!e && (status&0x80000040u))e=A04_WLAN_STATUS;
+ uint32_t status=0;int e=a04_wlan_interrupt_status(h,&status);
  if(!e && (status&1))e=a04_wlan_resources(h);
  if(e)return a04_wlan_runtime_fail(r,h,e);
  e=a04_wlan_backend_receive(h,&r->station,&r->security,&r->data,now,r->port);r->port^=1;

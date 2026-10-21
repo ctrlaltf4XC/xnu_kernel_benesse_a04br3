@@ -38,7 +38,7 @@ static inline int transfer(void *ctx,uint32_t arg,void *buffer,unsigned n){
    assert(size>=9 && size<=2056 && size-8<=s->length-c->section_offset);
    assert(!memcmp(p+8,s->data+c->section_offset,size-8));
    c->section_offset+=size-8;c->pda++;
-  }else if(p[5]==0xa0 && p[4]==1){
+  }else if(p[5]==0xa0 && p[4]==1 && c->fw){
    assert(size==20 && a04_wmt_le16(p+2)==0x8000);
    if(c->configs){assert(c->section_offset==c->fw->section[c->section_index].length);c->section_index++;}
    assert(c->fw && c->section_index<c->fw->count);c->section_offset=0;
@@ -46,7 +46,7 @@ static inline int transfer(void *ctx,uint32_t arg,void *buffer,unsigned n){
    assert(a04_wmt_get32(p+12)==c->fw->section[c->section_index].length);
    assert(a04_wmt_get32(p+16)==(0x80000001u|(c->configs?0:8)));
    c->seq=p[7];c->configs++;c->rx_size=12;c->cpu++;c->ffa++;
-  }else if(p[5]==0xa0 && p[4]==2){
+  }else if(p[5]==0xa0 && p[4]==2 && c->fw){
    assert(size==16 && c->section_offset==c->fw->section[c->section_index].length);
    assert(!a04_wmt_get32(p+8) && !a04_wmt_get32(p+12));c->start=1;c->ac++;c->ffa++;
   }

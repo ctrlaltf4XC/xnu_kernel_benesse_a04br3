@@ -1,8 +1,9 @@
 # A04BR3 BSD network adapter
 
 This original component creates a real Ethernet-family DLIL ifnet with WiFi
-subfamily and the hardware MAC supplied by a real backend. It is not a private
-IO80211Interface implementation. No built-in scan records, association success,
+subfamily and the hardware MAC supplied by a real backend. Its source-owned
+IO80211Controller and IO80211Interface implement the bounded native BSD ioctl
+path; they do not implement Apple private C++ vtables or IO80211 user clients. No built-in scan records, association success,
 MAC address, firmware-ready defaults, or Apple user client are provided.
 `tests/` alone supplies mock backend state/results.
 
@@ -14,8 +15,9 @@ sources are intentionally outside this component's edit scope. The real WLAN
 owner creates and attaches an IOService child under the SDIO provider, then calls
 `attach(child, &backend, unit)` after BSD Ethernet plumbing is available. Use an
 available unit; attach errors must be handled, not treated as ready. The bridge
-retains the child. Do not advertise a private IO80211 class or instantiate a fake
-IONetworkingFamily user client. State, callback context and the bridge object
+retains the child. Do not load proprietary IO80211Family alongside the source
+classes: duplicate metaclasses are incompatible. No Apple IO80211 user client
+is provided; native callers must use the BSD ioctl fallback. State, callback context and the bridge object
 must remain alive until detach completion. Backend callbacks run under the
 bridge lock and must not reenter it; transmit must queue promptly.
 
@@ -114,17 +116,19 @@ of native WiFi discovery. Official configd reference commit
 in SCNetworkInterface.c:7646 and registers InterfaceNamer notifications for that
 class (ifnamer.c:4421). It also classifies Ethernet as WiFi via actual parent
 IO80211Controller/AirPort ancestry (SCNetworkInterface.c:1792). This is a public
-reference prerequisite; exact shipped iOS16 SystemConfiguration behavior still
-needs retained REA verification. This bridge does NOT spoof class properties,
+reference prerequisite. REA analysis of the shipped iOS16 SystemConfiguration
+processNetworkInterface confirms the IO80211Controller ancestry classification. This bridge does NOT spoof class properties,
 metaclass ancestry, SC dynamic-store Interfaces, or a WiFi-connected flag.
-A genuine IONetworkingFamily interface/controller integration (or proven native
-alternate registration path) is still needed before claiming UI visibility.
+The source-owned wireless controller and interface provide this hierarchy,
+but native WiFi UI visibility still requires hardware validation.
 
 ## Genuine ancestry integration candidate
 
-A04BR3EthernetInterface inherits the vendored genuine IOEthernetInterface and
-IONetworkInterface; A04BR3EthernetController inherits IOEthernetController.
-These are original subclasses, not private IO80211Controller identities.
+IO80211Interface inherits the vendored genuine IOEthernetInterface and
+IONetworkInterface; IO80211Controller inherits IOEthernetController. The old
+A04BR3Ethernet type names are source aliases. These functional subclasses own
+real lifecycle, MAC, radio, packet filter and native ioctl dispatch, with no
+claim to the proprietary Apple class layout or user-client ABI.
 The documented virtual DDL attach/detach hooks use the existing bridge as the
 single ifnet owner. Apple's default ifnet allocator is not called for this
 subclass. getIfnet/getFlags report the actual bridge ifnet. IONetworkStack owns
@@ -148,5 +152,10 @@ records original and adapted hashes and APPLE_LICENSE is included. Tests:
 The adapter test uses typed Apple/DLIL mocks to execute actual adapter/bridge
 lifecycle plus verifies vendored-source hashes. It is not a full Apple family
 compile or native UI success claim. SDK compile/link and hardware tests are the
-parent's next gate. Native iOS WiFi classification and operation payloads remain
+parent's next gate. Native iOS WiFi UI validation and remaining operation payloads remain
 independent evidence requirements; no AirPort bool/property or class spoof is used.
+
+The current runtime GET subset is power (19), own driver version (43), and
+optional capability mask (12). Native runtime SET and scan codecs still return
+unsupported. Class registration and successful GET do not establish working
+scan, association, WPA2 or connectivity.

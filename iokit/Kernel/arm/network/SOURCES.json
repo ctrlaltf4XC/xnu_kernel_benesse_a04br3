@@ -112,5 +112,16 @@
     ],
     "implemented": "type19 raw24 version/count/state from observed radio_enabled; type43 raw256 own driver identity; type12 raw13 zero optional-capability advertisement; no fabricated scan/RSSI/link",
     "scope": "static shipped userspace layout proof; runtime binding not yet verified"
+  },
+  "wireless_classes": {
+    "implementation": "Original functional IO80211Controller and IO80211Interface over vendored Ethernet classes; native bounded BSD ioctl fallback",
+    "private_apple_abi_compatible": false,
+    "proprietary_family_coload_supported": false,
+    "runtime_get_types": [
+      19,
+      43,
+      12
+    ],
+    "runtime_set_scan_implemented": false
   }
 }

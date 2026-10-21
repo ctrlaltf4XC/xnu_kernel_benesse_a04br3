@@ -6,7 +6,7 @@ import unittest
 import test_wmt_protocol as codecs
 from test_wlan_host import FAKE
 
-BOARD = Path(__file__).resolve().parents[5]/'port/gsi/kernel-4.14/modules/connectivity/wlan/core/gen3'
+NATIVE_FIXTURE = Path(__file__).resolve().parent/'fixtures/mt6630_native/nic_cmd_event_fixture.h'
 SETUP = FAKE + r'''
 #include "A04BR3WLANData.h"
 static inline void local_profile(struct a04_wlan_local *l){
@@ -27,7 +27,7 @@ class WLANBackend(unittest.TestCase):
     run_c = codecs.WMTProtocol.run_c
 
     def test_layout_matches_extracted_primary_structs(self):
-        text=(BOARD/'include/nic_cmd_event.h').read_text()
+        text=NATIVE_FIXTURE.read_text()
         decl='typedef uint8_t UINT_8;typedef uint16_t UINT_16;typedef uint32_t UINT_32;\n#define MAC_ADDR_LEN 6\n'
         for name in ('CMD_SET_BSS_RLM_PARAM_T','CMD_SET_BSS_INFO','CMD_UPDATE_STA_RECORD_T','CMD_802_11_KEY','CMD_BSS_ACTIVATE_CTRL'):
             match=re.search(r'typedef struct _'+name+r'\s*\{.*?\}\s*'+name+r'\s*,[^;]*;',text,re.S)

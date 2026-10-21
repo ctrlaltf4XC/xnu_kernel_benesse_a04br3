@@ -150,7 +150,7 @@ class A04BR3SDIO : public IOService {
   setProperty("WLANControlReady",(r->configured&&!r->failed)?kOSBooleanTrue:kOSBooleanFalse);
   setProperty("WLANScanComplete",r->station.scan.complete?kOSBooleanTrue:kOSBooleanFalse);
   setProperty("WLANScanResults",r->scan_count,32);
-  if(r->failed){live->count=0;IOLog("A04BR3 WLAN: runtime stopped error=%d events=%u; no retry\n",r->failed,r->events);}
+  if(r->failed){live->count=0;IOLog("A04BR3 WLAN: runtime stopped error=%d phase=%u events=%u cap=%u event=0x%x/%u/%u lastCMD=0x%x type=0x%x set=%u seq=%u bytes=%u WHISR=0x%x WASR=0x%x wasr-error=%d; no retry\n",r->failed,r->phase,r->events,r->cap_received,r->last_event_id,r->last_event_sequence,r->last_event_bytes,wlanHost->last_cid,wlanHost->last_cmd_type,wlanHost->last_cmd_set,wlanHost->last_cmd_sequence,wlanHost->last_cmd_bytes,wlanHost->status,wlanHost->wasr,wlanHost->wasr_error);}
   else if(!liveStopping)scheduleLive((r->cap_pending || r->station.scan.pending || r->station.selected || r->data.pending || live->count)?20:50);
   IOLockUnlock(transportLock);
   if(ready)client.ready(client.context,this);
