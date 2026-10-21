@@ -6,6 +6,7 @@
 #if defined(ARM64_BOARD_CONFIG_A04BR3)
 #include <sys/systm.h>
 #include <sys/errno.h>
+#include <kern/clock.h>
 #include <vm/memory_types.h>
 #include <machine/machine_routines.h>
 #include <pexpert/pexpert.h>

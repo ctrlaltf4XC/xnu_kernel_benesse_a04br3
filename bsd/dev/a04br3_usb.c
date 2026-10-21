@@ -14,6 +14,7 @@
 #include <sys/select.h>
 #include <kern/locks.h>
 #include <kern/thread.h>
+extern kern_return_t thread_terminate(thread_t);
 #include <kern/sched_prim.h>
 #include <kern/clock.h>
 #include <mach/mach_time.h>
