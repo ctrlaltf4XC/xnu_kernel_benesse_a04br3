@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
-#include <errno.h>
+#include <sys/errno.h>
 #define A04_NVRAM_BLOCK 0x20000u
 #define A04_NVRAM_MAX_BLOCKS 512u
 struct a04_nvram_reader {void *context;uint32_t bytes;int (*read)(void *,uint32_t,void *,unsigned);};
