@@ -98,6 +98,17 @@ int a04br3_usb_controller_poll(void) {
   printf("A04BR3 USB: peripheral softconnect; private console 0e8d:20ff\n");
  }
  unsigned before=device.configured;int e=a04_usb_device_poll(&device,1);
+ /* Bounded fallbacks when no host address arrives: reconnect, then FS-only. */
+ { static unsigned idle,attempt;
+   if(device.active && !device.address && !device.configured){
+    if(++idle>=2000 && attempt<6){
+     idle=0;attempt++;uint8_t p=mac8(&board,1);
+     macw8(&board,1,(uint8_t)(p&~0x40u));for(unsigned n=0;n<10;n++)wait_us(&board,20000);
+     if(attempt>=3)p&=(uint8_t)~0x20u;
+     macw8(&board,1,(uint8_t)(p|0x40u));
+     printf("A04BR3 USB: no host address, reconnect attempt=%u power=0x%x hs=%u\n",attempt,mac8(&board,1),attempt<3);
+    }
+   } else idle=0; }
  /* Bounded enumeration diagnostics: never read clear-on-read INTRUSB here. */
  { static unsigned ticks;
    if(device.active && !device.configured && (++ticks%400)==0 && ticks<=400*60)

@@ -77,7 +77,7 @@ static inline int a04_usb_device_observe(const struct a04_usb_platform_io *io,
  r->phy6c=io->read8(io->context,A04_USB_PHY,0x6c);
  r->phy6d=io->read8(io->context,A04_USB_PHY,0x6d);
  if((r->top1&(1u<<13))||(r->top2&((1u<<14)|(1u<<24)|(1u<<31))))return A04_USB_PLATFORM_CLOCK;
- if((r->phy6c&0x3f)!=2||(r->phy6d&0x3f)!=2)return A04_USB_PLATFORM_PHY;
+ if((r->phy6c&0x3e)!=0x2e||(r->phy6d&0x3e)!=0x3e)return A04_USB_PLATFORM_PHY;
  if(io->read32(io->context,A04_USB_PHY,0x68)&0x00ba3cf4u)return A04_USB_PLATFORM_PHY;
  if((r->devctl&0x86)!=0x80)return A04_USB_PLATFORM_ROLE; /*Bdevice, no HM/hostreq; SESSION is set by an active host link*/
  if((r->devctl&0x18)!=0x18)return A04_USB_PLATFORM_NO_VBUS;
@@ -112,7 +112,10 @@ static inline int a04_usb_device_prepare(const struct a04_usb_platform_io *io,
  /* Source register definitions separate role request from sensed bus power.
   * Only IDDIG high is forced (peripheral); clear all bus-valid overrides. */
  uint32_t dtm1=io->read32(io->context,A04_USB_PHY,0x6c);
- io->write32(io->context,A04_USB_PHY,0x6c,(dtm1&~0x3f3fu)|0x202u);io->barrier(io->context);
+ /* Board BSP usb_phy_poweron: force device mode with IDDIG, AVALID,
+  * BVALID/VBUSVALID and SESSEND overrides (byte0x6c |=0x2e clear0x10,
+  * byte0x6d |=0x3e). MT8167 MUSB softconnect needs these PHY qualifiers. */
+ io->write32(io->context,A04_USB_PHY,0x6c,(dtm1&~0x0010u)|0x3e2eu);io->barrier(io->context);
  return a04_usb_device_observe(io,r);
 }
 #endif

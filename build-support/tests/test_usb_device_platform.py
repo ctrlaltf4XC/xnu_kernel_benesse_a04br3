@@ -18,7 +18,7 @@ static void w8(void *c,unsigned r,unsigned o,uint8_t v){auto *m=(Mock *)c;assert
 }
 static void w32(void *c,unsigned r,unsigned o,uint32_t v){auto *m=(Mock *)c;m->writes++;
  if(r==2){assert(o==0x9c||o==0x84);assert(v==(o==0x9c?0x81004000u:0x2000u));if(!m->clock_stuck)put(m,2,o==0x9c?0x3c:0x24,get(m,2,o==0x9c?0x3c:0x24)&~v);}
- else {assert(r==1&&(o==0x68||o==0x6c));if(o==0x6c)assert((v&0x3f3f)==0x202);if(!m->phy_stuck)put(m,r,o,v);}
+ else {assert(r==1&&(o==0x68||o==0x6c));if(o==0x6c)assert((v&0x3e3e)==0x3e2e&&!(v&0x10));if(!m->phy_stuck)put(m,r,o,v);}
 }
 static void barrier(void *){}
 static void delay(void *c,unsigned us){auto *m=(Mock *)c;assert(us==50||us==800||us==300);m->delays++;m->total_us+=us;}
@@ -34,12 +34,12 @@ int main(){unsigned cases=0;a04_usb_platform_result result={};
   switch(k){case 0:v.mac_physical++;break;case 1:v.mac_span--;break;case 2:v.phy_physical++;break;case 3:v.phy_span--;break;case 4:v.top_physical++;break;case 5:v.top_span--;break;case 6:v.read8=nullptr;break;case 7:v.write8=nullptr;break;case 8:v.read32=nullptr;break;case 9:v.write32=nullptr;break;case 10:v.delay_us=nullptr;break;case 11:v.vusb_enable_verified=nullptr;break;}
   assert(a04_usb_device_prepare(&v,&result)==A04_USB_PLATFORM_INVALID);assert(!m.writes&&!m.reads&&!m.supply&&!memcmp(&result,&old,sizeof(result)));cases++;
  }
- {auto m=initial();auto v=io(&m);assert(!a04_usb_device_prepare(&v,&result));assert(m.supply==1&&m.total_us==850&&result.stage==4);assert(m.mem[0][0x60]==0x98&&!(m.mem[0][1]&0x4c));assert((get(&m,1,0x6c)&0x3f3f)==0x202);unsigned writes=m.writes;assert(!a04_usb_device_observe(&v,&result)&&m.writes==writes);cases++;}
+ {auto m=initial();auto v=io(&m);assert(!a04_usb_device_prepare(&v,&result));assert(m.supply==1&&m.total_us==850&&result.stage==4);assert(m.mem[0][0x60]==0x98&&!(m.mem[0][1]&0x4c));assert((get(&m,1,0x6c)&0x3e3e)==0x3e2e&&!(get(&m,1,0x6c)&0x10));unsigned writes=m.writes;assert(!a04_usb_device_observe(&v,&result)&&m.writes==writes);cases++;}
  for(unsigned k=0;k<6;k++){auto m=initial();auto v=io(&m);int expected=0;
   switch(k){case 0:m.supply_error=110;expected=A04_USB_PLATFORM_POWER;break;case 1:m.clock_stuck=1;expected=A04_USB_PLATFORM_CLOCK;break;case 2:m.phy_stuck=1;expected=A04_USB_PLATFORM_PHY;break;case 3:m.mem[0][0x60]=0x80;expected=A04_USB_PLATFORM_NO_VBUS;break;case 4:m.mem[0][0x60]=0x9c;expected=A04_USB_PLATFORM_ROLE;break;case 5:m.mem[0][0x60]=0x18;expected=A04_USB_PLATFORM_ROLE;break;}
   assert(a04_usb_device_prepare(&v,&result)==expected);if(k==0)assert(!m.reads&&!m.writes&&result.supply_error==110);if(k==1)assert(m.writes==2);cases++;
  }
- {auto m=initial();auto v=io(&m);assert(!a04_usb_device_prepare(&v,&result));put(&m,1,0x6c,get(&m,1,0x6c)|0x2000);assert(a04_usb_device_observe(&v,&result)==A04_USB_PLATFORM_PHY);cases++;}
+ {auto m=initial();auto v=io(&m);assert(!a04_usb_device_prepare(&v,&result));put(&m,1,0x6c,get(&m,1,0x6c)&~0x0800u);assert(a04_usb_device_observe(&v,&result)==A04_USB_PLATFORM_PHY);cases++;}
  for(unsigned k=0;k<6;k++){Mock m={};m.pmic=0x1234;a04_usb_vusb_io p={&m,pr,pw,delay};
   if(k==1)m.pmic|=0xc000;if(k==2)m.pmic_error=110;if(k==3)m.pmic_stuck=1;
   if(k==4){m.pmic|=0x4000;}if(k==5)m.pmic_write_error=1;
