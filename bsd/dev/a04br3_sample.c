@@ -31,7 +31,7 @@ sample_proc(proc_t p, __unused void *arg)
     /* proc_name copies p_comm, truncated to 16 chars: com.apple.datami. */
     strlcpy(name, proc_best_name(p), sizeof(name));
     if (strcmp(name, "launchd") && strcmp(name, "backboardd") &&
-        strcmp(name, "SpringBoard") && strcmp(name, "Setup") && strcmp(name, "logd") &&
+        strcmp(name, "SpringBoard") && strcmp(name, "Setup") && strcmp(name, "wifid") && strcmp(name, "logd") &&
         strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
         strcmp(name, "containermanager") && strcmp(name, "containermanagerd") &&
         strcmp(name, "lsd") && strcmp(name, "installd") &&

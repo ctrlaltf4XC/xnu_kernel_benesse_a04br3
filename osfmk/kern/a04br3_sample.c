@@ -71,12 +71,13 @@ a04br3_sample_task(const char *name, int pid, task_t task)
     printf("A04BR3_SAMPLE %s[%d] threads=%d mh=0x%llx slide=0x%llx\n",
         name, pid, total, header, slide);
     for (unsigned i = 0; i < count; i++) {
-        printf("A04BR3_SAMPLE %s[%d] t%u pc=0x%llx lr=0x%llx sp=0x%llx\n",
-            name, pid, i, rows[i].pc, rows[i].lr, rows[i].sp);
+        printf("A04BR3_SAMPLE %s[%d] t%u pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx\n",
+            name, pid, i, rows[i].pc, rows[i].lr, rows[i].sp, rows[i].fp);
         /* Only window-server processes need remote user-stack reads. Never
          * fault user memory while holding the task lock. Saved FP/PC can race
          * running threads: these are approximate live samples, not crashes. */
         if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd") ||
+            !strcmp(name, "Setup") || !strcmp(name, "wifid") ||
             !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd") ||
             !strcmp(name, "lsd") || !strcmp(name,"installd") ||
             !strcmp(name,"installcoordinationd") || !strcmp(name,"appstored") ||
