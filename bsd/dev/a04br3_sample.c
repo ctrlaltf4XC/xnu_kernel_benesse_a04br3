@@ -32,7 +32,7 @@ sample_proc(proc_t p, __unused void *arg)
     strlcpy(name, proc_best_name(p), sizeof(name));
     if (strcmp(name, "launchd") && strcmp(name, "backboardd") &&
         strcmp(name, "SpringBoard") && strcmp(name, "Setup") && strcmp(name, "wifid") &&
-        strcmp(name, "kbd") && strcmp(name, "logd") &&
+        strcmp(name, "kbd") && strcmp(name, "configd") && strcmp(name, "logd") &&
         strcmp(name, "notifyd") && strcmp(name, "UserEventAgent") &&
         strcmp(name, "containermanager") && strcmp(name, "containermanagerd") &&
         strcmp(name, "lsd") && strcmp(name, "installd") &&
