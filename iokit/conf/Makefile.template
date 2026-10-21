@@ -199,6 +199,27 @@ TestIOMemoryDescriptor.cpo_CXXWARNFLAGS_ADD += -Wno-unused-parameter
 Tests.cpo_CXXWARNFLAGS_ADD += -Wno-unused-parameter
 IODMACommand.iig.cpo_CXXWARNFLAGS_ADD += -Wno-duplicate-decl-specifier
 
+# Pinned IONetworkingFamily is built with __PRIVATE_SPI__ in its original
+# Xcode project. Keep all in-tree family/adapter header consumers consistent.
+# P_RULE consumes per-object CFLAGS_ADD also for these C++ .cpo targets.
+A04BR3_NETWORK_OBJS = A04BR3BSDNetwork.cpo \
+	A04BR3Ethernet.cpo \
+	IOEthernetController.cpo \
+	IOEthernetInterface.cpo \
+	IOKernelDebugger.cpo \
+	IOMbufMemoryCursor.cpo \
+	IONetworkController.cpo \
+	IONetworkData.cpo \
+	IONetworkInterface.cpo \
+	IONetworkMedium.cpo \
+	IONetworkStack.cpo \
+	IONetworkUserClient.cpo \
+	IOOutputQueue.cpo \
+	IOPacketQueue.cpo \
+	A04BR3NetworkRuntime.cpo \
+	A04BR3NativeRendezvous.cpo
+$(foreach obj,$(A04BR3_NETWORK_OBJS),$(eval $(obj)_CFLAGS_ADD += -D__PRIVATE_SPI__=1))
+
 # Rebuild if per-file overrides change
 ${OBJS}: $(firstword $(MAKEFILE_LIST))
 

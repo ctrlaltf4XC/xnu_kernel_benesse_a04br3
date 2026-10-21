@@ -54,7 +54,7 @@
       "path": "IOKernelDebugger.cpp",
       "sha256": "bbac801acc6b02279db1635235dbc7500742111a40cf83ca9b96a27ea87064d8",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IOKernelDebugger.cpp",
-      "vendored_sha256": "5eb2c2a4a32c7e87df7682c354842e52ddb34cf5317a1d2e295ec02d0cfa5f5d"
+      "vendored_sha256": "8cd2c26efc1df550c8ddfd0874d3fbed21a7c572c8892a9d90c5aa5302a3ff5a"
     },
     {
       "path": "IOKernelDebugger.h",
@@ -120,7 +120,7 @@
       "path": "IONetworkInterface.cpp",
       "sha256": "b2cf42f7c621e0709d679ac599a3778983de5c72e42afcd90bd4d4b6d93b500a",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkInterface.cpp",
-      "vendored_sha256": "f61ad5cb8672009954b4fd52ac25800c5a577adf31b69399d3d90890730adbd1"
+      "vendored_sha256": "6892990e23766b7ac07c2616065e96b6f10a6a28a0a2a056de7bec54b27bcc17"
     },
     {
       "path": "IONetworkInterface.h",
@@ -201,5 +201,15 @@
       "vendored_sha256": "f2192a69dc33cdcac2e025fd545b92e1499e058bd5343a668c3a7ed0f44a6b0d"
     }
   ],
-  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained."
+  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained.",
+  "build_adaptations": {
+    "family_private_spi": "Parent-owned Makefile must define __PRIVATE_SPI__=1 for every network object; matches original pinned project GCC_PREPROCESSOR_DEFINITIONS, no declarations or enum values fabricated.",
+    "target_conditionals": "IONetworkInterface.cpp and IOKernelDebugger.cpp include source-owned A04BR3FamilyTarget.h; only consumed TARGET_OS_IPHONE derived from explicit target or board/XNU defines. No SDK system header dependency."
+  },
+  "local_files": [
+    {
+      "path": "A04BR3FamilyTarget.h",
+      "sha256": "0c91ecd7c10a0d965ec826c0ae6ed02ca0a25c4801cfdd9c1474e655789757f4"
+    }
+  ]
 }

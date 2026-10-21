@@ -25,6 +25,7 @@
  * HISTORY
  */
 
+#include "A04BR3FamilyTarget.h"
 #include <IOKit/assert.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOMessage.h>

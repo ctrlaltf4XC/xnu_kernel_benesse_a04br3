@@ -62,7 +62,7 @@ extern "C" {
 #include "IONetworkDebug.h"
 #include "IOMbufQueue.h"
 
-#include <TargetConditionals.h>
+#include "A04BR3FamilyTarget.h"
 
 //------------------------------------------------------------------------------
 
