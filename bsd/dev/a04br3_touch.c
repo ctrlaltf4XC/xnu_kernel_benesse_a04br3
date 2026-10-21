@@ -67,7 +67,7 @@ static void touch_thread(void *arg,wait_result_t result){
         unsigned x=0,y=0,z=0;e=measure(0x80,0xc4,1500,&x);if(!e)e=measure(0x90,0xd4,800,&y);if(!e)e=measure(0xa0,0xe4,600,&z);
         if(e){if(down){a04br3_hid_touch(0,0,lastx,lasty);down=0;}if(++failures<=3)printf("A04BR3 TOUCH: transfer error=%d\n",e);pause_ms(100);continue;}
         failures=0;
-        /* Board raw landscape X/Y to portrait panel: X=1-Y, Y=X. */
+        /* Board raw landscape X/Y to portrait panel: X=1-Y, Y=1-X. */
         int active=a04br3_touch_point(x,y,z,&lastx,&lasty);
         if(active<0){(void)command(0);pause_ms(20);continue;}
         if(active || down)a04br3_hid_touch(0,active,lastx,lasty);
