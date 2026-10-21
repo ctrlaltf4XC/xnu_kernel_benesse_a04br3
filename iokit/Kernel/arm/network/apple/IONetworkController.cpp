@@ -40,12 +40,11 @@
 // IONetworkController (and its subclasses) needs to know about mbufs,
 // but it shall have no further dependencies on BSD networking.
 //
-extern "C" {
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/param.h>  // mbuf limits defined here.
 #include <sys/mbuf.h>
 #include <sys/kdebug.h>
 #include <machine/machine_routines.h>
-}
 
 #ifndef kIOMessageDeviceSignaledWakeup
 #define kIOMessageDeviceSignaledWakeup  iokit_common_msg(0x350)

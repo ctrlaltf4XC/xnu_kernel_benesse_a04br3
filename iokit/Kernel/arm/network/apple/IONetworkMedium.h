@@ -23,7 +23,7 @@
 #ifndef _IONETWORKMEDIUM_H
 #define _IONETWORKMEDIUM_H
 
-__BEGIN_DECLS
+/* BSD headers own C linkage; this block contains only types/constants. */
 
 #include <net/if_media.h>
 
@@ -179,7 +179,6 @@ enum {
     kIONetworkLinkNoNetworkChange = IFM_WAKESAMENET
 };
 
-__END_DECLS
 
 #ifdef KERNEL
 //===========================================================================

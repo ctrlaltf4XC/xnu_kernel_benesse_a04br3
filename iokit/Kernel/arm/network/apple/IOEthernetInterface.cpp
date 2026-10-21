@@ -38,7 +38,7 @@
 
 #include <IOKit/pwr_mgt/RootDomain.h>	// publishFeature()
 
-extern "C" {
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/param.h>
 #include <sys/errno.h>
 #include <sys/socket.h>
@@ -55,7 +55,6 @@ extern "C" {
 #include <netinet/if_ether.h>
 #include <sys/sockio.h>
 #include <sys/malloc.h>
-}
 
 //---------------------------------------------------------------------------
 

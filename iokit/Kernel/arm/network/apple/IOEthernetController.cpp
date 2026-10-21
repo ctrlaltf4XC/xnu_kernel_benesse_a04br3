@@ -38,10 +38,9 @@
 
 #include "IONetworkDebug.h"
 
-extern "C" {
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/param.h>  // mbuf limits defined here.
 #include <sys/mbuf.h>
-}
 
 #include <AssertMacros.h>
 

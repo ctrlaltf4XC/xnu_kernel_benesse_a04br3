@@ -38,13 +38,13 @@
  * object will interact directly with DLIL to send and to receive packets.
  */
 
-extern "C" {
+/* Load real OSMetaClass ownership annotations before BSD bpf/skywalk. */
+#include <IOKit/IOLib.h>
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <net/if.h>
 #include <sys/sockio.h>
-}
 
 #include <IOKit/assert.h>
-#include <IOKit/IOLib.h>
 #include <IOKit/IOBSD.h>
 #include <IOKit/IOKitKeys.h>
 #include <IOKit/pwr_mgt/RootDomain.h>	// registerPrioritySleepWakeInterest()

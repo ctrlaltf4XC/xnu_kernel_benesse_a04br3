@@ -27,7 +27,9 @@
  *
  */
 
-extern "C" {
+/* Load real OSMetaClass ownership annotations before BSD bpf/skywalk. */
+#include <IOKit/IOLib.h>
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/mbuf.h>
@@ -48,10 +50,8 @@ extern "C" {
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <sys/_types/_timeval32.h>
-}
 
 #include <IOKit/assert.h>
-#include <IOKit/IOLib.h>
 #include <IOKit/IOBSD.h>
 #include "IONetworkInterface.h"
 #include "IONetworkController.h"
@@ -1556,23 +1556,23 @@ errno_t IONetworkInterface::if_set_bpf_tap(
 
     switch ( mode )
     {
-        case BPF_TAP_DISABLE:
+        case BPF_MODE_DISABLED:
             changed = (self->_inputFilterFunc != 0);
             self->_inputFilterFunc = self->_outputFilterFunc = 0;
             break;
 
-        case BPF_TAP_INPUT:
+        case BPF_MODE_INPUT:
             assert(func);
             changed = (self->_inputFilterFunc == 0);
             self->_inputFilterFunc = func;
             break;
 
-        case BPF_TAP_OUTPUT:
+        case BPF_MODE_OUTPUT:
             assert(func);
             self->_outputFilterFunc = func;
             break;
 
-        case BPF_TAP_INPUT_OUTPUT:
+        case BPF_MODE_INPUT_OUTPUT:
             assert(func);
             changed = (self->_inputFilterFunc == 0);
             self->_inputFilterFunc = self->_outputFilterFunc = func;

@@ -23,10 +23,9 @@
 #ifndef _IOMBUFQUEUE_H
 #define _IOMBUFQUEUE_H
 
-extern "C" {
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/param.h>
 #include <sys/mbuf.h>
-}
 
 struct IOMbufQueue
 {

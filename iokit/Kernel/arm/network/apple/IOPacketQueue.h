@@ -25,9 +25,8 @@
 
 #include <libkern/c++/OSObject.h>
 #include <IOKit/IOLocks.h>
-extern "C" {
+/* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/kpi_mbuf.h>
-}
 // Forward declarations.
 //
 struct mbuf;
