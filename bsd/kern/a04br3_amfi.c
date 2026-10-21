@@ -302,7 +302,7 @@ a04br3_sandbox_priv_grant(kauth_cred_t cred __unused, int priv)
 {
     struct proc *p = current_proc();
     int allowed = priv == PRIV_WORK_INTERVAL && a04br3_platform_root == 1 &&
-        p != PROC_NULL && csproc_get_platform_binary(p);
+        p != NULL && csproc_get_platform_binary(p);
     static unsigned reports;
     if (__atomic_fetch_add(&reports, 1, __ATOMIC_RELAXED) < 32) {
         char name[32];proc_selfname(name,sizeof(name));

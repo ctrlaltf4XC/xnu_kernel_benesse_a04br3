@@ -11,7 +11,6 @@ class WorkIntervalPrivilege(unittest.TestCase):
 #include <assert.h>
 #define __unused __attribute__((unused))
 #define PRIV_WORK_INTERVAL 1008
-#define PROC_NULL NULL
 typedef void *kauth_cred_t;
 struct proc{int platform;};static struct proc process,*current=&process;
 static int a04br3_platform_root;
