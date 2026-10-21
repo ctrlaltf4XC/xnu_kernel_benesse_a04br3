@@ -7,7 +7,9 @@
 #include <pexpert/pexpert.h>
 #include "A04BR3SDIOPIO.h"
 #include "A04BR3SDIOPads.h"
-#include "A04BR3WMTRoundtrip.h"
+#include "A04BR3WMTDownload.h"
+#include "A04BR3WMTBootFirmware.h"
+#include <libkern/c++/OSData.h>
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3SDIO : public IOService {
  OSDeclareDefaultStructors(A04BR3SDIO);
@@ -17,6 +19,13 @@ class A04BR3SDIO : public IOService {
  struct a04_sdio_transport transport;
  bool transportReady=false;
  struct a04_wmt_channel channel;
+ struct a04_wmt_identity identity={};
+ bool identityReady=false;
+ void *firmwareSnapshot=nullptr;
+ unsigned firmwareBytes=0;
+ struct a04_wmt_firmware_set firmwareSet={};
+ struct a04_wmt_download_state downloadState={};
+ struct a04_wmt_startup_options startupOptions={0,0,0,1,2,1};
  static uint32_t dataRead(void *p,unsigned off,unsigned width){
   A04BR3SDIO *s=(A04BR3SDIO *)p;
   if(width==4)return rd(s->host,off);
@@ -55,13 +64,75 @@ class A04BR3SDIO : public IOService {
 public:
  bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
  void stop(IOService *provider) APPLE_KEXT_OVERRIDE {
-  if(transportLock){IOLockLock(transportLock);transportReady=false;IOLockUnlock(transportLock);}
+  if(transportLock){IOLockLock(transportLock);identityReady=false;transportReady=false;IOLockUnlock(transportLock);}
   setProperty("WMTTransportReady",kOSBooleanFalse);
   IOService::stop(provider);
  }
  void free(void) APPLE_KEXT_OVERRIDE {
+  if(firmwareSnapshot)IOFree(firmwareSnapshot,firmwareBytes);
   if(transportLock)IOLockFree(transportLock);
   IOService::free();
+ }
+ /* Explicit CPU-view staging interface. Parent owns delivery/reservation;
+  * caller retains input until return. No PA translation, GPU asset aliasing,
+  * firmware transmission, resets or automatic retries occur here. */
+ int stageWMTFirmware(const void *bytes,unsigned length){
+  if(!bytes || length<32 || length>A04_WMT_FW_MAX_BUNDLE)return A04_WMT_FW_ARGUMENT;
+  if(!transportLock)return A04_WMT_FW_STATE;
+  IOLockLock(transportLock);
+  int e=0;
+  if(!identityReady || !transportReady || transport.failed || firmwareSnapshot)e=A04_WMT_FW_STATE;
+  void *snapshot=nullptr;
+  if(!e){snapshot=IOMalloc(length);if(!snapshot)e=A04_WMT_FW_MEMORY;}
+  if(!e){
+   bcopy(bytes,snapshot,length);
+   e=a04_wmt_firmware_bundle(&identity,snapshot,length,&firmwareSet);
+  }
+  if(!e){firmwareSnapshot=snapshot;firmwareBytes=length;}
+  else if(snapshot){firmwareSet.count=0;IOFree(snapshot,length);}
+  setProperty("WMTFirmwareStageError",(unsigned)e,32);
+  setProperty("WMTFirmwareStaged",firmwareSnapshot?kOSBooleanTrue:kOSBooleanFalse);
+  setProperty("WMTFirmwareRunning",kOSBooleanFalse);
+  IOLog("A04BR3 WMT: firmware CPU stage=%d bundle=%u parts=%u HW=0x%x ROM=0x%x; no firmware sent\n",e,length,firmwareSet.count,identity.hardware,identity.rom);
+  if(!e)for(unsigned i=0;i<firmwareSet.count;i++){
+   const struct a04_wmt_firmware_file *f=&firmwareSet.files[i];
+   IOLog("A04BR3 WMT: staged part=%u/%u body=%u destination=0x%x headerHW=0x%x SW=0x%x\n",f->sequence,f->count,f->header.body.length,f->destination,f->header.hardware,f->header.software);
+  }
+  IOLockUnlock(transportLock);return e;
+ }
+ static void downloadProgress(void *p,const struct a04_wmt_download_state *d){
+  A04BR3SDIO *s=(A04BR3SDIO *)p;
+  if(d->phase==A04_WMT_DL_FRAGMENT && (d->fragment&15))return;
+  IOLog("A04BR3 WMT: download phase=%u part=%u/%u fragment=%u offset=%u commands=%u ACKs=%u resets=%u credit=%u\n",d->phase,d->sequence,s->firmwareSet.count,d->fragment,d->offset,d->commands,d->acked,d->reset_acks,s->channel.free_bytes);
+ }
+ int startWMTFirmware(){
+  if(!transportLock)return A04_WMT_DOWNLOAD_STATE;
+  IOLockLock(transportLock);
+  if(downloadState.attempted){IOLockUnlock(transportLock);return A04_WMT_DOWNLOAD_STATE;}
+  int e=(!identityReady || !transportReady || !firmwareSnapshot)?A04_WMT_DOWNLOAD_STATE:
+   a04_wmt_download_run(&transport,&channel,&firmwareSet,&identity,&startupOptions,&downloadState,downloadProgress,this);
+  if(transport.failed)transportReady=false;
+  setProperty("WMTFirmwareDownloadError",(unsigned)e,32);
+  setProperty("WMTFirmwareDownloadComplete",(!e && downloadState.phase==A04_WMT_DL_READY)?kOSBooleanTrue:kOSBooleanFalse);
+  setProperty("WMTSTPReady",(!e && downloadState.stp_ready)?kOSBooleanTrue:kOSBooleanFalse);
+  setProperty("WMTWiFiFunctionReady",(!e && downloadState.function1_ready)?kOSBooleanTrue:kOSBooleanFalse);
+  setProperty("WMTTransportReady",transportReady?kOSBooleanTrue:kOSBooleanFalse);
+  /* fn1 enabled is a WLAN probe boundary, not evidence of WLAN FW execution. */
+  setProperty("WMTFirmwareRunning",kOSBooleanFalse);
+  IOLog("A04BR3 WMT: download result=%d phase=%u part=%u fragment=%u offset=%u ACKs=%u/%u resets=%u parts=%u STP=%u fn1=%u CHISR=0x%x credit=%u pending=%u\n",e,downloadState.phase,downloadState.sequence,downloadState.fragment,downloadState.offset,downloadState.acked,downloadState.commands,downloadState.reset_acks,downloadState.parts_acked,downloadState.stp_ready,downloadState.function1_ready,channel.status,channel.free_bytes,channel.pending_cost);
+  if(e && channel.event_length){
+   IOLog("A04BR3 WMT: failing event");
+   for(unsigned i=0;i<channel.event_length && i<32;i++)IOLog(" %02x",channel.event[i]);
+   IOLog("\n");
+  }
+  IOLockUnlock(transportLock);return e;
+ }
+ int copyWMTFirmware(unsigned sequence,unsigned offset,void *bytes,unsigned length){
+  if(!transportLock)return A04_WMT_FW_STATE;
+  IOLockLock(transportLock);
+  int e=identityReady && firmwareSnapshot?
+   a04_wmt_firmware_read(&firmwareSet,sequence,offset,bytes,length):A04_WMT_FW_STATE;
+  IOLockUnlock(transportLock);return e;
  }
  /* Synchronous kernel transport entry points. Never call from interrupt context.
   * Function1 is enabled on demand; WMT preparation only touches function2. */
@@ -134,11 +205,57 @@ bool A04BR3SDIO::start(IOService *provider)
   }
  }
  transportReady=!error;
+ if(!error){identity={0x6630,versions[0]&0xffff,versions[1]&0xffff};identityReady=true;}
  IOLockUnlock(transportLock);
  setProperty("WMTVersionQueryError",(unsigned)error,32);
  if(!error){
   setProperty("WMTHardwareVersion",versions[0],32);setProperty("WMTFirmwareROMVersion",versions[1],32);
-  IOLog("A04BR3 WMT: identity HW=0x%x FW/ROM=0x%x; firmware selection pending validated blob/revision match\n",versions[0],versions[1]);
+  IOLog("A04BR3 WMT: identity HW=0x%x FW/ROM=0x%x; awaiting explicit firmware bundle\n",versions[0],versions[1]);
+  struct a04_wmt_revision revision={};
+  int re=a04_wmt_revision_decode(&identity,&revision);
+  IOLog("A04BR3 WMT: revision decode=%d exact=%u table=0x%x tableECO=%u patch-family=%u (selection uses ROM-low8)\n",re,revision.exact,revision.table_hardware,revision.eco,revision.patch_family);
+  setProperty("WMTFirmwareStaged",kOSBooleanFalse);
+  setProperty("WMTFirmwareRunning",kOSBooleanFalse);
+  /* Explicit options reflect vendor cfgExist/clock/build/FM/HIF choices.
+   * Absent config: native cfgExist0 + co-clock disabled, MT6630 non-MT2601
+   * merge build enabled, launcher FM_COMM2, fn1 host probe boundary. */
+  OSObject *configObject=provider->copyProperty("WMTStartup-A04BR3");
+  OSData *config=OSDynamicCast(OSData,configObject);
+  bool configValid=!configObject;
+  if(config && config->getLength()==24){
+   const uint8_t *p=(const uint8_t *)config->getBytesNoCopy();
+   startupOptions={a04_wmt_get32(p),a04_wmt_get32(p+4),a04_wmt_get32(p+8),a04_wmt_get32(p+12),a04_wmt_get32(p+16),a04_wmt_get32(p+20)};
+   configValid=startupOptions.coex_present<=1 && startupOptions.antenna_mode<=255 && startupOptions.co_clock<=1 && startupOptions.merge_interface<=1 && (startupOptions.fm_strap==1 || startupOptions.fm_strap==2) && startupOptions.function1<=1;
+  }
+  if(configObject)configObject->release();
+  const void *bootView=nullptr;unsigned bootBytes=0;
+  int bootError=a04_wmt_boot_firmware_view(&bootView,&bootBytes);
+  IOLog("A04BR3 WMT: boot bundle view=%d bytes=%u config-valid=%u\n",bootError,bootBytes,configValid?1u:0u);
+  int stageError=A04_WMT_FW_STATE;
+  if(!configValid){
+   setProperty("WMTFirmwareStageError",A04_WMT_DOWNLOAD_CONFIG,32);
+   IOLog("A04BR3 WMT: invalid startup options; firmware send blocked\n");
+  }else if(bootError==A04_WMT_BOOT_OK){
+   stageError=stageWMTFirmware(bootView,bootBytes);
+  }else if(bootError==A04_WMT_BOOT_ABSENT){
+   /* Preserve explicit CPU-stage API/property; never reinterpret a DT PA pair
+    * as CPU bytes and never fall back after an invalid DT reservation. */
+   OSObject *assetObject=provider->copyProperty("WMTFirmware-A04BR3");
+   OSData *asset=OSDynamicCast(OSData,assetObject);
+   if(asset)stageError=stageWMTFirmware(asset->getBytesNoCopy(),asset->getLength());
+   else if(assetObject){
+    setProperty("WMTFirmwareStageError",A04_WMT_FW_ARGUMENT,32);
+    IOLog("A04BR3 WMT: rejected non-OSData CPU bundle\n");
+   }else IOLog("A04BR3 WMT: firmware bundle absent; download deferred\n");
+   if(assetObject)assetObject->release();
+  }else{
+   setProperty("WMTFirmwareStageError",A04_WMT_FW_RANGE,32);
+   IOLog("A04BR3 WMT: boot bundle reservation/mapping rejected; no fallback\n");
+  }
+  if(!stageError){
+   IOLog("A04BR3 WMT: SDIO mandatory STP, cfgExist=%u antenna=%u co-clock=%u merge=%u FM=%u; starting verified patch set\n",startupOptions.coex_present,startupOptions.antenna_mode,startupOptions.co_clock,startupOptions.merge_interface,startupOptions.fm_strap);
+   startWMTFirmware();
+  }
  }
  /* Preserve the diagnostic service on query failure but expose no readiness.
   * Firmware body transfer and WLAN startup remain gated until independently
@@ -146,4 +263,21 @@ bool A04BR3SDIO::start(IOService *provider)
  setProperty("WMTTransportReady",transportReady?kOSBooleanTrue:kOSBooleanFalse);
  setProperty("WMTCCIR",wmt.ccir,32);setProperty("WMTCHLPCR",wmt.chlpcr_after,32);
  setProperty("SDIOVendor",card.vendor,32);setProperty("SDIODevice",card.device,32);setProperty("NetworkDataPathAvailable",kOSBooleanFalse);registerService();return true;
+}
+
+extern "C" int a04br3_wmt_stage_firmware(IOService *service,const void *bytes,unsigned length)
+{
+ A04BR3SDIO *sdio=OSDynamicCast(A04BR3SDIO,service);
+ return sdio?sdio->stageWMTFirmware(bytes,length):A04_WMT_FW_STATE;
+}
+extern "C" int a04br3_wmt_copy_firmware(IOService *service,unsigned sequence,unsigned offset,void *bytes,unsigned length)
+{
+ A04BR3SDIO *sdio=OSDynamicCast(A04BR3SDIO,service);
+ return sdio?sdio->copyWMTFirmware(sequence,offset,bytes,length):A04_WMT_FW_STATE;
+}
+
+extern "C" int a04br3_wmt_start_firmware(IOService *service)
+{
+ A04BR3SDIO *sdio=OSDynamicCast(A04BR3SDIO,service);
+ return sdio?sdio->startWMTFirmware():A04_WMT_DOWNLOAD_STATE;
 }
