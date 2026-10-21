@@ -130,6 +130,10 @@ static void bindingCases(){
  ifmediareq64 media={};strcpy(media.ifm_name,"en7");
  assert(!actual->performCommand(controller,SIOCGIFMEDIA64,nullptr,&media));
  assert((media.ifm_current&IFM_NMASK)==IFM_IEEE80211 && !(media.ifm_status&IFM_ACTIVE));
+ ifreq selection={};strcpy(selection.ifr_name,"en7");selection.ifr_media=IFM_IEEE80211|IFM_AUTO;
+ assert(!actual->performCommand(controller,SIOCSIFMEDIA,nullptr,&selection));
+ selection.ifr_media|=0x100;assert(actual->performCommand(controller,SIOCSIFMEDIA,nullptr,&selection)==EOPNOTSUPP);
+
  actual->retain();
  Packet basePacket={false};actual->pushInputPacket(&basePacket,64);
  assert(basePacket.freed && baseInputs==1 && lastBaseIfnet==current);
@@ -184,9 +188,17 @@ static void recordInit(unsigned i){
  x.generation=observedGeneration;x.observed_us=1000000;x.from_probe=i;
  const uint8_t ies[]={0,3,'a','b','c',1,2,0x82,0x84};x.ie_bytes=sizeof(ies);memcpy(x.ies,ies,sizeof(ies));
 }
+// Match SDIO nativeDispatch: backend points to the retained client callbacks,
+// rather than testing a mock response that bypasses production Rendezvous.
+static int providerGet(void *,uint32_t t,uint32_t v,void *p,uint32_t *n){
+ return nativeClient.get?nativeClient.get(nativeClient.context,t,v,p,n):EOPNOTSUPP;
+}
+static int providerSet(void *,uint32_t t,uint32_t v,const void *p,uint32_t n){
+ return nativeClient.set?nativeClient.set(nativeClient.context,t,v,p,n):EOPNOTSUPP;
+}
 extern "C" int a04br3_wlan_acquire_backend(IOService *p,a04_network_backend *b){
  if(!realState.control_ready)return ENXIO;
- p->retain();acquires++;*b={nullptr,state,get,admin,tx,set};return 0;
+ p->retain();acquires++;*b={nullptr,state,providerGet,admin,tx,providerSet};return 0;
 }
 extern "C" void a04br3_wlan_release_backend(IOService *p){releases++;p->release();}
 extern "C" int a04br3_wlan_scan_snapshot(IOService *,a04_wlan_scan_info *out){
@@ -218,6 +230,27 @@ static void nativeCases(){
  assert(!a04br3_network_bind(&provider,&owner) && owner && !current);
  auto client=nativeClient;client.ready(client.context,&provider);
  assert(current && current->refs==2 && provider.refs==2);
+ // Exact first binder request: GET12, value0, thirteen bytes, no prefix.
+ a04_apple80211_req64 bindReq={};strcpy(bindReq.name,"en7");bindReq.type=12;
+ bindReq.length=13;bindReq.user_data=(uintptr_t)userBuffer;memset(userBuffer,0xa5,sizeof(userBuffer));
+ assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&bindReq) && bindReq.length==13);
+ for(unsigned i=0;i<13;i++)assert(!userBuffer[i]);assert(userBuffer[13]==0xa5);
+ // GET19 is firmware control/radio state even before any association.
+ bindReq.type=19;bindReq.length=24;memset(userBuffer,0,24);userBuffer[0]=1;
+ realState.radio_enabled=1;
+ assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&bindReq));
+ assert(userBuffer[0]==1 && userBuffer[4]==1 && userBuffer[8]==1 && !(current->flags&IFF_RUNNING));
+ int priorAdmin=adminCalls;credentialRoot=0;
+ assert(current->init.ioctl(current,A04_APPLE80211_SET64,&bindReq)==EPERM && adminCalls==priorAdmin);
+ credentialRoot=1;assert(!current->init.ioctl(current,A04_APPLE80211_SET64,&bindReq) && adminCalls==priorAdmin+1 && lastAdmin==1);
+ adminError=EOPNOTSUPP;userBuffer[8]=0;
+ assert(current->init.ioctl(current,A04_APPLE80211_SET64,&bindReq)==EOPNOTSUPP && realState.radio_enabled==1);
+ adminError=EIO;assert(current->init.ioctl(current,A04_APPLE80211_SET64,&bindReq)==EIO && realState.radio_enabled==1);
+ adminError=0;assert(!realState.associated && !(current->flags&IFF_RUNNING));
+
+ bindReq.type=0xffffffffu;bindReq.length=13;memset(userBuffer,0xa5,13);
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&bindReq)==EOPNOTSUPP && userBuffer[0]==0xa5);
+
  uint8_t policy[5456]={},out[1164]={};uint32_t n=sizeof(out);
  policy[0]=1;policy[4]=3;policy[0x34]=3;policy[0x38]=1;out[0]=1;out[0x8b]=4;
  observedDone=observedCount=0;client.changed(client.context);assert(!scanEvents);
@@ -329,7 +362,7 @@ class EthernetBinding(unittest.TestCase):
    self.assertEqual(definitions,[SOURCE/'A04BR3Ethernet.cpp'])
   self.assertIn('return network.dispatch(command,arg1)',impl)
   self.assertNotIn('setProperty("IOClass"',impl)
-  self.assertIn('if(type!=10)return EOPNOTSUPP;',(SOURCE/'A04BR3NativeRendezvous.cpp').read_text())
+  self.assertIn('if(type!=10 && type!=19)return EOPNOTSUPP;',(SOURCE/'A04BR3NativeRendezvous.cpp').read_text())
   files=(SOURCE.parents[2]/'conf/files.arm64').read_text()
   self.assertEqual(files.count('network/A04BR3Ethernet.cpp'),1)
   self.assertNotIn('IO80211Family',files)

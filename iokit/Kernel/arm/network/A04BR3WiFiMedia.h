@@ -38,4 +38,20 @@ template<class Request> static inline int a04_wifi_media_get(
     request->ifm_active=IFM_IEEE80211|(linked?IFM_AUTO:IFM_NONE);
     request->ifm_count=1;return 0;
 }
+/* SIOCSIFMEDIA selects a medium, not radio power or association. AUTO is the
+ * sole mode already reported above. Accepting that selection is idempotent;
+ * reject every rate/option we cannot actually configure. Canonical ifreq is
+ * already copied into kernel memory by BSD, with privilege checked in if.c. */
+static inline int a04_wifi_media_set(const struct a04_network_state *state,
+    const struct ifreq *request,const char *name)
+{
+    if(!state || !request || !name)return EINVAL;
+    unsigned i=0;for(;i<IFNAMSIZ && request->ifr_name[i];i++){
+        if(!name[i] || name[i]!=request->ifr_name[i])return ENXIO;
+    }
+    if(i==IFNAMSIZ)return EINVAL;
+    if(name[i])return ENXIO;
+    if(!a04_network_control_ready(state))return ENETDOWN;
+    return request->ifr_media==(IFM_IEEE80211|IFM_AUTO)?0:EOPNOTSUPP;
+}
 #endif

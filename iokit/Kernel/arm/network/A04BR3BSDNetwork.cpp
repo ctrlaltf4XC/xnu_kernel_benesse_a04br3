@@ -188,7 +188,7 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);if(!s || !s->gate)return ENXIO;
     const bool native=command==A04_APPLE80211_GET64 || command==A04_APPLE80211_SET64;
-    const bool media=command==SIOCGIFMEDIA32 || command==SIOCGIFMEDIA64;
+    const bool media=command==SIOCGIFMEDIA32 || command==SIOCGIFMEDIA64 || command==SIOCSIFMEDIA;
     if(!native && !media && command!=SIOCSIFFLAGS)return EOPNOTSUPP;
     const auto *request=native?(const a04_apple80211_req64 *)data:nullptr;
     const uint32_t traceType=request?request->type:0,traceValue=request?request->value:0;
@@ -203,7 +203,9 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
     if(media){
         if(!error){
             const a04_network_copy copy={nullptr,a04_network_copyin,a04_network_copyout};
-            if(command==SIOCGIFMEDIA64)
+            if(command==SIOCSIFMEDIA)
+                error=a04_wifi_media_set(&state,(const struct ifreq *)data,s->name);
+            else if(command==SIOCGIFMEDIA64)
                 error=a04_wifi_media_get(&state,(struct ifmediareq64 *)data,s->name,&copy);
             else error=a04_wifi_media_get(&state,(struct ifmediareq32 *)data,s->name,&copy);
         }

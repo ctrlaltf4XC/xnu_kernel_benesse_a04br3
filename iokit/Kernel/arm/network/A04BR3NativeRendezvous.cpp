@@ -2,6 +2,7 @@
 #include "A04BR3NativeRendezvous.h"
 #include "A04BR3NetworkRuntime.h"
 #include "A04BR3NativeGET.h"
+#include "A04BR3NativePower.h"
 #include "A04BR3NativeScanAdapter.h"
 #include "../sdio/A04BR3WLANBackendAPI.h"
 #include <sys/kpi_mbuf.h>
@@ -70,9 +71,17 @@ class A04BR3NativeNetwork : public IOService {
         a04br3_wlan_release_backend(self->backendProvider);return error;
     }
     static int set(void *context,uint32_t type,uint32_t value,const void *in,uint32_t bytes){
-        if(type!=10)return EOPNOTSUPP;
+        if(type!=10 && type!=19)return EOPNOTSUPP;
         auto *self=(A04BR3NativeNetwork *)context;
-        if(!self->scanLock || !self->backendProvider)return ENXIO;
+        if(!self->backendProvider)return ENXIO;
+        if(type==19){
+            a04_network_backend backend={};
+            int error=a04br3_wlan_acquire_backend(self->backendProvider,&backend);
+            if(error)return error;
+            error=a04_native_power_set(&backend,value,in,bytes);
+            a04br3_wlan_release_backend(self->backendProvider);return error;
+        }
+        if(!self->scanLock)return ENXIO;
         IOLockLock(self->scanLock);auto backend=self->scanBackend();
         int error=a04_scan_dispatch_set(&self->scanSession,&backend,type,value,in,bytes,&self->scanCompletion);
         IOLockUnlock(self->scanLock);return error;

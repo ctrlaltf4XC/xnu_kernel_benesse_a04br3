@@ -66,7 +66,7 @@ bool IO80211Interface::setFlags(UInt16 flags,UInt16 clear)
 SInt32 IO80211Interface::performCommand(IONetworkController *controller,unsigned long command,void *arg0,void *arg1)
 {
     if(command==A04_APPLE80211_GET64 || command==A04_APPLE80211_SET64 || command==SIOCSIFFLAGS ||
-       command==SIOCGIFMEDIA32 || command==SIOCGIFMEDIA64)
+       command==SIOCGIFMEDIA32 || command==SIOCGIFMEDIA64 || command==SIOCSIFMEDIA)
         return network.dispatch(command,arg1);
     return IOEthernetInterface::performCommand(controller,command,arg0,arg1);
 }

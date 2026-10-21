@@ -80,6 +80,8 @@ public:
 #define IFF_SIMPLEX 2048
 #define IFF_MULTICAST 32768
 #define SIOCSIFFLAGS 0x80206910UL
+#define SIOCSIFMEDIA 0x80206937UL
+struct ifreq {char ifr_name[16];int ifr_media;};
 #define SIOCGIFMEDIA32 0xc0286938UL
 #define SIOCGIFMEDIA64 0xc02c6938UL
 #define IFM_IEEE80211 0x80
@@ -207,6 +209,18 @@ static void mediaCases(){
   copyOutError=0;realState.control_ready=1;
  }
  assert(current->init.ioctl(current,SIOCGIFMEDIA64,nullptr)==EINVAL);
+ ifreq selection={};strcpy(selection.ifr_name,"en7");selection.ifr_media=IFM_IEEE80211|IFM_AUTO;
+ assert(!current->init.ioctl(current,SIOCSIFMEDIA,&selection));
+ assert(!nativeCalls && !setCalls && !adminCalls && !txCalls && !(current->flags&IFF_RUNNING));
+ for(int mode:{IFM_IEEE80211|IFM_NONE,IFM_IEEE80211|0x100,0x20}){
+  selection.ifr_media=mode;assert(current->init.ioctl(current,SIOCSIFMEDIA,&selection)==EOPNOTSUPP);
+ }
+ selection.ifr_media=IFM_IEEE80211|IFM_AUTO;
+ selection.ifr_name[2]='8';assert(current->init.ioctl(current,SIOCSIFMEDIA,&selection)==ENXIO);
+ memset(selection.ifr_name,'x',16);assert(current->init.ioctl(current,SIOCSIFMEDIA,&selection)!=0);
+ strcpy(selection.ifr_name,"en7");realState.control_ready=0;
+ assert(current->init.ioctl(current,SIOCSIFMEDIA,&selection)==ENETDOWN);realState.control_ready=1;
+ assert(current->init.ioctl(current,SIOCSIFMEDIA,nullptr)==EINVAL);
  assert(!a04_native_trace_count); // standard discovery never consumes native32 trace quota
  cleanup(bridge,service);
 }
