@@ -1,0 +1,105 @@
+{
+  "scope": "Independent CPU-only source units, NOT runtime integration or a valid full208 command",
+  "license": {
+    "A04BR3RogueFragmentKick.h": "MIT; original Imagination2022 notice retained; selected Mesa expression reconstruction",
+    "A04BR3RogueTransferBackground.h": "BSD-2-Clause-Patent; original source reconstruction from target evidence, not a copied proprietary header"
+  },
+  "native": {
+    "target": "vendor/lib64/libsrv_um.so",
+    "sha256": "d32a4a224d06302d9bec0a66cbb7d17dec663d3985f1c8592f5bb77353ca1d4b",
+    "analysis": "REA standalone CLI, owned snapshot; no target execution",
+    "functions": [
+      {
+        "address": "0x13cd1c",
+        "evidence": "ev_6822f93c18e0a49ad8186a5fdc85d4f1ed556e584c4e2d6fa029e1669df4e78d",
+        "contract": "Fragment DOUTU combined image: data8 DWORDs, code1, constant0/cc0 at native core call. Native struct differs from Mesa; no struct ABI reused."
+      },
+      {
+        "address": "0x129f88",
+        "evidence": "ev_2643ceb73416945ad436c7b84268c9896d78dc0314e525becf17a84eb2b4ae98",
+        "contract": "Shader branch control raw00=0x200; four background fields at raw38/40/48/50; raw base=P+0x10."
+      },
+      {
+        "address": "0x12c568",
+        "evidence": "ev_bfd5db4bb483da5e455dea5ee2e31d2bc3b1a28b388699b659a061919bc6c744",
+        "contract": "P+168/P+170 hold successive secondary-data allocations, P+178 code table selection, P+180/P+184 padded counts, P+1a4 temps."
+      },
+      {
+        "address": "0x13ca3c",
+        "evidence": "ev_fa3cec85186e6b414fb7ffd52aadc94e4ba1cbfac941eb2da3374a46df974806",
+        "contract": "Secondary-state DATA producer; clear path writes immediate values and common-store controls. Code-table selection and full launch ordering remain unresolved; NOT implemented as a live generator."
+      },
+      {
+        "address": "0x1326a8",
+        "evidence": "ev_81c5443c85f9a0d64be59e6b70c814460dac832358891dd322fedb68604cda18",
+        "contract": "Exported producer copies original200 register bytes plus8-byte tail into old208 payload; not Mesa KMD stream."
+      },
+      {
+        "address": "0x13c5f8",
+        "evidence": [
+          "ev_f0dd50ab4a74a99fd6dc0b74d573dc5ae7d6dfae2957eff1cd4ab650d3abe1e7"
+        ],
+        "contract": "USC task word address32, temps ceil/4 shift35, sample-rate shift33, dual-phase bit41; unsupported/truncating inputs rejected by the helper."
+      }
+    ]
+  },
+  "mesa": {
+    "revision": "e1ef8f046c6e37ec1e2a13229560fbb824e5118f",
+    "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/e1ef8f046c6e37ec1e2a13229560fbb824e5118f/src/imagination/vulkan/pds/pvr_pds.c",
+    "source_sha256": {
+      "pvr_pds.c": "dfa8cd8b3fcfedcc44f181fc0e2e4ed6fbfc2ada92dd8a00fc1072f777a6339d",
+      "pvr_pds.h": "43b2bc22ea75c778ba1f1316b4f8cf6f5117dd4c7d44c0f35065b8d002d19e12"
+    },
+    "functions": [
+      "pvr_pds_kick_usc lines3744-3820",
+      "pvr_pds_setup_doutu lines485-523",
+      "pvr_pds_pixel_shader_uniform_texture_data: comparison only, not reused as target data/code ABI"
+    ]
+  },
+  "old208_fields": [
+    {
+      "raw_offset": "0x00 (low32 only)",
+      "source": "P+0x10 <- 0x200 ONLY in native non-fill, source_count>0 shader branch",
+      "status": "returned as separate field, never patches a live command"
+    },
+    {
+      "raw_offset": "0x38",
+      "source": "P+0x48: low32(P+160 minus PDSbase)&fffffff0 OR ((low32(P+178 minus PDSbase)>>4)<<36)"
+    },
+    {
+      "raw_offset": "0x40",
+      "source": "P+0x50: (low32(P+170 minus PDSbase)&fffffff0)<<32"
+    },
+    {
+      "raw_offset": "0x48",
+      "source": "P+0x58: low32(P+168 minus PDSbase)&fffffff0"
+    },
+    {
+      "raw_offset": "0x50",
+      "source": "P+0x60: (first_words&7fc)<<21 OR ceil(shared_words/16)<<55 OR (ceil(temps/4)&f) OR ((second_words/4)&7f)<<16"
+    }
+  ],
+  "validation_policy": [
+    "PDS heap <=4GiB; offset16 aligned; explicit nonempty extents; first/second data have sufficient declared lengths",
+    "Reject masked bits rather than truncating; first_words4..2044 multiple4, second_words4..508 multiple4; shared1..256 conservative local bound, PDS temps1..60",
+    "Native fragment DOUTU supports here only cc0/constant0/dual0/rate0 or2, temps0..252, aligned4 nonwrapping USC offset/extent",
+    "Output bounds checked before loads/stores; background input copied only after size/pointer/alignment/alias checks; failures atomic"
+  ],
+  "open_gates": [
+    "No BVNC-specific acceptance of newly generated solid USC fragment has been measured",
+    "DOUTU launch does not upload SolidShader shared_data; native13ca3c data path identified but shared/code table + conditional execution not fully matched",
+    "Original shader branch is non-fill with source_count>0; zero-source shaderless fill cannot be converted by setting raw00=0x200 alone",
+    "No source unit produces/accepts a complete shader-enabled208 task. Other200 register bytes, PBE/ISP, resource lifetime/cache, task ordering remain owner responsibilities",
+    "No EOT replacement, runtime modification, hardware invocation, drawn pixels or Metal/AGX capability claim"
+  ],
+  "tests": {
+    "fragment_launch_configs": 130548,
+    "background_configs": 15360,
+    "checks": [
+      "Original pinned Mesa forward encoder comparison with exact fixture",
+      "Original target task-control and background packing expression comparison",
+      "ASan/UBSan host execution, atomic invalid cases, guards and alias rejection",
+      "ARM64 Apple iOS16 freestanding C11 and strict host C++14 compile"
+    ]
+  }
+}
