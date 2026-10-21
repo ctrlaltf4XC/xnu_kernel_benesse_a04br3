@@ -1,0 +1,105 @@
+{
+  "status": "Bounded CPU-only canonical native22 background STATE producer; not a fragment compiler, full208 or runtime integration",
+  "license": "BSD-2-Clause-Patent; independent reconstruction of native format/producer facts; no opaque USC asset embedded",
+  "target": {
+    "file": "vendor/lib64/libsrv_um.so",
+    "sha256": "d32a4a224d06302d9bec0a66cbb7d17dec663d3985f1c8592f5bb77353ca1d4b"
+  },
+  "fixed_profile": [
+    "native22, linear32x32, pitch32pixels, one sample, point0 filter, plane1, source==destination, flags0",
+    "Canonical13-word property tuple [0,0,0,1,0,0,0,0,0,0,0,0,0] maps through native12e3b4 to key8; not a general shader selector",
+    "Unknown flags/formats/sizes/sources/metadata are not input API options"
+  ],
+  "evidence": [
+    {
+      "function": "12d0bc",
+      "id": "ev_b30091037b1e40d3642c580c9936020cc26ab5e3ad971330788b41d81ef3862b",
+      "fact": "point0/filter4 sampler16B=base240000000000 and0 for plane1/layout0; destination metadata[6]&fe DWORD0"
+    },
+    {
+      "function": "12d28c",
+      "id": "ev_90d81796e142693943627bd3fde4b34cc55816263f51e23a7cd04f9e604c0da3",
+      "fact": "Constructs typed texture descriptor from actual surface,12d758 dims/stride/VA,13eeac image; destination metadata[7]=DWORD4, no special postpatch for22->22"
+    },
+    {
+      "function": "13eeac",
+      "id": "ev_27b7274b45e533b120b308994cebf283481ddb0941a8d1fbf7e2cf579724d394",
+      "fact": "Actual texture packing: row fields<<27/14/11/8/5, width/height-1<<34/48, linear2D4, address<<14, stride-1, level1<<60, format0082 bit2clear implies bit59"
+    },
+    {
+      "function": "12c080/12ca38/12c310/12e3b4",
+      "ids": [
+        "ev_c26bb1bb030ed155ffb21819a9889db8992d04b8a5ebfa8ee83791ab59e28f9d",
+        "ev_b2054ee5d213fcb9d8ff5e832c0f09db9c2e921588d9aff0d9e700e1fc71164e",
+        "ev_b9d4427db6fc2191b2a4d4fcb51b4a0ed7edd2bc890ad3d56f2cf556d877ebfd"
+      ],
+      "fact": "Source profile trace: matching normalized8 source/dst -> PBEsrc0; single-sample clears MSAA properties; source normal2D/filter0 rect0..32 gives remaining props0, key8"
+    },
+    {
+      "table": "19a864, row26(native22)",
+      "id": "ev_139f7ddde8d8eb0baa419966a65047b9195a4da09ff95290340df983a4861c75",
+      "fields": {
+        "planes": 1,
+        "format_field": 12,
+        "flags": 8,
+        "swizzle": [
+          0,
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "table": "197cc0, native22 format info40 bytes",
+      "id": "ev_661e59d2180b4141c38bf9b6baad8dc7cf89d731bad45bd188a2ad2e524fe1a6",
+      "fact": "bits32, plane1, four8bit channels; flags at24=0082"
+    },
+    {
+      "table": "1507dc key table +17eb7c metadata0 +193bfc offsets",
+      "ids": [
+        "ev_7b82e4c53ff50224ecbae93851b36fe1b350b997c1de2c29e9b525a949f6d19e",
+        "ev_a7abcd28fcdf869cad19189756adcc34f4f9969bc87d02f2d2bdf4eea95e36a0",
+        "ev_d406cd688f4eee96ab3f8b0fc3ded56caf08f220e1d3914a30922de4a68e525d"
+      ],
+      "fact": "entry0 key8, offsets0..152, shared9, USC temps4, sampler0/image4/literal8=255"
+    },
+    {
+      "function": "13ca3c/13c794",
+      "ids": [
+        "ev_fa3cec85186e6b414fb7ffd52aadc94e4ba1cbfac941eb2da3374a46df974806",
+        "ev_99cb17f3a482728df8955d7ec0da7af543d2469ffa93bebb8cca2cab3addc688"
+      ],
+      "fact": "Native one-kick secondary path: first padded count0, second padded4; data3 DWORDs (VA64+controlf0000009), code3 DWORDs IF0 branch+2 / DOUTD.END const2 / HALT; temps1"
+    }
+  ],
+  "missing_shader": {
+    "native_address": "151ce4",
+    "bytes": 152,
+    "sha256": "5c68917faa051238b23674b64c6b137ef7ff75425dbde9dbc5e1e5a36e02c4a3",
+    "evidence": "ev_910dc555760f50405b2c4dd9760a8681757e5dfaf091954580c73f0292857078",
+    "meaning": "Fingerprint for future reproducible source-forward comparison or explicitly verified external asset policy; NOT approval to copy/submit this shader. No binary bytes embedded, no DOUTU/fulltask generated."
+  },
+  "resource_contract": [
+    "All4 cold BIF views share catalogue; exact GENERAL/PDS/USC BRN bases and ISP range0..1GiB, full page->ownedPA walks",
+    "Shared36 and target4096 reside in GENERAL and must be disjoint; PDS data16/code16 disjoint; all output/input backing alias checks precede output write",
+    "Producer writes local CPU image only, all failure atomic; no target pixels, table writes or CCB submission",
+    "Suggested joint plan: targetGeneral0, sharedGeneral8192, PDS EOT0/solid64/immediate128/primary192/nativeDMAdata256/code272; USC EOT0/solid64/NOP96. Native background152B entry still has NO allocation/content/dispatch here",
+    "Earlier SolidPrograms11-retain adapter does NOT stage new background or retain ISP3 buffers. Future fourheap owner must retain14 allocations, partition guards around shared36, initialize/cache-clean all spans; do NOT silently stage this using old full-General-A5 poison logic"
+  ],
+  "tests": {
+    "producer_target_positions": 481,
+    "joint_primary_carry_cases": 61,
+    "checks": [
+      "Actual producer + native expressions, original pinned Mesa DOUTD encoder, fourheap translations/bounds/atomic errors, ASanUBSan, ARM64 C++14/frame<4096",
+      "External native REA rows/metadata/code-boundaries verified by optional A04_RGX_NATIVE22_EVIDENCE_DIR; raw native data remains outside source",
+      "test_rogue_isp_programs ties actual programs+sourceNOPDOUTU+native22state+ISP outputs to same4heap/target; no fake full208",
+      "Full Rogue57 tests PASS20.805s with external metadata and primary evidence; final padding canonicalization retested by producer+joint tests"
+    ]
+  },
+  "unverified": [
+    "Source/native equivalence or explicitly reviewed immutable delivery policy for background152B USC",
+    "Complete native2 native12934c routing, raw00/PBE200byte and ISP/EOT resources, fourteen-allocation lifetime/cache owner",
+    "Firmware acceptance and pixel/guard outcome; never infer pixels from CCB/UFO completion"
+  ]
+}
