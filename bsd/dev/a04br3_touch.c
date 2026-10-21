@@ -77,7 +77,7 @@ static void touch_thread(void *arg,wait_result_t result){
 }
 void a04br3_touch_init(void){
     if(__atomic_exchange_n(&started,1,__ATOMIC_ACQ_REL))return;
-    bus=ml_io_map(0x11009000,0x1000);gpio=ml_io_map(0x10005000,0x1000);top=ml_io_map(0x10000000,0x1000);infra=ml_io_map(0x10001000,0x1000);pwrap=ml_io_map(0x1000d000,0x1000);
+    bus=ml_io_map(0x11009000,0x1000);gpio=ml_io_map(0x10005000,0x1000);top=ml_io_map(0x10000000,0x1000);infra=ml_io_map(0x10001000,0x1000);pwrap=ml_io_map(0x1000f000,0x1000);
     if(!bus || !gpio || !top || !infra || !pwrap){printf("A04BR3 TOUCH: MMIO map failed\n");return;}
     thread_t t=THREAD_NULL;kern_return_t e=kernel_thread_start(touch_thread,NULL,&t);if(e==KERN_SUCCESS)thread_deallocate(t);else printf("A04BR3 TOUCH: thread error=%d\n",e);
 }
