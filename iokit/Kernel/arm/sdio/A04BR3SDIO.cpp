@@ -7,6 +7,7 @@
 #include <pexpert/pexpert.h>
 #include "A04BR3SDIOPIO.h"
 #include "A04BR3SDIOPads.h"
+#include "A04BR3WMTRoundtrip.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3SDIO : public IOService {
  OSDeclareDefaultStructors(A04BR3SDIO);
@@ -15,6 +16,7 @@ class A04BR3SDIO : public IOService {
  struct a04_sdio_io io;
  struct a04_sdio_transport transport;
  bool transportReady=false;
+ struct a04_wmt_channel channel;
  static uint32_t dataRead(void *p,unsigned off,unsigned width){
   A04BR3SDIO *s=(A04BR3SDIO *)p;
   if(width==4)return rd(s->host,off);
@@ -72,7 +74,11 @@ public:
  int transferFunction(unsigned fn,unsigned address,int write,int increment,void *buffer,unsigned length){
   if(!transportLock)return A04_SDIO_POISONED;
   IOLockLock(transportLock);
-  int e=transportReady?a04_sdio_transfer(&transport,fn,address,write,increment,buffer,length):A04_SDIO_POISONED;
+  /* fn2 belongs to the serialized WMT channel: raw CHISR/FIFO accesses
+   * would consume status/data behind its credit and response bookkeeping. */
+  int e=!transportReady?A04_SDIO_POISONED:
+   (fn==2 && channel.initialized)?A04_SDIO_ARGUMENT:
+   a04_sdio_transfer(&transport,fn,address,write,increment,buffer,length);
   if(transport.failed){transportReady=false;setProperty("WMTTransportReady",kOSBooleanFalse);}
   IOLockUnlock(transportLock);return e;
  }
@@ -111,8 +117,33 @@ bool A04BR3SDIO::start(IOService *provider)
  error=a04_sdio_wmt_prepare(&transport,&wmt);
  IOLog("A04BR3 SDIO: WMT fn2 prepare=%d CCIR=0x%x CHLPCR=0x%x->0x%x polls=%u enabled=0x%x\n",error,wmt.ccir,wmt.chlpcr_before,wmt.chlpcr_after,wmt.polls,transport.enabled);
  if(error)return false;
- transportReady=true;
- setProperty("WMTTransportReady",kOSBooleanTrue);
+ /* Keep all WMT commands and destructive CHISR/CRDR reads under one lock.
+  * Cold preparation above is the only point at which FIFO credits initialize. */
+ IOLockLock(transportLock);
+ error=a04_wmt_channel_init(&transport,&channel);
+ IOLog("A04BR3 WMT: channel init=%d CHCR=0x%x (polled)\n",error,channel.chcr);
+ const uint32_t addresses[2]={0x80000000u,0x80000004u};
+ uint32_t versions[2]={0,0};
+ for(unsigned i=0;!error && i<2;i++){
+  error=a04_wmt_read_version(&transport,&channel,addresses[i],&versions[i]);
+  IOLog("A04BR3 WMT: version addr=0x%x error=%d value=0x%x CHISR=0x%x polls=%u rxlen=%u packets=%u event=%u credit=%u pending=%u\n",addresses[i],error,versions[i],channel.status,channel.polls,channel.rx_length,channel.rx_packets,channel.event_length,channel.free_bytes,channel.pending_cost);
+  if(channel.event_length){
+   IOLog("A04BR3 WMT: event");
+   for(unsigned k=0;k<channel.event_length && k<32;k++)IOLog(" %02x",channel.event[k]);
+   IOLog("\n");
+  }
+ }
+ transportReady=!error;
+ IOLockUnlock(transportLock);
+ setProperty("WMTVersionQueryError",(unsigned)error,32);
+ if(!error){
+  setProperty("WMTHardwareVersion",versions[0],32);setProperty("WMTFirmwareROMVersion",versions[1],32);
+  IOLog("A04BR3 WMT: identity HW=0x%x FW/ROM=0x%x; firmware selection pending validated blob/revision match\n",versions[0],versions[1]);
+ }
+ /* Preserve the diagnostic service on query failure but expose no readiness.
+  * Firmware body transfer and WLAN startup remain gated until independently
+  * selected firmware and version-query hardware validation are available. */
+ setProperty("WMTTransportReady",transportReady?kOSBooleanTrue:kOSBooleanFalse);
  setProperty("WMTCCIR",wmt.ccir,32);setProperty("WMTCHLPCR",wmt.chlpcr_after,32);
  setProperty("SDIOVendor",card.vendor,32);setProperty("SDIODevice",card.device,32);setProperty("NetworkDataPathAvailable",kOSBooleanFalse);registerService();return true;
 }
