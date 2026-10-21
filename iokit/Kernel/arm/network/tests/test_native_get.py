@@ -15,7 +15,7 @@ memset(b,0x55,sizeof(b));b[0]=1;b[1]=b[2]=b[3]=0;s.radio_enabled=1;n=sizeof(b);
 assert(a04_native_get(&s,19,0,b,&n)==0 && n==24 && b[0]==1 && b[4]==1 && b[8]==1 && b[24]==0x55);
 s.radio_enabled=0;n=24;assert(a04_native_get(&s,19,0,b,&n)==0 && b[8]==0);
 b[0]=2;n=24;assert(a04_native_get(&s,19,0,b,&n)==EINVAL && b[0]==2);
-n=260;assert(a04_native_get(&s,12,0,b,&n)==EOPNOTSUPP);assert(a04_native_get(&s,19,1,b,&n)==EOPNOTSUPP);
+n=260;memset(b,0x55,sizeof(b));assert(a04_native_get(&s,12,0,b,&n)==0 && n==13 && b[13]==0x55);for(unsigned i=0;i<13;i++)assert(!b[i]);n=260;assert(a04_native_get(&s,19,1,b,&n)==EOPNOTSUPP);
 memset(b,0x55,sizeof(b));n=260;assert(a04_native_get(&s,43,0,b,&n)==0 && n==256 && b[255]==0 && b[256]==0x55);
 assert(!strcmp((char *)b,"A04BR3 MT6630 source SDIO runtime"));return 0;}
 '''

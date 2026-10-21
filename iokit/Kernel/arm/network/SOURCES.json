@@ -1,5 +1,5 @@
 {
-  "implementation": "Original A04BR3 adapter/bridge plus pinned genuine Apple IONetworkingFamily in apple/. Apple license headers retained; only local include spellings adapted.",
+  "implementation": "Original A04BR3 adapter/bridge plus pinned genuine Apple IONetworkingFamily in apple/. Apple license headers retained; adaptations recorded in apple/SOURCE.json.",
   "api_source": {
     "remote": "https://github.com/apple-oss-distributions/xnu",
     "tag": "xnu-8796.141.3",
@@ -97,5 +97,20 @@
     ],
     "scope": "reference source prerequisite, not proof of shipped iOS16 execution; not copied into runtime sources"
   },
-  "apple_runtime_source": "apple/SOURCE.json"
+  "apple_runtime_source": "apple/SOURCE.json",
+  "native_get_codecs": {
+    "target_wrapper_sha256": "5ad1a0f267e55da17d4af357d19c10c23ac3893f03e2c1c7633d1e8c93062093",
+    "procedures": {
+      "Apple80211GetPowerState": "0x1d3ebad38",
+      "Apple80211CopyValue": "0x1d3eba368",
+      "Apple80211GetWithIOCTL": "0x1d3ec3f64"
+    },
+    "evidence_ids": [
+      "ev_42495042ba8075dc43bfeaaee7bd5b035b7095f5d4887f328cc88a2c6ce8eb7b",
+      "ev_49013c6f80ab70678320d49fd47e6dda5212a41771c8f64cce63a82f2aa87ff6",
+      "ev_6e87fc12e1077c6c752bbb4e58b30ddca8df7a79fcfa3605e9dceb69d251cefe"
+    ],
+    "implemented": "type19 raw24 version/count/state from observed radio_enabled; type43 raw256 own driver identity; type12 raw13 zero optional-capability advertisement; no fabricated scan/RSSI/link",
+    "scope": "static shipped userspace layout proof; runtime binding not yet verified"
+  }
 }
