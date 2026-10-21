@@ -66,6 +66,7 @@ int main(void){
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory);(p/'IOKit').mkdir();(p/'arm').mkdir()
             (p/'IOKit/IOBufferMemoryDescriptor.h').write_text(r'''
+#pragma once
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,12 +76,13 @@ static int kernel_task=0;
 enum {A04_TEST_MAIN_BYTES=0x40000,kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,kIOMapWriteCombineCache=0x400,kIOReturnSuccess=0};
 class IOBufferMemoryDescriptor;
 static IOBufferMemoryDescriptor *retained[128];
+static bool renderAllocating;
 static unsigned descriptors,attempts,live,completed,cleaned;static int allocFault;
 class IOBufferMemoryDescriptor {
 public:
  void *cpu;uint64_t size,pa;unsigned id;
  static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(int,unsigned options,uint64_t size,uint64_t){
-  assert(((options&kIOMapWriteCombineCache)!=0)==(size==A04_TEST_MAIN_BYTES));
+  assert(((options&kIOMapWriteCombineCache)!=0)==(size==A04_TEST_MAIN_BYTES || (renderAllocating && (attempts==0 || attempts==4))));
   unsigned slot=attempts++;
   if(allocFault==(int)slot+1)return nullptr;
   auto b=new IOBufferMemoryDescriptor;b->id=descriptors++;assert(b->id<128);
@@ -94,8 +96,9 @@ public:
  void *getBytesNoCopy(){return cpu;}
 };
 ''')
-            (p/'arm/caches_internal.h').write_text('static void flush_dcache(vm_offset_t,unsigned,int){++cleaned;}\n')
+            (p/'arm/caches_internal.h').write_text('#pragma once\nstatic void flush_dcache(vm_offset_t,unsigned,int){++cleaned;}\n')
             (p/'A04BR3RogueMemory.h').write_text(r'''
+#pragma once
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <arm/caches_internal.h>
 #include "A04BR3RogueMipsMMU.h"
@@ -121,8 +124,13 @@ public:
                 header=header.replace(asm,'__asm__ volatile("":::"memory");')
             header=header.replace('__asm__ volatile("dc ivac, %0"::"r"(line):"memory");','(void)line;')
             (p/'A04BR3RogueRuntime.h').write_text(header)
+            render=(GPU/'A04BR3RogueRenderMemory.h').read_text().replace(
+                '__asm__ volatile("dsb sy":::"memory");','__asm__ volatile("":::"memory");')
+            (p/'A04BR3RogueRenderMemory.h').write_text(render)
             (p/'test.cpp').write_text(r'''
 #include "A04BR3RogueRuntime.h"
+#include "A04BR3RogueRenderMemory.h"
+static A04BR3RogueRenderMemory *activeRender;
 static uint64_t regs[0x10000/8];static A04BR3RogueRuntime *active;
 static bool released;static unsigned writes,waited;static int failure;
 static uint32_t read32(void *,uint32_t at){assert(at<0x10000);return ((uint32_t*)regs)[at/4];}
@@ -140,7 +148,7 @@ static uint32_t shared(void *,uint32_t address){
  }
  return active->readShared(address);
 }
-static unsigned commandKicks,commandWaits;static bool commandAnswer=true;
+static unsigned commandKicks,commandWaits;static bool commandAnswer=true,commandCorrupt;
 static void *commandMemory(uint32_t address) {
  assert(address>=0xc0040000 && address<0xc0080000);
  return (char*)retained[descriptors-3]->cpu+(address-0xc0040000);
@@ -153,18 +161,34 @@ static void kickCommand(void *,uint32_t at,uint32_t value) {
 static void waitCommand(void *,uint32_t us) {
  assert(us==10);++commandWaits;
  if(!commandAnswer)return;
+ if(commandCorrupt){activeRender->view()->control[1]->ui32ReadOffset=4096;return;}
  auto init=active->init();
  auto ctl=(RGXFWIF_CCB_CTL*)commandMemory(init->psKernelCCBCtl.ui32Addr);
  auto commands=(RGXFWIF_KCCB_CMD*)commandMemory(init->psKernelCCB.ui32Addr);
  auto &cmd=commands[ctl->ui32ReadOffset];
- assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_SYNC && cmd.eDM==3);
- *(uint32_t*)commandMemory(cmd.uCmdData.sSyncData.sSyncObjDevVAddr.ui32Addr)=cmd.uCmdData.sSyncData.uiUpdateVal;
+ if(cmd.eCmdType==RGXFWIF_KCCB_CMD_SYNC) {
+  assert(cmd.eDM==3);
+  *(uint32_t*)commandMemory(cmd.uCmdData.sSyncData.sSyncObjDevVAddr.ui32Addr)=cmd.uCmdData.sSyncData.uiUpdateVal;
+ } else {
+  assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_KICK && (cmd.eDM==2 || cmd.eDM==3));
+  auto r=activeRender->view();unsigned n=cmd.eDM==3;
+  assert(cmd.uCmdData.sCmdKickData.psContext.ui32Addr==
+    a04_rgx_render_fw_address(r,n?&r->context->s3DContext:&r->context->sTAContext));
+  auto client=r->control[n];
+  auto header=(RGXFWIF_CCB_CMD_HEADER*)(r->commands[n]+client->ui32ReadOffset);
+  assert(header->eCmdType==A04_RGX_CLIENT_UPDATE && header->ui32CmdSize==8);
+  auto ufo=(RGXFWIF_UFO*)((char*)header+40);
+  assert(ufo->puiAddrUFO.ui32Addr==r->sync_addr.ui32Addr);
+  *r->sync=ufo->ui32Value;
+  client->ui32ReadOffset=client->ui32WriteOffset=client->ui32DepOffset=cmd.uCmdData.sCmdKickData.ui32CWoffUpdate;
+ }
  ctl->ui32ReadOffset=ctl->ui32WriteOffset;
 }
 static a04_rgx_command_io commandIO={nullptr,publishCommand,acquireCommand,kickCommand,waitCommand};
 static void publishCommand(void *) {
  /* Reentrant producer cannot interleave a second command. */
  assert(active->fence(3,commandIO)==A04_CCB_BUSY);
+ if(activeRender)assert(active->renderUpdate(*activeRender,2,commandIO)==A04_CCB_BUSY);
 }
 int main(){
  for(allocFault=1;allocFault<=3;allocFault++) {
@@ -177,26 +201,37 @@ int main(){
   assert(runtime.prepare(source,26000000));assert(baseTable[0x40] && baseTable[0x1ff0]);
   assert(baseTable[0]&4U);
   runtime.reset();assert(!live && !baseTable[0x40] && !baseTable[0x1ff0] && !(baseTable[0]&4U));}
- for(failure=0;failure<4;failure++) {
-  A04BR3RogueMemory source;A04BR3RogueRuntime runtime;active=&runtime;attempts=0;
+ for(failure=0;failure<6;failure++) {
+  A04BR3RogueMemory source;A04BR3RogueRuntime runtime;A04BR3RogueRenderMemory render;
+  active=&runtime;activeRender=&render;attempts=0;renderAllocating=true;
+  assert(render.prepareCold(source,1));renderAllocating=false;attempts=0;
+  commandKicks=commandWaits=0;commandAnswer=true;commandCorrupt=false;
   released=false;writes=waited=0;memset(regs,0,sizeof(regs));
   assert(runtime.prepare(source,26000000));assert(!runtime.ready());
   a04_rgx_exec_io io={nullptr,read32,read64,write32,write64,waitUS,shared};
   unsigned pinned=live;
-  int result=runtime.start(source,io);
+  assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OFFLINE);
+  render.pinForFirmware();int result=runtime.start(source,io);
   assert(released && source.owned && writes);
   if(failure==1)assert(waited==1000009); /* exact finite MTK 1s poll, plus startup waits and recovery reset */
-  if(!failure){assert(result==0 && runtime.ready()==1);
+  if(!failure || failure>=4){assert(result==0 && runtime.ready()==1);
    assert(runtime.fence(4,commandIO)==A04_CCB_INPUT && !commandKicks);
    assert(runtime.fence(3,commandIO)==A04_CCB_OK && commandKicks==1 && commandWaits==1);
-   commandAnswer=false;commandWaits=0;
-   assert(runtime.fence(3,commandIO)==A04_CCB_TIMEOUT && commandKicks==2 && commandWaits==10000);
-   assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE && commandKicks==2);
+   assert(runtime.renderUpdate(render,4,commandIO)==A04_CCB_INPUT && commandKicks==1);
+   assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OK);
+   assert(runtime.renderUpdate(render,3,commandIO)==A04_CCB_OK);
+   assert(runtime.fence(3,commandIO)==A04_CCB_OK);
+   commandAnswer=failure==4;commandCorrupt=failure==4;commandWaits=0;
+   int commandResult=failure==5?runtime.fence(3,commandIO):runtime.renderUpdate(render,3,commandIO);
+   assert(commandResult==(failure==4?A04_CCB_CORRUPT:A04_CCB_TIMEOUT));
+   assert(commandKicks==5 && commandWaits==(failure==4?1U:10000U));
+   assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE && commandKicks==5);
+   assert(runtime.renderUpdate(render,2,commandIO)==A04_CCB_OFFLINE && commandKicks==5);
   }
   else {assert(result!=0);assert(regs[0x100/8]==0x100000000ULL);
    assert(runtime.fence(3,commandIO)==A04_CCB_OFFLINE);}
   assert(!runtime.prepare(source,26000000));
-  runtime.reset();assert(live==pinned); /* never free fabric-visible resources */
+  render.reset();runtime.reset();assert(live==pinned); /* never free fabric-visible resources */
  }
  /* Test harness alone reclaims quarantined mock resources after mock device
   * shutdown. Production deliberately retains them until a real power cycle. */

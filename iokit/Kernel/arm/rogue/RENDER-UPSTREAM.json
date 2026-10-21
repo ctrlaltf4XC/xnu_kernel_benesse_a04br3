@@ -1,5 +1,5 @@
 {
-  "status": "New-file-only native BIF/context/client UPDATE + KCCB KICK candidate; source/host verified, not wired into frozen driver and not hardware tested; no rasterization claimed",
+  "status": "Cold native render-context owner integrated before runtime prepare; bounded TA/3D client UPDATE/KCCB KICK plus post-UPDATE SYNC, host/ARM64 compile tested; physical UPDATE and rasterization unverified",
   "ddk": "Imagination/MediaTek m1.11ED5425693, MT8167 user config, BVNC22.40.54.30",
   "source_sha256": {
     "hwdefs/km/rgxmmudefs_km.h": "bfedc5799e2b57b27cece82d3cd882c557f44ce3356895c9ffa5d7471cdffd28",
@@ -24,12 +24,7 @@
     "Client CCB48byte UPDATE packet,40byte PADDING header/reserved-tail rule, no CPU writes to FW-owned CCCB write offset",
     "Typed KCCB KICK from owned context and current client write offset, no hardware task/shader bytes; finite100ms polling of KCCB and client read offsets plus exact UFO sequence; timeout quarantine"
   ],
-  "integration_required": [
-    "Call owner.prepareCold after CPU memory.stage and BEFORE Runtime.prepare; new mapping is cold only",
-    "Pin owner before firmware release; keep Memory source alive longer than owner",
-    "After actual firmware ready and matching compatibility checks, call update under SAME producer/power/stop lock as existing KCCB SYNC",
-    "Frozen Runtime layout is currently private: parent must add trusted internal view/accessor in next integration change. No current CPP/Runtime file changed by this scope"
-  ],
+  "integration_required": [],
   "not_implemented": [
     "Actual TA/3D task/raster/shader command ABI and validated resources/RT data/freelists",
     "Live MIPS/BIF TLB invalidation, power-off drain and safe teardown, asynchronous FWCCB request handlers",
@@ -37,7 +32,26 @@
   ],
   "tests": [
     "test_rogue_render.py",
-    "test_rogue_render_memory.py"
+    "test_rogue_render_memory.py",
+    "test_rogue_runtime.py: actual Runtime + RenderMemory + typed submit against simulated FW, offline/invalidDM/reentrant/bounded timeout/corrupt/poison and pinned ownership",
+    "test_rogue_boot_firmware.py: actual CPP with owner/runtime shims, cold/prepare/pin ordering, shared service lock, fallback, baseline gate, stop and byte accounting",
+    "test_rogue_runtime_compile.py: full production CPP/headers and original ARM instructions target compile, not XNU link"
   ],
-  "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE"
+  "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE",
+  "hardware_baseline": {
+    "source": "user current157a; integration/wlan-native-runtime-first-boot.txt lines167-171",
+    "observed": "FW ready ABI/DDK/BVNC verified; KCCB SYNC DM0/2/3 result0; baseline predates this integration"
+  },
+  "integration_implemented": [
+    "GPU.cpp owns render after Memory/Runtime; prepareCold before Runtime.prepare, pin before Runtime.start, reset render before runtime/base; five additional owned allocations total143360bytes",
+    "Allocation failure preserves FW/SYNC baseline; no new required boot arguments or user command ABI",
+    "Only after baseline GP/TA/3D SYNC verified mask0xd: UPDATE/KICK DM2 then SYNC DM2, UPDATE/KICK DM3 then SYNC DM3; each command bounded100ms",
+    "Runtime.renderUpdate accepts only typed owner and private runtime layout; shares commandBusy gate with fence and driver bridgeLock with stop; render timeout/corrupt poisons common KCCB transport",
+    "Success requires exact own UFO and kernel/client consumption; verified mask0xc additionally requires post-UPDATE SYNC for each DM"
+  ],
+  "limits": [
+    "UPDATE executes client firmware scheduling/UFO operations only; no BIF hardware translation or rasterizer work is demonstrated",
+    "Physical FW UPDATE/KICK response remains untested in this candidate; parent commits/builds/boots",
+    "Main/render command banks normal-NC; cached BIF tables cleaned cold; no live table mutation or speculative shader bytes"
+  ]
 }

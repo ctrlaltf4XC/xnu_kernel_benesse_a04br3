@@ -14,6 +14,7 @@
 #include "A04BR3RogueMemory.h"
 #include "A04BR3RogueBootFirmware.h"
 #include "A04BR3RogueRuntime.h"
+#include "A04BR3RogueRenderMemory.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 extern "C" vm_offset_t ml_static_ptovirt(vm_offset_t);
 /* Platform SLEH can call this hook before its unhandled-SPI panic, then EOI.
@@ -67,13 +68,14 @@ public:
             __asm__ volatile("dsb sy":::"memory");
             (void)*(volatile uint64_t *)(core+0x100);
         }
-        runtime.reset();memory.reset();
+        render.reset();runtime.reset();memory.reset();
         if (bridgeLock) IOLockUnlock(bridgeLock);
         IOService::stop(provider);
     }
 private:
     A04BR3RogueMemory memory;
     A04BR3RogueRuntime runtime;
+    A04BR3RogueRenderMemory render; /* destroyed before runtime/base mappings */
     vm_offset_t core=0,gic=0;
     bool attempted=false;
     IOLock *bridgeLock=nullptr;bool bridgeOnline=false;
@@ -111,7 +113,33 @@ private:
         IOLockUnlock(bridgeLock);
         return error;
     }
-    void verifyCommandBridge() {
+    int submitRenderUpdate(uint32_t dm) {
+        if (!bridgeLock) return A04_CCB_OFFLINE;
+        if (!IOLockTryLock(bridgeLock)) return A04_CCB_BUSY;
+        a04_rgx_command_io io={this,commandPublish,commandAcquire,fwWrite32,fwWait};
+        int error=bridgeOnline?runtime.renderUpdate(render,dm,io):A04_CCB_OFFLINE;
+        IOLockUnlock(bridgeLock);
+        return error;
+    }
+    void verifyRenderBridge() {
+        if (!render.view()) return;
+        uint32_t verified=0;
+        for (uint32_t dm=2;dm<=3;dm++) {
+            int error=submitRenderUpdate(dm);
+            setProperty("FirmwareRenderUpdateResult",(uint64_t)error,32);
+            IOLog("A04BR3 GPU: client UPDATE/KICK DM=%u result=%d; FW UFO + KCCB/client read-offset required, no draw packet\n",dm,error);
+            if (error) break;
+            /* A separate SYNC confirms the existing fence path still works
+             * after firmware has consumed this client's UPDATE. */
+            error=submitFence(dm);
+            setProperty("FirmwareRenderPostFenceResult",(uint64_t)error,32);
+            IOLog("A04BR3 GPU: post-UPDATE SYNC DM=%u result=%d\n",dm,error);
+            if (error) break;
+            verified|=1U<<dm;
+        }
+        setProperty("FirmwareRenderUpdateVerifiedDMs",(uint64_t)verified,32);
+    }
+    uint32_t verifyCommandBridge() {
         const uint32_t domains[]={A04_RGX_DM_GP,A04_RGX_DM_TA,A04_RGX_DM_3D};
         uint32_t verified=0;
         for (unsigned i=0;i<3;i++) {
@@ -122,6 +150,7 @@ private:
             verified|=1U<<domains[i];
         }
         setProperty("FirmwareFenceVerifiedDMs",(uint64_t)verified,32);
+        return verified;
     }
     void startFirmware() {
         unsigned enabled=1;
@@ -155,14 +184,22 @@ private:
             return;
         }
         IOLog("A04BR3 GPU: FW core clock 26000000 Hz from verified crystal mux path\n");
+        /* No live TLB edits: reserve/map native contexts before runtime
+         * promotes code PTEs, and before MIPS reset is released. Allocation
+         * failure leaves the proven firmware/SYNC path available. */
+        bool renderPrepared=render.prepareCold(memory,1);
+        setProperty("FirmwareRenderContextPrepared",renderPrepared?kOSBooleanTrue:kOSBooleanFalse);
+        IOLog("A04BR3 GPU: cold render context prepared=%u; no tasks/shaders submitted\n",(unsigned)renderPrepared);
         if (!runtime.prepare(memory,26000000)) {
+            render.reset();
             setProperty("BringupStage","firmware-runtime-allocation-failed");
             IOLog("A04BR3 GPU: FW runtime allocation/mapping rejected; MIPS not released\n");return;
         }
         setProperty("FirmwareMemoryBytes",(uint64_t)(A04BR3RogueMemory::TableBytes+
             A04BR3RogueMemory::CodeBytes+A04BR3RogueMemory::DataBytes+
-            A04_RGX_MAIN_BYTES+A04_RGX_CONFIG_BYTES+0x4000),32);
+            A04_RGX_MAIN_BYTES+A04_RGX_CONFIG_BYTES+0x4000+(renderPrepared?143360:0)),32);
         a04_rgx_exec_io io={this,fwRead32,fwRead64,fwWrite32,fwWrite64,fwWait,fwShared};
+        render.pinForFirmware(); /* quarantine before any reset release, including failed start */
         attempted=true;
         IOLog("A04BR3 GPU: FW start INIT=%u ready_offset=%u; bounded polled IRQ route, INTID217 masked\n",
             (unsigned)sizeof(RGXFWIF_INIT),(unsigned)offsetof(RGXFWIF_INIT,bFirmwareStarted));
@@ -178,7 +215,7 @@ private:
         setProperty("BringupStage","firmware-ready");
         IOLog("A04BR3 GPU: FW ready=1 ABI/DDK/BVNC verified; IRQ=0x%x; no acceleration bridge\n",fwRead32(this,0x8a8));
         bridgeOnline=true;
-        verifyCommandBridge();
+        if (verifyCommandBridge()==0xd) verifyRenderBridge();
     }
     void stageBootFirmware() {
         DTEntry map=nullptr;

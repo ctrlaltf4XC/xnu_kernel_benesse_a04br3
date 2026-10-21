@@ -27,7 +27,7 @@ using vm_offset_t=uintptr_t;using vm_size_t=uintptr_t;
 static void IODelay(unsigned) {}
 static void IOLog(const char *,...) {}
 ''')
-            (root/'IOKit/IOLocks.h').write_text('struct IOLock {};\nstatic IOLock *IOLockAlloc(){return new IOLock;}\nstatic void IOLockFree(IOLock *p){delete p;}\nstatic void IOLockLock(IOLock *){}\nstatic bool IOLockTryLock(IOLock *){return true;}\nstatic void IOLockUnlock(IOLock *){}\n')
+            (root/'IOKit/IOLocks.h').write_text('struct IOLock {};\nstatic bool lockHeld,forceLockBusy;\nstatic IOLock *IOLockAlloc(){return new IOLock;}\nstatic void IOLockFree(IOLock *p){delete p;}\nstatic void IOLockLock(IOLock *){assert(!lockHeld);lockHeld=true;}\nstatic bool IOLockTryLock(IOLock *){if(lockHeld || forceLockBusy)return false;lockHeld=true;return true;}\nstatic void IOLockUnlock(IOLock *){assert(lockHeld);lockHeld=false;}\n')
             (root/'arm').mkdir(exist_ok=True)
             (root/'arm/machine_routines.h').write_text('static bool inInterrupt;\nstatic bool ml_at_interrupt_context(){return inInterrupt;}\n')
             (root/'IOKit/IOService.h').write_text(r'''
@@ -37,6 +37,7 @@ static void IOLog(const char *,...) {}
 static const void *kOSBooleanFalse=(void *)1;
 static const void *kOSBooleanTrue=(void *)2;
 static char payloadStatus[64],bringupStage[64];
+static uint64_t memoryBytes,renderMask;
 static uint64_t stageResult;static unsigned runningFalse,runningTrue;
 using IOReturn=int;
  enum {kIOReturnSuccess=0,kIOReturnBadArgument=1,kIOReturnNotPermitted=2,kIOReturnTimeout=3,
@@ -61,6 +62,8 @@ public:
  }
  void setProperty(const char *name,uint64_t value,int) {
   if(!strcmp(name,"FirmwareStageResult"))stageResult=value;
+  if(!strcmp(name,"FirmwareMemoryBytes"))memoryBytes=value;
+  if(!strcmp(name,"FirmwareRenderUpdateVerifiedDMs"))renderMask=value;
  }
 };
 ''')
@@ -92,7 +95,19 @@ public:
   if(stageError){reset();}return stageError;}
 };
 ''')
+            (root/'A04BR3RogueRenderMemory.h').write_text(r'''
+#pragma once
+static unsigned coldPrepares,renderPins,renderResets,renderUpdates;
+static bool coldOK=true;static int renderError;
+class A04BR3RogueRenderMemory {public:
+ bool prepareCold(A04BR3RogueMemory &,unsigned id){assert(id==1);++coldPrepares;return coldOK;}
+ void pinForFirmware(){++renderPins;}
+ void reset(){++renderResets;}
+ const void *view()const{return coldOK?this:nullptr;}
+};
+''')
             (root/'A04BR3RogueRuntime.h').write_text(r'''
+#include "A04BR3RogueRenderMemory.h"
 #include "A04BR3RogueRuntimeLayout.h"
 #include "A04BR3RogueStartupExecutor.h"
 #include "A04BR3RogueCommand.h"
@@ -101,9 +116,10 @@ static unsigned runtimePrepares,runtimeStarts;static bool prepareOK=true;static 
 class A04BR3RogueRuntime {
 public:
  void reset(){}
- bool prepare(A04BR3RogueMemory &,uint32_t){++runtimePrepares;return prepareOK;}
- int start(A04BR3RogueMemory &,const a04_rgx_exec_io &){++runtimeStarts;return startError;}
- int fence(uint32_t dm,const a04_rgx_command_io &){++fenceCalls;lastDM=dm;return fenceError;}
+ bool prepare(A04BR3RogueMemory &,uint32_t){assert(coldPrepares==1);++runtimePrepares;return prepareOK;}
+ int start(A04BR3RogueMemory &,const a04_rgx_exec_io &){assert(renderPins==1);++runtimeStarts;return startError;}
+ int fence(uint32_t dm,const a04_rgx_command_io &){assert(lockHeld);++fenceCalls;lastDM=dm;return fenceError;}
+ int renderUpdate(A04BR3RogueRenderMemory &,uint32_t dm,const a04_rgx_command_io &){assert(lockHeld && (dm==2 || dm==3));++renderUpdates;return renderError;}
  uint32_t readShared(uint32_t){return 0;}
  uint32_t ready(){return 0;}
 };
@@ -154,6 +170,8 @@ static void initialize() {
  absentMap=absentAsset=absentKernel=badTranslation=zeroTranslation=hasRAMDisk=false;
  stages=resets=stageError=translations=runningFalse=runningTrue=0;stageResult=99;
  fenceCalls=lastDM=0;fenceError=0;inInterrupt=false;
+ assert(!lockHeld);forceLockBusy=false;memoryBytes=renderMask=0;
+ coldPrepares=renderPins=renderResets=renderUpdates=0;coldOK=true;renderError=0;
  autoStart=runtimePrepares=runtimeStarts=0;prepareOK=true;startError=0;
  memset(gicMemory,0,sizeof(gicMemory));memset(coreMemory,0,sizeof(coreMemory));
  memset(topMemory,0,sizeof(topMemory));topMemory[0]=4U<<8;topMemory[1]=8U<<8;
@@ -196,7 +214,10 @@ int main() {
  initialize();autoStart=1;gpu.core=(vm_offset_t)coreMemory;gpu.stageBootFirmware();
  assert(runtimePrepares==1 && runtimeStarts==1 && runningTrue==1);
  assert(!strcmp(bringupStage,"firmware-ready"));
- assert(fenceCalls==3 && lastDM==3);
+ assert(fenceCalls==5 && lastDM==3 && renderUpdates==2 && renderMask==0xc && memoryBytes==643072);
+ forceLockBusy=true;
+ assert(gpu.submitRenderUpdate(2)==A04_CCB_BUSY && renderUpdates==2);
+ assert(gpu.submitFence(3)==A04_CCB_BUSY && fenceCalls==5);forceLockBusy=false;
  assert(gpu.callPlatformFunction(nullptr,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnBadArgument);
  OSSymbol fenceName("A04BR3RogueFence"),otherName("unknown");
  assert(gpu.callPlatformFunction(&otherName,false,nullptr,nullptr,nullptr,nullptr)==99);
@@ -204,7 +225,7 @@ int main() {
  assert(gpu.callPlatformFunction(&fenceName,false,nullptr,(void*)1,nullptr,nullptr)==kIOReturnBadArgument);
  inInterrupt=true;
  assert(gpu.callPlatformFunction(&fenceName,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnNotPermitted);
- assert(fenceCalls==3);inInterrupt=false;
+ assert(fenceCalls==5);inInterrupt=false;
  assert(gpu.callPlatformFunction(&fenceName,false,(void*)2,nullptr,nullptr,nullptr)==0 && lastDM==2);
  fenceError=A04_CCB_TIMEOUT;
  assert(gpu.callPlatformFunction(&fenceName,false,(void*)3,nullptr,nullptr,nullptr)==kIOReturnTimeout);
@@ -215,10 +236,18 @@ int main() {
  coreMemory[0x8a8/4]=1;
  assert(!a04br3_rogue_irq_dispatch(216));assert(a04br3_rogue_irq_dispatch(217));
  assert(coreMemory[0x8b0/4]==1);
- gpu.stop(nullptr);assert(!a04br3_rogue_irq_dispatch(217));
+ gpu.stop(nullptr);assert(renderResets==1 && !lockHeld && !a04br3_rogue_irq_dispatch(217));
  assert(gpu.callPlatformFunction(&fenceName,false,nullptr,nullptr,nullptr,nullptr)==kIOReturnNotReady);
  initialize();autoStart=1;prepareOK=false;gpu.stageBootFirmware();
- assert(runtimePrepares==1 && !runtimeStarts && !runningTrue);
+ assert(runtimePrepares==1 && !runtimeStarts && !runningTrue && renderResets==1);
+ initialize();autoStart=1;coldOK=false;gpu.stageBootFirmware();
+ assert(runtimeStarts==1 && runningTrue==1 && fenceCalls==3 && !renderUpdates && memoryBytes==499712);
+ initialize();autoStart=1;renderError=A04_CCB_TIMEOUT;gpu.stageBootFirmware();
+ assert(runtimeStarts==1 && fenceCalls==3 && renderUpdates==1);
+ initialize();autoStart=1;fenceError=A04_CCB_TIMEOUT;gpu.stageBootFirmware();
+ assert(runtimeStarts==1 && fenceCalls==1 && !renderUpdates);
+ initialize();autoStart=1;startError=1;gpu.stageBootFirmware();
+ assert(runtimeStarts==1 && renderPins==1 && !fenceCalls && !renderUpdates);
  initialize();autoStart=1;gicMemory[(0x100+6*4)/4]=1U<<25;gpu.stageBootFirmware();
  assert(!runtimePrepares && !runtimeStarts && !runningTrue);
  assert(!strcmp(bringupStage,"firmware-irq-mask-failed"));

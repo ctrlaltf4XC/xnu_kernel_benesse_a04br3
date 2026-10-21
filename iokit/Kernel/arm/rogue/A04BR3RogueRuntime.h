@@ -10,6 +10,7 @@
 #include "A04BR3RogueRuntimeLayout.h"
 #include "A04BR3RogueStartupExecutor.h"
 #include "A04BR3RogueCommand.h"
+#include "A04BR3RogueRenderMemory.h"
 class A04BR3RogueRuntime {
     IOBufferMemoryDescriptor *buffers[3]={};
     bool prepared[3]={};bool mapped=false,pinned=false;
@@ -158,6 +159,21 @@ public:
         if (!__atomic_compare_exchange_n(&commandBusy,&expected,1,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))
             return A04_CCB_BUSY;
         int error=firmwareOnline?a04_rgx_command_fence(&layout,&commandState,&io,dm,10000,10):A04_CCB_OFFLINE;
+        __atomic_store_n(&commandBusy,0,__ATOMIC_RELEASE);
+        return error;
+    }
+    /* Only a source-owned render owner is accepted; never expose the mutable
+     * kernel layout to a bridge client. Same producer gate as fence(), with
+     * outer service lock required for power/stop exclusion. */
+    int renderUpdate(A04BR3RogueRenderMemory &owner,uint32_t dm,const a04_rgx_command_io &io) {
+        unsigned expected=0;
+        if (!__atomic_compare_exchange_n(&commandBusy,&expected,1,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))
+            return A04_CCB_BUSY;
+        int error=firmwareOnline && !commandState.poisoned?
+            owner.update(layout,io,dm):A04_CCB_OFFLINE;
+        /* An unresolved KICK owns the shared transport too. Do not allow SYNC
+         * to overwrite/replay it after timeout or corrupt firmware response. */
+        if (error==A04_CCB_TIMEOUT || error==A04_CCB_CORRUPT) commandState.poisoned=true;
         __atomic_store_n(&commandBusy,0,__ATOMIC_RELEASE);
         return error;
     }
