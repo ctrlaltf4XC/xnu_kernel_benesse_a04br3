@@ -95,7 +95,7 @@ int main(int argc,char **argv){
  }
  /* Same logical file relocated past a bitmap-marked bad block. */
  memcpy(i.p+0x40000,i.p+0x20000,514);memset(i.p+0x20000,0xff,514);
- for(unsigned k=0;k<3;k++)i.p[0x80000+k*5+1]=1;
+ for(unsigned k=0;k<3;k++)i.p[0x80000+k*5+1]=0xff;
  memset(out,0,512);assert(a04_nvram_wifi(&r,w,out)==0 && out[196]==1);
  r.bytes--;assert(a04_nvram_wifi(&r,w,out)==EINVAL);
  free(w);free(i.p);return 0;

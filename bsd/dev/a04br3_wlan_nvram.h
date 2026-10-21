@@ -50,7 +50,7 @@ static inline int a04_nvram_wifi(const struct a04_nvram_reader *r,struct a04_nvr
   for(unsigned n=at+1;n<=total;n++){
    if(a04_nvram_le32(w->scratch+3*n)!=0xaabbccddu)continue;
    unsigned valid=1;
-   for(unsigned i=0;i<n;i++)if(w->scratch[i]>1 || w->scratch[i]!=w->scratch[i+n] || w->scratch[i]!=w->scratch[i+2*n]){valid=0;break;}
+   for(unsigned i=0;i<n;i++)if(w->scratch[i]!=w->scratch[i+n] || w->scratch[i]!=w->scratch[i+2*n]){valid=0;break;}
    if(valid){blocks=n;bitmap_block=at;memcpy(w->bitmap,w->scratch,n);break;}
   }
  }
