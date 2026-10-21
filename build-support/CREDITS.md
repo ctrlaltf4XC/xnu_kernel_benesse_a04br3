@@ -207,3 +207,20 @@ documented by dipa-studio/ios-sweet NOTES.md at fdad0de8dc0e75c5ea84762adc03f723
 The optional A04BR3 root-preparation move uses XNU renameat_internal with kernel
 paths, no-follow and exclusive destination flags, before donor launchd starts.
 It does not modify Apple executable bytes or assert a completed migration.
+
+A04BR3 HID event service and local IOHIDFamily source/header copies derive from
+`dipa-studio/ios-sweet`, revision fdad0de8dc0e75c5ea84762adc03f7232dc91f19,
+patch 0058-sweet-hid-event-services.patch (IOHIDFamily-1915.140.3).
+The original Apple APSL headers remain in each copied file. No Git history was
+cloned. A04BR3 adapts the service names, one-contact limit, 800x1280 normalization
+and edge-tip reporting (design from upstream patch 0071). Hardware-specific
+Qualcomm touch code is not used.
+
+The independent MT8167/BU21025 PIO implementation uses register/protocol facts
+from the board Linux source revision eb47f42e1f84fe5716ef239620725f82718a620a:
+`drivers/input/touchscreen/mediatek/BU21025/bu21025.c` (SANYO Techno Solutions
+Tottori, 2017; Hirotomo Ozaki adjustments 2018; GPLv2), `i2c-mt65xx.c`,
+`pinctrl-mt8167.c`, `clk-mt8167.c`, `mt6392-regulator.c`, and `a04br3.dts`.
+No Linux driver source is linked into this kernel. EDK2 MT8167 PWRAP register
+layout is from mouseos/edk2-mtk revision1982d888c765f5b12f6e0dce71f1ed8bc92ac50b.
+The driver configures only I2C0, GPIO8/58/59 and the board VGP1 1.8V rail.

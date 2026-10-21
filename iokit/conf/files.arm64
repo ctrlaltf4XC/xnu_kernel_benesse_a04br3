@@ -20,3 +20,8 @@ iokit/Kernel/arm/A04BR3Watchdog.cpp                               optional iokit
 iokit/Kernel/arm/A04BR3Display.cpp                               optional iokitcpp
 iokit/Kernel/arm/A04BR3Surface.cpp                               optional iokitcpp
 iokit/Kernel/arm/A04BR3Framebuffer.cpp                               optional iokitcpp
+
+iokit/Kernel/arm/hid/A04BR3HID.cpp optional iokitcpp
+iokit/Kernel/arm/hid/IOHIDEvent.cpp optional iokitcpp
+iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp optional iokitcpp
+iokit/Kernel/arm/hid/IOHIDEventServiceUserClient.cpp optional iokitcpp

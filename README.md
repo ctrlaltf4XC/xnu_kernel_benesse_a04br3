@@ -451,3 +451,15 @@ The native FairPlay override transaction also accepts flat XML boolean dictionar
 preserving all unrelated XML bytes. Nested XML values, entities, and unsupported
 structures are refused rather than discarded. Binary dictionaries retain their
 existing general value support. The original is restored byte for byte.
+
+### A04BR3 touch input
+
+The source includes a BU21025 single-contact PIO driver and the iOS 16.7 HID
+shared-event queue interface. I2C0 is at 0x11009000, device address 0x48;
+GPIO8 reports contact and MT6392 VGP1 supplies 1.8V. The initial driver polls at
+20ms intervals, bounds every bus/PWRAP wait, and never uses I2C DMA. It emits
+real measured contact events, including release on bus errors. ADC plausibility
+checks follow the board panel's RX/RY values. Coordinates map the landscape
+raw panel to the existing portrait framebuffer. Initial orientation and input
+operation require real-device validation; compiling this code is not proof of
+working touch. No synthetic Home press or migration-complete flag is enabled.

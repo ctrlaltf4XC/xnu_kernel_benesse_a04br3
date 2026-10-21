@@ -645,3 +645,5 @@ bsd/skywalk/packet/packet_kern.c		optional skywalk
 bsd/skywalk/packet/pbufpool.c			optional skywalk
 bsd/skywalk/packet/pbufpool_kern.c		optional skywalk
 bsd/dev/cpu_copy_in_cksum_gen.c			optional skywalk
+
+bsd/dev/a04br3_touch.c standard
