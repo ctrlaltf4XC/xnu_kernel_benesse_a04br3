@@ -37,7 +37,7 @@ static inline int a04_usb_device_start(struct a04_usb_device *s,unsigned enable,
  io->physical!=0x11100000 || io->span<0x1000 || !io->read8 || !io->read16 ||
  !io->write8 || !io->write16 || !io->barrier || !wait_us)return A04_MUSB_NOT_READY;
  unsigned d=io->read8(io->context,0x60);
- if((d&0x9f)!=0x98)return A04_MUSB_NOT_READY;
+ if((d&0x9e)!=0x98)return A04_MUSB_NOT_READY;
  s->io=*io;s->policy=*p;void *c=io->context;
  io->write8(c,1,(uint8_t)(io->read8(c,1)&~0x4dU));
  io->write16(c,6,0);io->write16(c,8,0);io->write8(c,11,0);
@@ -124,7 +124,7 @@ static inline int a04_usb_device_poll(struct a04_usb_device *s,unsigned budget){
  if(!budget || budget>8)return A04_MUSB_NOT_READY;
  struct a04_musb_io *i=&s->io;void *c=i->context;unsigned old=i->read8(c,14);int result=A04_MUSB_AGAIN;
  for(unsigned b=0;b<budget;b++){
- if((i->read8(c,0x60)&0x9f)!=0x98){a04_usb_device_stop(s);return A04_MUSB_NOT_READY;}
+ if((i->read8(c,0x60)&0x9e)!=0x98){a04_usb_device_stop(s);return A04_MUSB_NOT_READY;}
  unsigned bus=i->read8(c,10),tx=i->read16(c,2),rx=i->read16(c,4);
  if(bus)i->write8(c,10,(uint8_t)bus);if(tx)i->write16(c,2,(uint16_t)tx);if(rx)i->write16(c,4,(uint16_t)rx);
  if(bus&0x24){a04_usb_device_reset(s);if(bus&0x20)continue;}

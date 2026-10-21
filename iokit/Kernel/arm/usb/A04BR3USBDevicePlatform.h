@@ -79,7 +79,7 @@ static inline int a04_usb_device_observe(const struct a04_usb_platform_io *io,
  if((r->top1&(1u<<13))||(r->top2&((1u<<14)|(1u<<24)|(1u<<31))))return A04_USB_PLATFORM_CLOCK;
  if((r->phy6c&0x3f)!=2||(r->phy6d&0x3f)!=2)return A04_USB_PLATFORM_PHY;
  if(io->read32(io->context,A04_USB_PHY,0x68)&0x00ba3cf4u)return A04_USB_PLATFORM_PHY;
- if((r->devctl&0x87)!=0x80)return A04_USB_PLATFORM_ROLE; /*Bdevice, no HM/hostreq/session*/
+ if((r->devctl&0x86)!=0x80)return A04_USB_PLATFORM_ROLE; /*Bdevice, no HM/hostreq; SESSION is set by an active host link*/
  if((r->devctl&0x18)!=0x18)return A04_USB_PLATFORM_NO_VBUS;
  return 0;
 }

@@ -89,7 +89,7 @@ int a04br3_usb_controller_poll(void) {
  if(!device.active){
   int e=a04_usb_device_observe(&platform,&observed);
   if(e==A04_USB_PLATFORM_NO_VBUS)return 0;
-  if(e)return -EIO;
+  if(e){printf("A04BR3 USB: observe=%d devctl=0x%x phy=%x/%x\n",e,observed.devctl,observed.phy6c,observed.phy6d);return -EIO;}
   struct a04_musb_io io={&board,0x11100000,0x1000,64,ready,mac8,mac16,macw8,macw16,barrier};
   /* Explicit private development identity shared with the host selector.
    * This is not an Apple/stock updater or a production USB-ID assignment. */
