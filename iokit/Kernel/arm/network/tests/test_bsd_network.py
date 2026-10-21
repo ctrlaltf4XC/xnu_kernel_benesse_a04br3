@@ -22,6 +22,8 @@ static SInt32 OSAddAtomic(SInt32 n,volatile SInt32 *p){return __atomic_fetch_add
 static bool OSCompareAndSwap(UInt32 old,UInt32 next,volatile SInt32 *p){SInt32 expected=(SInt32)old;return __atomic_compare_exchange_n(p,&expected,(SInt32)next,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST);}
 using clock_sec_t=int64_t;using clock_usec_t=int32_t;
 static inline void clock_get_system_microtime(clock_sec_t *s,clock_usec_t *u){*s=2;*u=234567;}
+static const unsigned IFNAMSIZ=16;
+using user64_addr_t=uint64_t;using user32_addr_t=uint32_t;
 using errno_t=int;using user_addr_t=uint64_t;using protocol_family_t=uint32_t;
 struct Packet {bool freed;};using mbuf_t=Packet *;
 struct IF;using ifnet_t=IF *;
@@ -78,6 +80,15 @@ public:
 #define IFF_SIMPLEX 2048
 #define IFF_MULTICAST 32768
 #define SIOCSIFFLAGS 0x80206910UL
+#define SIOCGIFMEDIA32 0xc0286938UL
+#define SIOCGIFMEDIA64 0xc02c6938UL
+#define IFM_IEEE80211 0x80
+#define IFM_AUTO 0
+#define IFM_NONE 2
+#define IFM_NMASK 0xe0
+#define IFM_AVALID 1
+#define IFM_ACTIVE 2
+MEDIA_STRUCTS
 struct sockaddr {};
 struct sockaddr_dl {uint8_t sdl_len,sdl_family;uint16_t sdl_index;uint8_t sdl_type,sdl_nlen,sdl_alen,sdl_slen;char sdl_data[24];};
 #define LLADDR(p) ((p)->sdl_data+(p)->sdl_nlen)
@@ -138,8 +149,12 @@ static void mbuf_freem(mbuf_t p){assert(!p->freed);p->freed=true;packetFrees++;}
 static int ifnet_input(ifnet_t p,mbuf_t m,const void *){assert(p->refs==2 && !heldLocks);inputCalls++;mbuf_freem(m);return inputError;}
 static uint8_t userBuffer[16384];
 static int copyin(user_addr_t a,void *out,size_t n){copyIns++;if(copyInError)return copyInError;if(a!=(uintptr_t)userBuffer || n>sizeof(userBuffer))return EFAULT;memcpy(out,userBuffer,n);return 0;}
-static int copyout(const void *in,user_addr_t a,size_t n){copyOuts++;if(copyOutError)return copyOutError;if(a!=(uintptr_t)userBuffer || n>sizeof(userBuffer))return EFAULT;memcpy(userBuffer,in,n);return 0;}
+static int copyout(const void *in,user_addr_t a,size_t n){copyOuts++;if(copyOutError)return copyOutError;if((a!=(uintptr_t)userBuffer && a!=0x1234) || n>sizeof(userBuffer))return EFAULT;memcpy(userBuffer,in,n);return 0;}
 '''
+
+_private=(SOURCE.parents[3]/'bsd/net/if_private.h').read_text()
+_a=_private.index('struct ifmediareq64 {');_b=_private.index('\nstruct ifdrv32',_a)
+STUB=STUB.replace('MEDIA_STRUCTS','#pragma pack(4)\n'+_private[_a:_b]+'\n#pragma pack()\nstatic_assert(sizeof(ifmediareq64)==44 && sizeof(ifmediareq32)==40,"native media layouts");\n')
 
 CASE=r'''
 #include "driver.cpp"
@@ -161,6 +176,40 @@ static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;ass
 static a04_apple80211_req64 req(){a04_apple80211_req64 r={};strcpy(r.name,"en7");r.type=12;r.value=7;r.length=8;r.user_data=(uintptr_t)userBuffer;return r;}
 static void ready(){realState.firmware_running=realState.control_ready=realState.datapath_ready=realState.associated=1;}
 static void cleanup(A04BR3BSDNetwork &n,IOService &s){assert(n.detach()==0);if(pending)completeDetach();assert(n.isDetached() && n.finish()==0 && s.refs==1);assert(!lockCount && !current);}
+static void mediaCases(){
+ reset();a04_network_backend b={nullptr,state,get,admin,tx,set};A04BR3BSDNetwork bridge;IOService service;
+ realState.firmware_running=realState.control_ready=1;assert(!bridge.attach(&service,&b,7));
+ ifmediareq64 m={};strcpy(m.ifm_name,"en7");
+ assert(!current->init.ioctl(current,SIOCGIFMEDIA64,&m));
+ // Exact donor __getIfListCopy predicate: discovery BEFORE native GET12.
+ assert((m.ifm_current&0xe0)==0x80 && m.ifm_count==1 && m.ifm_mask==0);
+ assert(m.ifm_status==IFM_AVALID && m.ifm_active==(IFM_IEEE80211|IFM_NONE));
+ assert(!nativeCalls && !setCalls && !adminCalls && !txCalls && !(current->flags&IFF_RUNNING));
+ memset(userBuffer,0xa5,sizeof(userBuffer));m.ifm_count=1000000;m.ifmu_ulist=(uintptr_t)userBuffer;
+ assert(!current->init.ioctl(current,SIOCGIFMEDIA64,&m) && m.ifm_count==1);
+ uint32_t word;memcpy(&word,userBuffer,4);assert(word==(IFM_IEEE80211|IFM_AUTO));
+ for(unsigned i=4;i<sizeof(userBuffer);i++)assert(userBuffer[i]==0xa5);
+ ifmediareq32 n={};strcpy(n.ifm_name,"en7");n.ifm_count=1;n.ifmu_ulist=0x1234;
+ assert(!current->init.ioctl(current,SIOCGIFMEDIA32,&n) && n.ifm_count==1 && (n.ifm_current&IFM_NMASK)==IFM_IEEE80211);
+ realState.radio_enabled=realState.associated=1;realState.datapath_ready=0;
+ m.ifm_count=0;assert(!current->init.ioctl(current,SIOCGIFMEDIA64,&m) && !(m.ifm_status&IFM_ACTIVE));
+ realState.datapath_ready=1;assert(!current->init.ioctl(current,SIOCGIFMEDIA64,&m) && (m.ifm_status&IFM_ACTIVE));
+ realState.radio_enabled=0;assert(!current->init.ioctl(current,SIOCGIFMEDIA64,&m) && !(m.ifm_status&IFM_ACTIVE));
+ for(unsigned fault=0;fault<5;fault++){
+  m={};strcpy(m.ifm_name,"en7");m.ifm_status=12345;
+  int want=EINVAL;
+  if(fault==0){m.ifm_count=-1;}
+  if(fault==1){m.ifm_name[2]='8';want=ENXIO;}
+  if(fault==2){m.ifm_count=1;want=EFAULT;}
+  if(fault==3){m.ifm_count=1;m.ifmu_ulist=(uintptr_t)userBuffer;copyOutError=EFAULT;want=EFAULT;}
+  if(fault==4){realState.control_ready=0;want=ENETDOWN;}
+  auto before=m;assert(current->init.ioctl(current,SIOCGIFMEDIA64,&m)==want && !memcmp(&m,&before,sizeof(m)));
+  copyOutError=0;realState.control_ready=1;
+ }
+ assert(current->init.ioctl(current,SIOCGIFMEDIA64,nullptr)==EINVAL);
+ assert(!a04_native_trace_count); // standard discovery never consumes native32 trace quota
+ cleanup(bridge,service);
+}
 static void traceCases(){
  reset();a04_network_backend b={nullptr,state,get,admin,tx,set};A04BR3BSDNetwork bridge;IOService service;
  ready();assert(!bridge.attach(&service,&b,7));
@@ -179,6 +228,7 @@ static void traceCases(){
  cleanup(bridge,service);
 }
 int main(){
+ mediaCases();
  traceCases();
  a04_network_backend b={nullptr,state,get,admin,tx,set};
  // No invented identity or parent; no ifnet allocated for absent hardware.
@@ -310,7 +360,7 @@ class BSDNetwork(unittest.TestCase):
     def test_actual_bridge(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'stub.h').write_text(STUB)
-            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h']:
+            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
                 p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('#include "stub.h"\n')
             (root/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text())
             (root/'case.cpp').write_text(CASE);exe=root/'case'

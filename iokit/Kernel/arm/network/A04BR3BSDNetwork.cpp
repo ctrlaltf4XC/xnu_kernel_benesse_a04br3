@@ -6,6 +6,7 @@
 #include "A04BR3BSDNetwork.h"
 #include "A04BR3Apple80211IOCTL.h"
 #include "A04BR3Apple80211SET.h"
+#include "A04BR3WiFiMedia.h"
 #include <sys/kauth.h>
 #include <libkern/OSAtomic.h>
 #include <sys/kern_event.h>
@@ -186,8 +187,9 @@ errno_t A04BR3BSDNetwork::output(ifnet_t ifp,mbuf_t packet)
 errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);if(!s || !s->gate)return ENXIO;
-    if(command!=A04_APPLE80211_GET64 && command!=A04_APPLE80211_SET64 && command!=SIOCSIFFLAGS)return EOPNOTSUPP;
-    const bool native=command!=SIOCSIFFLAGS;
+    const bool native=command==A04_APPLE80211_GET64 || command==A04_APPLE80211_SET64;
+    const bool media=command==SIOCGIFMEDIA32 || command==SIOCGIFMEDIA64;
+    if(!native && !media && command!=SIOCSIFFLAGS)return EOPNOTSUPP;
     const auto *request=native?(const a04_apple80211_req64 *)data:nullptr;
     const uint32_t traceType=request?request->type:0,traceValue=request?request->value:0;
     const uint32_t traceLength=request?request->length:0;
@@ -198,7 +200,14 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
         a04_native_trace(traceType,traceValue,traceLength,EPERM);return EPERM;
     }
     IOLockLock(s->gate);a04_network_state state={};int error=s->snapshot(&state);
-    if(command==SIOCSIFFLAGS){
+    if(media){
+        if(!error){
+            const a04_network_copy copy={nullptr,a04_network_copyin,a04_network_copyout};
+            if(command==SIOCGIFMEDIA64)
+                error=a04_wifi_media_get(&state,(struct ifmediareq64 *)data,s->name,&copy);
+            else error=a04_wifi_media_get(&state,(struct ifmediareq32 *)data,s->name,&copy);
+        }
+    }else if(command==SIOCSIFFLAGS){
         bool enabled=(ifnet_flags(ifp)&IFF_UP)!=0;
         /* UP enables radio/control before scan/association. It must not depend
          * on association or a usable packet datapath (that would deadlock setup).

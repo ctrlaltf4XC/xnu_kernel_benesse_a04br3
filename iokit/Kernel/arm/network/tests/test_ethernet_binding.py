@@ -25,7 +25,7 @@ struct ifnet_stat_increment_param {unsigned packets_in,bytes_in,errors_in,collis
 struct if_bandwidths_t {uint64_t max_bw,eff_bw;};
 struct IONetworkLinkEventData {uint64_t linkSpeed;};
 static const unsigned kIONetworkEventTypeLinkUp=1,kIONetworkEventTypeLinkDown=2,kIONetworkEventTypeLinkSpeedChange=3,kIONetworkEventTypeDLIL=4,kIONetworkEventWakeOnLANSupportChanged=5;
-static const unsigned KEV_VENDOR_APPLE=1,KEV_NETWORK_CLASS=1,KEV_DL_SUBCLASS=1,KEV_DL_LINK_ON=1,KEV_DL_LINK_OFF=2,IFNAMSIZ=16;
+static const unsigned KEV_VENDOR_APPLE=1,KEV_NETWORK_CLASS=1,KEV_DL_SUBCLASS=1,KEV_DL_LINK_ON=1,KEV_DL_LINK_OFF=2;
 using thread_call_param_t=void *;
 static int baseInputs;
 static int ifnet_input_extended(ifnet_t p,mbuf_t a,mbuf_t b,const ifnet_stat_increment_param *stats){assert(p && p==current && a==b && stats->packets_in==1);lastBaseIfnet=p;baseInputs++;mbuf_freem(a);return 0;}
@@ -127,6 +127,9 @@ static void bindingCases(){
  assert(current->refs==2); // one allocated ifnet: bridge ref + genuine base ref
  auto *actual=OSDynamicCast(A04BR3EthernetInterface,mockAttachedInterface);assert(actual);
  assert(actual->getIfnet()==current); // actual Apple getter sees private field
+ ifmediareq64 media={};strcpy(media.ifm_name,"en7");
+ assert(!actual->performCommand(controller,SIOCGIFMEDIA64,nullptr,&media));
+ assert((media.ifm_current&IFM_NMASK)==IFM_IEEE80211 && !(media.ifm_status&IFM_ACTIVE));
  actual->retain();
  Packet basePacket={false};actual->pushInputPacket(&basePacket,64);
  assert(basePacket.freed && baseInputs==1 && lastBaseIfnet==current);
@@ -262,10 +265,10 @@ static void nativeCases(){
 class EthernetBinding(unittest.TestCase):
  def test_adapter(self):
   stub=STUB.replace('static int childCount,failChildInit','static int failReference;\nstatic int childCount,failChildInit').replace('assert(p&&p->refs);p->refs++;return 0;','assert(p&&p->refs);if(failReference)return failReference;p->refs++;return 0;').replace('class IOService {','class IOService {\npublic: virtual ~IOService()=default;').replace('public: virtual ~IOService()=default;', 'public: virtual ~IOService()=default; virtual void free(){}').replace('childCount--;delete this;', 'childCount--;free();delete this;').replace('bool init(){heap=true;','bool init(void * =nullptr){heap=true;')
-  case=CASE.replace(' traceCases();\n a04_network_backend b=', ' a04_network_backend b=').replace('#include "driver.cpp"','#include "driver.cpp"\n#include "apple/IOEthernetController.h"\n#include "A04BR3Ethernet.cpp"\n#include "A04BR3NetworkRuntime.cpp"').replace('int main(){',EXTRA+'\n#include \"sdio/mock_provider.h\"\n#include \"A04BR3NativeRendezvous.cpp\"\n'+NATIVE_CASE+'\nint main(){traceCases();nativeCases();bindingCases();')
+  case=CASE.replace(' mediaCases();\n','').replace(' traceCases();\n a04_network_backend b=', ' a04_network_backend b=').replace('#include "driver.cpp"','#include "driver.cpp"\n#include "apple/IOEthernetController.h"\n#include "A04BR3Ethernet.cpp"\n#include "A04BR3NetworkRuntime.cpp"').replace('int main(){',EXTRA+'\n#include \"sdio/mock_provider.h\"\n#include \"A04BR3NativeRendezvous.cpp\"\n'+NATIVE_CASE+'\nint main(){mediaCases();traceCases();nativeCases();bindingCases();')
   with tempfile.TemporaryDirectory() as d:
    p=Path(d);(p/'stub.h').write_text(stub)
-   for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/clock.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h']:
+   for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/clock.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
     h=p/name;h.parent.mkdir(parents=True,exist_ok=True);h.write_text('#include "stub.h"\n')
    (p/'sdio').mkdir();(p/'sdio/mock_provider.h').write_text(NATIVE_API)
    sdio=SOURCE.parent/'sdio'
