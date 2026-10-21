@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 """Execute actual two-program atomic installer with bounded vnode mocks."""
 from pathlib import Path
-import subprocess,tempfile,unittest
+import itertools,subprocess,tempfile,unittest
 ROOT=Path(__file__).resolve().parents[2]
 class Installer(unittest.TestCase):
  def test_two_independent_payloads_and_failure_preserves_old_capture(self):
@@ -55,10 +55,10 @@ struct vnode_attr {unsigned mask,supported;uint64_t values[5];};
 typedef struct node {int dir,regular,uid,mode,links,mount,exists;unsigned bytes;unsigned char data[2048];} *vnode_t;
 typedef int vfs_context_t;
 struct componentname {int cn_nameiop,cn_flags,cn_context;char *cn_nameptr;int cn_namelen;};
-static struct node root,dirs[3],targets[3],temps[3];static vnode_t rootvnode=&root;
-static unsigned writes,renames,removes,enabled=1,corrupt_capture,partial_capture,unsafe_temp,unsafe_target,corrupt_ui,missing_ui;
-static const char *leaves[]={"launchd.a04br3","a04-fb-capture","a04-ui-test"};
-static int which(const char *path){return strstr(path,"a04-ui-test")?2:strstr(path,"a04-fb-capture")?1:0;}
+static struct node root,dirs[3],targets[4],temps[4];static vnode_t rootvnode=&root;
+static unsigned writes,renames,removes,enabled=1,corrupt_capture,partial_capture,unsafe_temp,unsafe_target,corrupt_ui,missing_ui,corrupt_keyboard,missing_keyboard;
+static const char *leaves[]={"launchd.a04br3","a04-fb-capture","a04-ui-test","a04br3-keyboard-state"};
+static int which(const char *path){return strstr(path,"a04br3-keyboard-state")?3:strstr(path,"a04-ui-test")?2:strstr(path,"a04-fb-capture")?1:0;}
 static vfs_context_t vfs_context_kernel(void){return 1;}
 static int vfs_context_ucred(int x){return x;}
 static int vfs_context_proc(int x){return x;}
@@ -77,7 +77,7 @@ static int vnode_lookup(const char *path,int flags,vnode_t *out,int ctx){
  (void)ctx;assert(flags==VNODE_LOOKUP_NOFOLLOW);
  const char *names[]={"/usr","/usr/appleinternal","/usr/appleinternal/sbin"};
  for(unsigned i=0;i<3;i++)if(!strcmp(path,names[i])){*out=dirs+i;return 0;}
- assert(!strncmp(path,"/usr/appleinternal/sbin/",24));if(which(path)==2&&missing_ui){*out=NULL;return ENOENT;}*out=targets+which(path);return 0;
+ assert(!strncmp(path,"/usr/appleinternal/sbin/",24));if((which(path)==2&&missing_ui)||(which(path)==3&&missing_keyboard)){*out=NULL;return ENOENT;}*out=targets+which(path);return 0;
 }
 static int vnode_open(const char *path,int flags,int mode,int unused,vnode_t *out,int ctx){
  (void)unused;(void)ctx;assert(flags==(FWRITE|O_CREAT|O_NOFOLLOW)&&mode==0600);
@@ -87,7 +87,7 @@ static int vnode_open(const char *path,int flags,int mode,int unused,vnode_t *ou
 static int vn_rdwr(int operation,vnode_t n,char *p,int count,off_t offset,int space,int flags,int cred,int *resid,int proc){
  (void)space;(void)flags;(void)cred;(void)proc;assert(count>=0&&offset>=0&&offset+count<=2048);
  *resid=0;if(operation==UIO_WRITE){writes++;memcpy(n->data+offset,p,count);n->bytes=(unsigned)(offset+count);if(n==temps+1&&partial_capture)*resid=1;}
- else{memcpy(p,n->data+offset,count);if((n==temps+1&&corrupt_capture)||(n==temps+2&&corrupt_ui))p[0]^=1;}return 0;
+ else{memcpy(p,n->data+offset,count);if((n==temps+1&&corrupt_capture)||(n==temps+2&&corrupt_ui)||(n==temps+3&&corrupt_keyboard))p[0]^=1;}return 0;
 }
 static int vn_close(vnode_t n,int flags,int ctx){(void)n;(void)flags;(void)ctx;return 0;}
 static void vnode_put(vnode_t n){(void)n;}
@@ -107,10 +107,10 @@ static int remove_node(vnode_t p,vnode_t temp,struct componentname *cn,int flags
 static int PE_parse_boot_argn(const char *s,void *p,int bytes){(void)s;assert(bytes==sizeof(unsigned));*(unsigned *)p=enabled;return 1;}
 #include "HEADER"
 static void reset(void){
- writes=renames=removes=corrupt_capture=partial_capture=unsafe_temp=unsafe_target=corrupt_ui=missing_ui=0;enabled=1;
+ writes=renames=removes=corrupt_capture=partial_capture=unsafe_temp=unsafe_target=corrupt_ui=missing_ui=corrupt_keyboard=missing_keyboard=0;enabled=1;
  root.mount=1;
  for(unsigned i=0;i<3;i++)dirs[i]=(struct node){.dir=1,.uid=0,.mode=0755,.links=1,.mount=1};
- for(unsigned i=0;i<3;i++){
+ for(unsigned i=0;i<4;i++){
   targets[i]=(struct node){.regular=1,.uid=0,.mode=0755,.links=1,.mount=1,.exists=1,.bytes=3,.data={'o','l','d'}};
   temps[i]=(struct node){.regular=1,.uid=0,.mode=0600,.links=1,.mount=1};
  }
@@ -170,5 +170,36 @@ int main(void){
    subprocess.run(['clang','-std=c11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror',
                    '-fsanitize=address,undefined','-I',str(p),str(p/'ui.c'),'-o',str(p/'ui')],check=True)
    subprocess.run([str(p/'ui')],check=True)
+
+   # Every optional combination compiles the actual header. Keyboard faults
+   # preserve its old file while other enabled programs are still installed.
+   for capture,ui,keyboard in itertools.product((False,True),repeat=3):
+    include='static const unsigned char a04br3_console_payload[700]={1,2,3};\n'
+    if capture:include+='#define A04BR3_CAPTURE_PAYLOAD_PRESENT 1\nstatic const unsigned char a04br3_fb_capture_payload[1100]={4,5,6};\n'
+    if ui:include+='#define A04BR3_UI_TEST_PAYLOAD_PRESENT 1\nstatic const unsigned char a04br3_ui_test_payload[900]={7,8,9};\n'
+    if keyboard:include+='#define A04BR3_KEYBOARD_STATE_PAYLOAD_PRESENT 1\nstatic const unsigned char a04br3_keyboard_state_payload[800]={10,11,12};\n'
+    (p/'a04br3_console_payload.inc').write_text(include)
+    count=1+int(capture)+int(ui)+int(keyboard)
+    main='int main(void){reset();assert(prepare_uart_console()==0&&writes==COUNT&&renames==COUNT);'.replace('COUNT',str(count))
+    for index,present,size in ((0,True,700),(1,capture,1100),(2,ui,900),(3,keyboard,800)):
+     main+=f'assert(targets[{index}].bytes=={size if present else 3});'
+    if keyboard:
+     main+=r'''
+ assert(targets[3].mode==0755&&!memcmp(targets[3].data,a04br3_keyboard_state_payload,800));
+ reset();corrupt_keyboard=1;assert(prepare_uart_console()==0&&renames==OTHERS&&removes==1);
+ assert(targets[3].bytes==3&&!memcmp(targets[3].data,"old",3));
+ reset();temps[3].links=2;assert(prepare_uart_console()==0&&renames==OTHERS&&writes==OTHERS&&!removes);
+ assert(targets[3].bytes==3&&!memcmp(targets[3].data,"old",3));
+ reset();targets[3].links=2;assert(prepare_uart_console()==0&&renames==OTHERS&&writes==OTHERS);
+ reset();targets[3].regular=0;assert(prepare_uart_console()==0&&renames==OTHERS&&writes==OTHERS);
+ reset();targets[3].uid=501;assert(prepare_uart_console()==0&&renames==OTHERS&&writes==OTHERS);
+ reset();missing_keyboard=1;targets[3].exists=0;assert(prepare_uart_console()==0&&renames==COUNT);
+ assert(targets[3].exists&&targets[3].bytes==800);
+'''.replace('OTHERS',str(count-1)).replace('COUNT',str(count))
+    main+='reset();enabled=0;assert(prepare_uart_console()==0&&!writes&&!renames);return 0;}'
+    (p/'combination.c').write_text(source[:source.index('int main(void){')]+main)
+    subprocess.run(['clang','-std=c11','-D_DEFAULT_SOURCE','-Wall','-Wextra','-Werror',
+                    '-fsanitize=address,undefined','-I',str(p),str(p/'combination.c'),'-o',str(p/'combination')],check=True)
+    subprocess.run([str(p/'combination')],check=True,capture_output=True)
 
 if __name__=='__main__':unittest.main()

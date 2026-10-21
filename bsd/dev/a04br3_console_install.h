@@ -13,6 +13,8 @@
 #define A04_CAPTURE_TEMP ".a04-fb-capture.new"
 #define A04_UI_TEST_LEAF "a04-ui-test"
 #define A04_UI_TEST_TEMP ".a04-ui-test.new"
+#define A04_KEYBOARD_STATE_LEAF "a04br3-keyboard-state"
+#define A04_KEYBOARD_STATE_TEMP ".a04br3-keyboard-state.new"
 
 static int
 a04_console_regular(vnode_t vp, vfs_context_t ctx)
@@ -180,6 +182,12 @@ prepare_uart_console(void)
     int ui_error = a04_console_install_program(a04br3_ui_test_payload,
         sizeof(a04br3_ui_test_payload), A04_UI_TEST_LEAF, A04_UI_TEST_TEMP);
     if (ui_error) printf("A04BR3 ROOT: optional UI test installation failed error=%d\n", ui_error);
+#endif
+#if defined(A04BR3_KEYBOARD_STATE_PAYLOAD_PRESENT)
+    /* Install only: observation requires an explicit root invocation later. */
+    int keyboard_error = a04_console_install_program(a04br3_keyboard_state_payload,
+        sizeof(a04br3_keyboard_state_payload), A04_KEYBOARD_STATE_LEAF, A04_KEYBOARD_STATE_TEMP);
+    if (keyboard_error) printf("A04BR3 ROOT: optional keyboard state installation failed error=%d\n", keyboard_error);
 #endif
     return 0;
 }

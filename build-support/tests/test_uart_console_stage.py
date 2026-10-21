@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 """Pinned second-program staging without network, SDK or local source inputs."""
-import hashlib,importlib.util,io,json,struct,subprocess,tempfile,unittest
+import itertools,hashlib,importlib.util,io,json,struct,subprocess,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 ROOT=Path(__file__).resolve().parents[2]
@@ -8,10 +8,11 @@ spec=importlib.util.spec_from_file_location('capture_stage',ROOT/'build-support/
 stage=importlib.util.module_from_spec(spec);spec.loader.exec_module(stage)
 
 class Staging(unittest.TestCase):
- def fixture(self,base,capture=True,ui_test=False):
+ def fixture(self,base,capture=True,ui_test=False,keyboard_state=False):
   src={'tools/uart-console.c':b'console source','tools/build-uart-console.sh':b'console build','tools/uart-libSystem.tbd':b'link stub'}
   if capture:src.update({name:('source '+name).encode() for name in stage.CAPTURE_FILES})
   if ui_test:src.update({name:('source '+name).encode() for name in stage.UI_TEST_FILES})
+  if keyboard_state:src.update({name:('source '+name).encode() for name in stage.KEYBOARD_STATE_FILES})
   pin={'github_repository':'test/source','commit':'a'*40,'files':{k:hashlib.sha256(v).hexdigest() for k,v in src.items()}}
   (base/'uart-console-source.json').write_text(json.dumps(pin))
   work=base/'work';(work/'bsd/dev').mkdir(parents=True,exist_ok=True)
@@ -101,5 +102,57 @@ class Staging(unittest.TestCase):
      with self.assertRaises((ValueError,subprocess.CalledProcessError)):stage.stage_console(work,base/'cache')
     self.assertEqual(target.read_text(),'previous valid include')
     self.assertFalse((base/'cache'/('uart-console-'+pin['commit'])/'build.json').exists())
+
+ def test_keyboard_all_optional_combinations_and_cache_tamper(self):
+  for capture,ui,keyboard in itertools.product((False,True),repeat=3):
+   with self.subTest(capture=capture,ui=ui,keyboard=keyboard),tempfile.TemporaryDirectory() as d:
+    base=Path(d);src,pin,work=self.fixture(base,capture,ui,keyboard);commands=[]
+    with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen',side_effect=self.fetch(src)),patch.object(stage.subprocess,'run',side_effect=self.builder(commands)):
+     result=stage.stage_console(work,base/'cache');count=1+int(capture)+int(ui)+int(keyboard)
+     self.assertEqual(len(commands),count)
+     text=(work/'bsd/dev/a04br3_console_payload.inc').read_text()
+     self.assertEqual('a04br3_keyboard_state_payload[]' in text,keyboard)
+     self.assertEqual('A04BR3_KEYBOARD_STATE_PAYLOAD_PRESENT' in text,keyboard)
+     self.assertEqual('keyboard_state' in result,keyboard)
+     self.assertEqual(stage.stage_console(work,base/'cache'),result);self.assertEqual(len(commands),count)
+     if keyboard:
+      cache=base/'cache'/('uart-console-'+pin['commit'])
+      (cache/'a04br3-keyboard-state').write_bytes(b'tamper')
+      stage.stage_console(work,base/'cache');self.assertEqual(len(commands),count+1)
+      self.assertIn('build-a04br3-keyboard-state.sh',commands[-1][1])
+      source=cache/'tools/a04br3_keyboard_state.c';source.write_bytes(b'tamper')
+      stage.stage_console(work,base/'cache')
+      self.assertEqual(source.read_bytes(),src['tools/a04br3_keyboard_state.c'])
+      self.assertEqual(len(commands),count+1)
+
+ def test_keyboard_every_partial_group_fails_before_fetch_or_build(self):
+  for missing in stage.KEYBOARD_STATE_FILES:
+   with self.subTest(missing=missing),tempfile.TemporaryDirectory() as d:
+    base=Path(d);src,pin,work=self.fixture(base,True,True,True)
+    del pin['files'][missing];(base/'uart-console-source.json').write_text(json.dumps(pin))
+    with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen') as fetch,patch.object(stage.subprocess,'run') as run:
+     with self.assertRaisesRegex(ValueError,'incomplete pinned keyboard'):stage.stage_console(work,base/'cache')
+     fetch.assert_not_called();run.assert_not_called()
+
+ def test_keyboard_tamper_or_failed_build_preserves_previous_include_and_metadata(self):
+  for fault in ('build','binary','source'):
+   with self.subTest(fault=fault),tempfile.TemporaryDirectory() as d:
+    base=Path(d);src,pin,work=self.fixture(base,True,True,True);normal=self.builder([])
+    with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen',side_effect=self.fetch(src)),patch.object(stage.subprocess,'run',side_effect=normal):
+     stage.stage_console(work,base/'cache')
+    cache=base/'cache'/('uart-console-'+pin['commit']);target=work/'bsd/dev/a04br3_console_payload.inc'
+    before=target.read_bytes();metadata=(cache/'build.json').read_bytes()
+    (cache/'a04br3-keyboard-state').write_bytes(b'bad cache')
+    if fault=='source':
+     (cache/'tools/a04br3_keyboard_state.c').write_bytes(b'bad cache')
+     src['tools/a04br3_keyboard_state.c']=b'wrong downloaded source'
+    def builder(cmd,check):
+     if 'build-a04br3-keyboard-state.sh' in cmd[1]:
+      if fault=='binary':Path(cmd[2]).write_bytes(b'not arm64 Mach-O');return
+      raise subprocess.CalledProcessError(1,cmd)
+     normal(cmd,check)
+    with patch.object(stage,'SUPPORT',base),patch.object(stage.urllib.request,'urlopen',side_effect=self.fetch(src)),patch.object(stage.subprocess,'run',side_effect=builder):
+     with self.assertRaises((ValueError,subprocess.CalledProcessError)):stage.stage_console(work,base/'cache')
+    self.assertEqual(target.read_bytes(),before);self.assertEqual((cache/'build.json').read_bytes(),metadata)
 
 if __name__=='__main__':unittest.main()
