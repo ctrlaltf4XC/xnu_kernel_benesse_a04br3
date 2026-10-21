@@ -31,6 +31,10 @@
 #include <IOKit/IOLib.h>
 #include <libkern/c++/OSData.h>
 #include "IOEthernetInterface.h"
+/* bpf.h exports this C implementation without its own C++ linkage guard.
+ * Declare its exact existing ABI before that header, without wrapping the
+ * template-bearing BSD include graph in extern-C. */
+extern "C" void bpfattach(ifnet_t, unsigned int, unsigned int);
 #include "IOEthernetController.h"
 #include "IONetworkUserClient.h"
 #include "IONetworkDebug.h"

@@ -2086,6 +2086,8 @@ ifnet_t IONetworkInterface::getIfnet( void ) const
 	return _backingIfnet;
 }
 
+#include "A04BR3IONetworkBacking.inc"
+
 OSMetaClassDefineReservedUsed(IONetworkInterface, 0);
 
 IOReturn IONetworkInterface::attachToDataLinkLayer( IOOptionBits options,

@@ -35,7 +35,8 @@ int A04BR3BSDNetwork::snapshot(a04_network_state *s)
     return 0;
 }
 
-int A04BR3BSDNetwork::attach(IOService *service,const a04_network_backend *b,unsigned unit)
+int A04BR3BSDNetwork::attach(IOService *service,const a04_network_backend *b,unsigned unit,
+    AdoptIfnet adopt,void *context)
 {
     if(gate || !service || !service->getProvider() || !b || !b->state || unit>999999)return EINVAL;
     a04_network_state state={};int error=b->state(b->context,&state);
@@ -59,6 +60,9 @@ int A04BR3BSDNetwork::attach(IOService *service,const a04_network_backend *b,uns
         IFF_BROADCAST|IFF_SIMPLEX|IFF_MULTICAST|IFF_UP|IFF_RUNNING);
     struct sockaddr_dl address={};address.sdl_len=sizeof(address);address.sdl_family=AF_LINK;
     address.sdl_type=IFT_ETHER;address.sdl_alen=6;memcpy(LLADDR(&address),mac,6);
+    /* Base interface adoption happens before DLIL attach/publication. Hook
+     * must take its own reference; bridge retains original allocation ref. */
+    if(!error && adopt)error=adopt(context,interface);
     if(!error)error=ifnet_attach(interface,&address);
     if(error){ifnet_release(interface);interface=nullptr;finish();return error;}
     /* Publish only after the real BSD interface exists, never claim connected. */

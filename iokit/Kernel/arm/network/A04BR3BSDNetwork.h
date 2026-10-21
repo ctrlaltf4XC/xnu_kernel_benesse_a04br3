@@ -14,7 +14,9 @@ public:
     A04BR3BSDNetwork();
     A04BR3BSDNetwork(const A04BR3BSDNetwork &)=delete;
     A04BR3BSDNetwork &operator=(const A04BR3BSDNetwork &)=delete;
-    int attach(IOService *registry,const a04_network_backend *backend,unsigned unit);
+    typedef int (*AdoptIfnet)(void *,ifnet_t);
+    int attach(IOService *registry,const a04_network_backend *backend,unsigned unit,
+        AdoptIfnet adopt=nullptr,void *context=nullptr);
     /* Creates a real IOService child attached to provider; registers it only
      * after successful BSD attach. Does not claim IONetworkInterface ancestry. */
     int attachProvider(IOService *provider,const a04_network_backend *backend,unsigned unit);

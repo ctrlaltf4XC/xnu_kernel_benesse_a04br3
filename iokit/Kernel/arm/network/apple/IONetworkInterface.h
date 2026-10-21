@@ -896,6 +896,12 @@ public:
     virtual ifnet_t  getIfnet( void ) const;
 
 protected:
+    /* A04BR3 source-owned extension for a legacy externally allocated ifnet.
+     * Takes an independent reference, without allocating or replacing softc.
+     * Owner drains I/O and completes real DLIL detach before clear. Nonvirtual:
+     * no native/private vtable layout or callback ABI is impersonated. */
+    IOReturn adoptExistingIfnet(ifnet_t interface);
+    IOReturn clearExistingIfnet(ifnet_t expected);
 
     /* Deprecated. Use <code>initIfnetParams</code> instead. */
     virtual bool     initIfnet( struct ifnet * ifp );

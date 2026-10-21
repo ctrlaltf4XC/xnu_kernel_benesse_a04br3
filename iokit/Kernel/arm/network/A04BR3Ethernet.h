@@ -11,14 +11,15 @@ class A04BR3EthernetInterface : public IOEthernetInterface {
     OSDeclareDefaultStructors(A04BR3EthernetInterface);
     A04BR3BSDNetwork network;
     a04_network_backend backend;
+    ifnet_t adopted=nullptr;
+    static int adopt(void *,ifnet_t);
 public:
     bool initBackend(IONetworkController *,const a04_network_backend *);
     IOReturn attachToDataLinkLayer(IOOptionBits,void *) APPLE_KEXT_OVERRIDE;
     void detachFromDataLinkLayer(IOOptionBits,void *) APPLE_KEXT_OVERRIDE;
-    ifnet_t getIfnet() const APPLE_KEXT_OVERRIDE;
-    UInt16 getFlags() const APPLE_KEXT_OVERRIDE;
+    bool setFlags(UInt16 flags,UInt16 clear=0) APPLE_KEXT_OVERRIDE;
     SInt32 performCommand(IONetworkController *,unsigned long,void *,void *) APPLE_KEXT_OVERRIDE;
-    int shutdownBackend(){ return network.detachAndWait(); }
+    int shutdownBackend();
     int refreshBackend(){ return network.refresh(); }
     int receive(mbuf_t m){ return network.input(m); }
 };
@@ -36,6 +37,7 @@ public:
     IONetworkInterface *createInterface() APPLE_KEXT_OVERRIDE;
     IOReturn getHardwareAddress(IOEthernetAddress *) APPLE_KEXT_OVERRIDE;
     IOReturn getPacketFilters(UInt32 *) const APPLE_KEXT_OVERRIDE;
+    IOReturn enablePacketFilter(const OSSymbol *,UInt32,UInt32,IOOptionBits) APPLE_KEXT_OVERRIDE;
     IOReturn enable(IONetworkInterface *) APPLE_KEXT_OVERRIDE;
     IOReturn disable(IONetworkInterface *) APPLE_KEXT_OVERRIDE;
     int shutdownBackend();

@@ -30,7 +30,7 @@
       "path": "IOEthernetInterface.cpp",
       "sha256": "1339d99dbf4a7190a5b5afa0c433d0dc1eefa1e581fbfc821f085c66e2bf0a64",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IOEthernetInterface.cpp",
-      "vendored_sha256": "bd11f206cf4c07cbd3e206b18e81eb11e8a8f200259b0420b94e7e33f894df4b"
+      "vendored_sha256": "b84420c5346be67a439eda56ba5d0a6a7ac144e29915b5dbe201249be818e826"
     },
     {
       "path": "IOEthernetInterface.h",
@@ -120,13 +120,13 @@
       "path": "IONetworkInterface.cpp",
       "sha256": "b2cf42f7c621e0709d679ac599a3778983de5c72e42afcd90bd4d4b6d93b500a",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkInterface.cpp",
-      "vendored_sha256": "54013556c8097a3779cacb5ca142f1caffe9d6ec1f208aa8f81e5028217a1feb"
+      "vendored_sha256": "244de72d8bdaae1169f6f5390ab61f4f718d3be5bd1987f919828f5268cab1b3"
     },
     {
       "path": "IONetworkInterface.h",
       "sha256": "5ceae4cb76560b39858fb695fe9b7ff215e54a2a24872198312f0b93c629204a",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkInterface.h",
-      "vendored_sha256": "e0a9ac73a67af9f03f5a23c9530f3f8e56bcfa53c492c5a869fc1be4843b753b"
+      "vendored_sha256": "3e0c3a713df49281fb7bdd1bbbca334c2e0327f48e644f3f567ee6f67479d76a"
     },
     {
       "path": "IONetworkMedium.cpp",
@@ -207,12 +207,17 @@
     "target_conditionals": "IONetworkInterface.cpp and IOKernelDebugger.cpp include source-owned A04BR3FamilyTarget.h; only consumed TARGET_OS_IPHONE derived from explicit target or board/XNU defines. No SDK system header dependency.",
     "xnu8796_header_linkage": "Removed blanket extern-C around BSD/header-only types; real XNU headers own linkage and may import kern/startup C++ templates. Explicit C function declarations in IOMbufMemoryCursor/IOKernelDebugger preserved.",
     "ownership_annotations": "IONetworkInterface/IONetworkStack load real IOKit/IOLib before BSD headers, so OSMetaClass LIBKERN_CONSUMED exists before bpf/skywalk.",
-    "bpf_mode_names": "if_set_bpf_tap switch now uses exact exported kpi_interface.h BPF_MODE_DISABLED/INPUT/OUTPUT/INPUT_OUTPUT values (0/1/2/3) rather than private dlil aliases."
+    "bpf_mode_names": "if_set_bpf_tap switch now uses exact exported kpi_interface.h BPF_MODE_DISABLED/INPUT/OUTPUT/INPUT_OUTPUT values (0/1/2/3) rather than private dlil aliases.",
+    "shared_backing_lifecycle": "Protected nonvirtual adopt/clear seam adds independent ifnet_reference to actual base private _backingIfnet; adopts before bridge ifnet_attach, clears and releases after actual bridge detach completes. Default allocation not called; genuine base free is fallback reference cleanup. No parent IOEthernetInterface.cpp changes."
   },
   "local_files": [
     {
       "path": "A04BR3FamilyTarget.h",
       "sha256": "0c91ecd7c10a0d965ec826c0ae6ed02ca0a25c4801cfdd9c1474e655789757f4"
+    },
+    {
+      "path": "A04BR3IONetworkBacking.inc",
+      "sha256": "90c66a211550ce8b3a846c6f245530d81e463682f32e4e020c2eedc53ea9ada8"
     }
   ]
 }

@@ -21,8 +21,13 @@ IOReturn A04BR3EthernetInterface::attachToDataLinkLayer(IOOptionBits,void *)
     /* Use the documented virtual extension point. Do NOT call Apple's default
      * attach here: it would allocate another ifnet and a different softc.
      * IONetworkStack owns name/unit assignment and registered-state transition. */
-    int error=network.attach(this,&backend,getUnitNumber());
-    if(error){IOLog("A04BR3 network: genuine interface DLIL attach errno=%d\n",error);return kIOReturnError;}
+    int error=network.attach(this,&backend,getUnitNumber(),adopt,this);
+    if(error){
+        // Allocation/attach failure: bridge dropped its original reference.
+        // Any base-adoption reference still needs its one matching release.
+        if(adopted){(void)clearExistingIfnet(adopted);adopted=nullptr;}
+        IOLog("A04BR3 network: genuine interface DLIL attach errno=%d\n",error);return kIOReturnError;
+    }
     return kIOReturnSuccess;
 }
 
@@ -30,15 +35,33 @@ void A04BR3EthernetInterface::detachFromDataLinkLayer(IOOptionBits,void *)
 {
     /* Apple invokes this in sleepable thread-call context. No busy wait and
      * no release of callback context before real DLIL detach completes. */
-    int error=network.detachAndWait();
+    int error=shutdownBackend();
     if(error)IOLog("A04BR3 network: genuine interface detach errno=%d; live bridge retained\n",error);
 }
 
-ifnet_t A04BR3EthernetInterface::getIfnet() const { return network.ifnet(); }
-UInt16 A04BR3EthernetInterface::getFlags() const
+int A04BR3EthernetInterface::adopt(void *context,ifnet_t interface)
 {
-    ifnet_t ifp=network.ifnet();
-    return ifp?ifnet_flags(ifp):IOEthernetInterface::getFlags();
+    auto *self=(A04BR3EthernetInterface *)context;
+    IOReturn result=self->adoptExistingIfnet(interface);
+    if(result!=kIOReturnSuccess)return EIO;
+    self->adopted=interface;return 0;
+}
+int A04BR3EthernetInterface::shutdownBackend()
+{
+    int error=network.detachAndWait();if(error)return error;
+    if(adopted){
+        IOReturn result=clearExistingIfnet(adopted);
+        if(result!=kIOReturnSuccess)return EIO;
+        adopted=nullptr;
+    }
+    return 0;
+}
+bool A04BR3EthernetInterface::setFlags(UInt16 flags,UInt16 clear)
+{
+    // Real radio/admin + association/datapath are owned by the bridge. Apple's
+    // power/filter path must not turn radio-enabled into premature RUNNING.
+    if(getIfnet()){flags&=~(IFF_UP|IFF_RUNNING);clear&=~(IFF_UP|IFF_RUNNING);}
+    return IOEthernetInterface::setFlags(flags,clear);
 }
 SInt32 A04BR3EthernetInterface::performCommand(IONetworkController *controller,unsigned long command,void *arg0,void *arg1)
 {
@@ -85,9 +108,21 @@ IOReturn A04BR3EthernetController::getHardwareAddress(IOEthernetAddress *address
 IOReturn A04BR3EthernetController::getPacketFilters(UInt32 *filters) const
 {
     if(!filters)return kIOReturnBadArgument;
-    /* Do not inherit Apple's default advertised multicast/promiscuous support
-     * until actual firmware filter programming has a proven backend callback. */
-    *filters=0;return kIOReturnSuccess;
+    /* Actual A04BR3WLANStation::setup submits CID0x0a mask13, including
+     * directed+broadcast. Advertise only those mandatory, always-on filters;
+     * optional multicast/promiscuous/wake control is not implemented here. */
+    *filters=kIOPacketFilterUnicast|kIOPacketFilterBroadcast;return kIOReturnSuccess;
+}
+IOReturn A04BR3EthernetController::enablePacketFilter(const OSSymbol *group,
+    UInt32 filter,UInt32,IOOptionBits)
+{
+    if(group!=gIONetworkFilterGroup ||
+        (filter!=kIOPacketFilterUnicast && filter!=kIOPacketFilterBroadcast))return kIOReturnUnsupported;
+    a04_network_state state={};
+    if(!configured || backend.state(backend.context,&state) || !a04_network_control_ready(&state))return kIOReturnNotReady;
+    // These baseline filters are already enabled by real station setup. No
+    // synthetic firmware transaction or optional-mode success is returned.
+    return kIOReturnSuccess;
 }
 static IOReturn a04_radio(const a04_network_backend *b,unsigned enable)
 {
