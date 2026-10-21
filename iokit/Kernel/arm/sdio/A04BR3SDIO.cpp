@@ -13,6 +13,8 @@
 #include "A04BR3WLANBootFirmware.h"
 #include "A04BR3WLANRuntime.h"
 #include "A04BR3WLANBackendAPI.h"
+#include "A04BR3WLANJoinAdmission.h"
+#include "A04BR3WLANCurrentNetwork.h"
 #include <kern/thread_call.h>
 #include <kern/clock.h>
 extern "C" {
@@ -275,6 +277,24 @@ public:
    e=a04_wlan_station_select(&r->station,wlanHost,&r->scan[index],secure,1,1000,now,now+1500000);
    if(!e)scheduleLive();
   }IOLockUnlock(transportLock);return e?EIO:0;
+ }
+ int currentRecord(struct a04_wlan_scan_record *out){
+  if(!out)return EINVAL;
+  IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_current_record(&live->runtime,out);
+  IOLockUnlock(transportLock);return e;
+ }
+ int requestJoinTarget(const struct a04_wlan_join_target *target){
+  if(!target)return EINVAL;
+  IOLockLock(transportLock);int e=ENXIO;
+  if(live && !liveStopping && networkInitialized && wlanHost){
+   struct a04_wlan_runtime *r=&live->runtime;uint64_t now=liveNow();
+   e=a04_wlan_join_target_check(r,target,now);
+   if(!e){
+    r->station.local.active_channels=r->station.local.permitted_channels;
+    int command=a04_wlan_station_select(&r->station,wlanHost,&r->scan[target->index],0,1,1000,now,now+1500000);
+    e=command?EIO:0;if(!e)scheduleLive();
+   }
+  }IOLockUnlock(transportLock);return e;
  }
  int sendEAPOL(const void *p,unsigned n){if(!p || n<14 || a04_wlan_be16((const uint8_t *)p+12)!=0x888e)return EINVAL;IOLockLock(transportLock);int e=queuePacket(p,n);IOLockUnlock(transportLock);return e;}
  int installKey(unsigned pairwise,unsigned id,const uint8_t *key,const uint8_t *rsc){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_security_install(&live->runtime.security,&live->runtime.station,wlanHost,pairwise,id,key,rsc,liveNow());if(!e)scheduleLive();IOLockUnlock(transportLock);return e?EIO:0;}
@@ -636,6 +656,8 @@ extern "C" int a04br3_wlan_scan(IOService *p){auto s=OSDynamicCast(A04BR3SDIO,p)
 extern "C" int a04br3_wlan_scan_count(IOService *p,unsigned *c,unsigned *done){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->scanCount(c,done):ENXIO;}
 extern "C" int a04br3_wlan_scan_copy(IOService *p,unsigned i,struct a04_wlan_ap *a){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->scanCopy(i,a):ENXIO;}
 extern "C" int a04br3_wlan_join(IOService *p,unsigned i,unsigned secure){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->requestJoin(i,secure):ENXIO;}
+extern "C" int a04br3_wlan_current_record(IOService *p,struct a04_wlan_scan_record *out){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->currentRecord(out):ENXIO;}
+extern "C" int a04br3_wlan_join_target(IOService *p,const struct a04_wlan_join_target *t){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->requestJoinTarget(t):ENXIO;}
 extern "C" int a04br3_wlan_eapol(IOService *p,const void *b,unsigned n){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->sendEAPOL(b,n):ENXIO;}
 extern "C" int a04br3_wlan_install_key(IOService *p,unsigned pair,unsigned id,const uint8_t k[16],const uint8_t r[8]){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->installKey(pair,id,k,r):ENXIO;}
 extern "C" int a04br3_wlan_authorize(IOService *p,int result){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->authorize(result):ENXIO;}

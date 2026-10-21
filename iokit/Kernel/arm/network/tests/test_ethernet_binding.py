@@ -179,7 +179,7 @@ NATIVE_API=r'''
 #include "A04BR3WLANBackendAPI.h"
 static a04_wlan_native_client nativeClient={};
 static unsigned observedCount,observedDone,observedGeneration=1,acquires,releases,beginCalls,beginActive;
-static int runtimeError,beginError,copyError;
+static int runtimeError,beginError,copyError,currentRecordError;
 static a04_wlan_scan_record scanRecords[2];
 static void recordInit(unsigned i){
  auto &r=scanRecords[i];r={};auto &a=r.ap;auto &x=r.observation;
@@ -213,6 +213,9 @@ extern "C" int a04br3_wlan_scan_mode(IOService *,unsigned active,unsigned *accep
  beginCalls++;beginActive=active;if(beginError)return beginError;
  *accepted=++observedGeneration;observedDone=observedCount=0;return 0;
 }
+static unsigned joinCalls;static int joinError;static a04_wlan_join_target lastJoin={};
+extern "C" int a04br3_wlan_current_record(IOService *,a04_wlan_scan_record *out){if(currentRecordError)return currentRecordError;if(!realState.associated)return ENOTCONN;*out=scanRecords[0];return 0;}
+extern "C" int a04br3_wlan_join_target(IOService *,const a04_wlan_join_target *target){joinCalls++;lastJoin=*target;return joinError;}
 extern "C" int a04br3_wlan_bind_native(IOService *,const a04_wlan_native_client *c){nativeClient=*c;c->owner->retain();return 0;}
 extern "C" int a04br3_wlan_unbind_native(IOService *){nativeClient.owner->release();nativeClient={};return 0;}
 #define MBUF_DONTWAIT 0
@@ -308,6 +311,56 @@ static void nativeCases(){
  observedDone=0;client.changed(client.context);observedDone=1;realState.control_ready=0;
  client.changed(client.context);assert(scanEvents==2); // poisoned/offline backend must not emit completion
  realState.control_ready=1;client.changed(client.context);assert(scanEvents==3);
+ // Actual BSD credential/copyin -> production Rendezvous -> typed join API.
+ observedCount=observedDone=1;recordInit(0);scanRecords[0].ap.capability&=~16u;
+ memset(userBuffer,0,592);userBuffer[0]=1;userBuffer[4]=2;userBuffer[6]=1;
+ userBuffer[12]=3;memcpy(userBuffer+16,"abc",3);
+ auto association=bindReq;association.type=20;association.value=0;association.length=592;
+ association.user_data=(uintptr_t)userBuffer;
+ unsigned beforeJoin=joinCalls;int oldCopies=copyIns;
+ credentialRoot=0;assert(current->init.ioctl(current,A04_APPLE80211_SET64,&association)==EPERM && joinCalls==beforeJoin && copyIns==oldCopies);
+ credentialRoot=1;assert(!current->init.ioctl(current,A04_APPLE80211_SET64,&association));
+ assert(joinCalls==beforeJoin+1 && copyIns==oldCopies+1 && lastJoin.generation==observedGeneration && lastJoin.index==0 && lastJoin.ssid_length==3);
+ assert(!realState.associated && !(current->flags&IFF_RUNNING));
+ joinError=ESTALE;assert(current->init.ioctl(current,A04_APPLE80211_SET64,&association)==ESTALE);joinError=0;
+ beforeJoin=joinCalls;userBuffer[56]=1;
+ assert(current->init.ioctl(current,A04_APPLE80211_SET64,&association)==EOPNOTSUPP && joinCalls==beforeJoin);userBuffer[56]=0;
+ scanRecords[0].ap.capability|=16;
+ assert(current->init.ioctl(current,A04_APPLE80211_SET64,&association)==EOPNOTSUPP && joinCalls==beforeJoin);
+ assert(client.set(client.context,22,0,nullptr,0)==EOPNOTSUPP && joinCalls==beforeJoin);
+ // Current103 must come from a real associated backend snapshot, with the
+ // exact zero-version native query and observed IEs/RSSI, never scan-cache
+ // substitution while unassociated. Source currentRecord is separately run.
+ scanRecords[0].ap.capability&=~16u;realState.associated=1;
+ auto currentReq=association;currentReq.type=103;currentReq.length=1164;
+ memset(userBuffer,0,1164);userBuffer[0x8b]=4;userBuffer[1164]=0xa5;
+ assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&currentReq));
+ assert(userBuffer[0]==1 && userBuffer[0x60]==3 && !memcmp(userBuffer+0x61,"abc",3) && userBuffer[1164]==0xa5);
+ scanRecords[0].observation.ie_bytes=1025;memset(userBuffer,0,1164);userBuffer[0x8b]=4;
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&currentReq)==EMSGSIZE && !userBuffer[0]);
+ scanRecords[0].observation.ie_bytes=9;
+ // Execute the actual current adapter's complete temporary ownership paths.
+ // Acquiring a backend retains provider once; copied state/record own no refs.
+ uint8_t query[1164];
+ auto currentOwnership=[&](int expected,bool acquired){
+  memset(query,0,sizeof(query));query[0x8b]=4;uint32_t size=sizeof(query);
+  unsigned a=acquires,r=releases,refs=provider.refs;int storage=allocations;
+  assert(a04_assoc_provider_current(&provider,0,query,&size,a04_scan_provider_now())==expected);
+  assert(acquires==a+(acquired?1u:0u) && releases==r+(acquired?1u:0u));
+  assert(provider.refs==refs && allocations==storage && size==sizeof(query));
+  if(expected)assert(!query[0]);
+ };
+ currentOwnership(0,true);
+ stateError=EIO;currentOwnership(EIO,true);stateError=0;
+ failMemory=1;currentOwnership(ENOMEM,true);failMemory=0;
+ currentRecordError=EIO;currentOwnership(EIO,true);currentRecordError=0;
+ scanRecords[0].observation.ie_bytes=1025;currentOwnership(EMSGSIZE,true);scanRecords[0].observation.ie_bytes=9;
+ realState.associated=0;currentOwnership(ENOTCONN,true);realState.associated=1;
+ realState.control_ready=0;currentOwnership(ENXIO,false);realState.control_ready=1;
+ realState.associated=0;
+
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&currentReq)==ENOTCONN && !userBuffer[0]);
+
  assert(!a04br3_network_unbind(&provider,&owner) && !owner && !current && provider.refs==1);
  assert(acquires==releases);
  a04Stack->detach(&provider);a04Stack->release();a04Stack=nullptr;
@@ -331,6 +384,7 @@ class EthernetBinding(unittest.TestCase):
    station=(sdio/'A04BR3WLANStation.h').read_text();a=station.index('struct a04_wlan_ap {');b=station.index('};',a)+2
    (p/'sdio/A04BR3WLANStation.h').write_text('#pragma once\n'+station[a:b])
    (p/'sdio/A04BR3WLANScanSnapshot.h').write_text((sdio/'A04BR3WLANScanSnapshot.h').read_text())
+   (p/'sdio/A04BR3WLANJoinTarget.h').write_text((sdio/'A04BR3WLANJoinTarget.h').read_text())
    (p/'A04BR3NativeRendezvous.cpp').write_text((SOURCE/'A04BR3NativeRendezvous.cpp').read_text().replace('../sdio/','sdio/'))
    (p/'apple').mkdir()
    original=(SOURCE/'apple/IONetworkInterface.cpp').read_text()
@@ -381,7 +435,7 @@ class EthernetBinding(unittest.TestCase):
    self.assertEqual(definitions,[SOURCE/'A04BR3Ethernet.cpp'])
   self.assertIn('return network.dispatch(command,arg1)',impl)
   self.assertNotIn('setProperty("IOClass"',impl)
-  self.assertIn('if(type!=10 && type!=19)return EOPNOTSUPP;',(SOURCE/'A04BR3NativeRendezvous.cpp').read_text())
+  self.assertIn('if(type!=10 && type!=19 && type!=20)return EOPNOTSUPP;',(SOURCE/'A04BR3NativeRendezvous.cpp').read_text())
   files=(SOURCE.parents[2]/'conf/files.arm64').read_text()
   self.assertEqual(files.count('network/A04BR3Ethernet.cpp'),1)
   self.assertNotIn('IO80211Family',files)

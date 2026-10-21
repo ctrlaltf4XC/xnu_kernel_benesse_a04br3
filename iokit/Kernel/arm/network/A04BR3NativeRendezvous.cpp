@@ -4,6 +4,7 @@
 #include "A04BR3NativeGET.h"
 #include "A04BR3NativePower.h"
 #include "A04BR3NativeScanAdapter.h"
+#include "A04BR3NativeAssociationAdapter.h"
 #include "../sdio/A04BR3WLANBackendAPI.h"
 #include <sys/kpi_mbuf.h>
 #include <sys/errno.h>
@@ -57,6 +58,7 @@ class A04BR3NativeNetwork : public IOService {
     static int get(void *context,uint32_t type,uint32_t value,void *out,uint32_t *bytes){
         auto *self=(A04BR3NativeNetwork *)context;
         if(!self->backendProvider)return ENXIO;
+        if(type==103)return a04_assoc_provider_current(self->backendProvider,value,out,bytes,a04_scan_provider_now());
         if(type==11){
             if(!self->scanLock)return ENXIO;
             IOLockLock(self->scanLock);auto backend=self->scanBackend();
@@ -71,9 +73,10 @@ class A04BR3NativeNetwork : public IOService {
         a04br3_wlan_release_backend(self->backendProvider);return error;
     }
     static int set(void *context,uint32_t type,uint32_t value,const void *in,uint32_t bytes){
-        if(type!=10 && type!=19)return EOPNOTSUPP;
+        if(type!=10 && type!=19 && type!=20)return EOPNOTSUPP;
         auto *self=(A04BR3NativeNetwork *)context;
         if(!self->backendProvider)return ENXIO;
+        if(type==20)return a04_assoc_provider_set(self->backendProvider,value,in,bytes);
         if(type==19){
             a04_network_backend backend={};
             int error=a04br3_wlan_acquire_backend(self->backendProvider,&backend);

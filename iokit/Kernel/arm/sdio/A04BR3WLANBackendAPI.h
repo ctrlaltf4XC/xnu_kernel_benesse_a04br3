@@ -6,8 +6,10 @@
 #ifndef A04BR3_WLAN_BACKEND_API_H
 #define A04BR3_WLAN_BACKEND_API_H
 #define A04_WLAN_SCAN_MODE_API 1
+#define A04_WLAN_JOIN_TARGET_API 1
 #include "A04BR3WLANData.h"
 #include "A04BR3WLANScanSnapshot.h"
+#include "A04BR3WLANJoinTarget.h"
 #include "../network/A04BR3NetworkBackend.h"
 #ifdef __cplusplus
 class IOService;
@@ -55,6 +57,11 @@ int a04br3_wlan_scan_snapshot(a04_wlan_service,struct a04_wlan_scan_info *);
 int a04br3_wlan_scan_copy_record(a04_wlan_service,unsigned generation,unsigned index,struct a04_wlan_scan_record *);
 /* Explicit native association request for an ACTUALLY observed result. */
 int a04br3_wlan_join(a04_wlan_service,unsigned index,unsigned secured);
+/* Open-only admission; generation+index+identity validated atomically with
+ * station_select. No cached index race and no association-success return. */
+int a04br3_wlan_join_target(a04_wlan_service,const struct a04_wlan_join_target *);
+/* Only actual association permits this peer/observed-IE snapshot. */
+int a04br3_wlan_current_record(a04_wlan_service,struct a04_wlan_scan_record *);
 int a04br3_wlan_eapol(a04_wlan_service,const void *ethernet,unsigned bytes);
 int a04br3_wlan_install_key(a04_wlan_service,unsigned pairwise,unsigned keyid,const uint8_t key[16],const uint8_t rsc[8]);
 /* Only real authenticated native supplicant completion, never a key ioctl. */
