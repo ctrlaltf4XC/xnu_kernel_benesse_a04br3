@@ -41,7 +41,8 @@ static int
 prepare_uart_console(void)
 {
     unsigned enabled = 0;
-    PE_parse_boot_argn("a04br3.uart_console", &enabled, sizeof(enabled));
+    if (!PE_parse_boot_argn("a04br3.console", &enabled, sizeof(enabled)))
+        PE_parse_boot_argn("a04br3.uart_console", &enabled, sizeof(enabled));
     if (enabled != 1) return 0;
     /* Build failure for an absent generated include is intentional: never ship
      * a placeholder or download a program during boot. */

@@ -708,7 +708,8 @@ void a04br3_msdc_probe(void) {
             locations[i],le64(sector+72),le32(sector+80),le32(sector+84));
         error=find_root_partition(sector,sectors);
         if(!error) {
-            boot_update_enabled=PE_parse_boot_argn("a04br3.boot_update",&enabled,sizeof(enabled)) && enabled==1;
+            boot_update_enabled=(PE_parse_boot_argn("a04br3.console",&enabled,sizeof(enabled)) ||
+                PE_parse_boot_argn("a04br3.boot_update",&enabled,sizeof(enabled))) && enabled==1;
             if(boot_update_enabled) {
                 int be=boot_parse_gpt(sector,sectors,&boot_first,&boot_sectors);
                 if(!be)boot_gpt_lba=locations[i];
