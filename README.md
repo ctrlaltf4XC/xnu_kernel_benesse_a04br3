@@ -446,3 +446,8 @@ Unsupported formats, oversized files, symlinks, non-root ownership and hard link
 are refused. A missing override uses the small marked XML dictionary, and only
 that exact generated XML file may be removed. This remains an experiment until
 hardware confirms both application and progress past the native wait.
+
+The native FairPlay override transaction also accepts flat XML boolean dictionaries,
+preserving all unrelated XML bytes. Nested XML values, entities, and unsupported
+structures are refused rather than discarded. Binary dictionaries retain their
+existing general value support. The original is restored byte for byte.

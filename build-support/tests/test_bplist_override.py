@@ -22,7 +22,7 @@ class BinaryPlistOverride(unittest.TestCase):
   src=plistlib.dumps({'com.apple.fairplayd.H2':True,'other':b'data'},fmt=plistlib.FMT_BINARY);rc,out=self.apply(src);self.assertEqual((rc,out),(0,src))
  def test_rejects_unknown_target_types_and_small_output(self):
   src=plistlib.dumps({'com.apple.fairplayd.H2':'unknown'},fmt=plistlib.FMT_BINARY);self.assertNotEqual(self.apply(src)[0],0)
-  self.assertNotEqual(self.apply(plistlib.dumps({},fmt=plistlib.FMT_XML))[0],0)
+  self.assertEqual(self.apply(plistlib.dumps({},fmt=plistlib.FMT_XML))[0],0)
   self.assertNotEqual(self.apply(plistlib.dumps({},fmt=plistlib.FMT_BINARY),10)[0],0)
  def test_truncations_and_hostile_trailers(self):
   src=plistlib.dumps({'one':True},fmt=plistlib.FMT_BINARY)

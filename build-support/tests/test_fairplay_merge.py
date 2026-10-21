@@ -84,7 +84,7 @@ int main(int argc,char **argv) {
  assert(merge_existing_fairplay(&nodes[0],0,NULL)==0);assert(nodes[0].mode==0640 && nodes[0].gid==20);
  f=fopen(argv[2],"wb");assert(f);assert(fwrite(nodes[0].bytes,1,nodes[0].size,f)==nodes[0].size);fclose(f);
  int before=writes;assert(merge_existing_fairplay(&nodes[0],0,NULL)==0 && writes==before);
- nodes[0].bytes[0]='X';assert(merge_existing_fairplay(&nodes[0],1,NULL)==EBUSY && writes==before);nodes[0].bytes[0]='b';
+ nodes[0].bytes[0]='X';assert(merge_existing_fairplay(&nodes[0],1,NULL)==EBUSY && writes==before);nodes[0].bytes[0]=baseline[0];
  assert(merge_existing_fairplay(&nodes[0],1,NULL)==0 && !nodes[1].exists && nodes[0].size==baseline_size && !memcmp(nodes[0].bytes,baseline,baseline_size));
  reset();rename_error=EIO;assert(merge_existing_fairplay(&nodes[0],0,NULL)==EIO && !nodes[2].exists && nodes[1].exists && !memcmp(nodes[0].bytes,baseline,baseline_size));rename_error=0;assert(merge_existing_fairplay(&nodes[0],0,NULL)==0);
  return 0;
@@ -97,3 +97,8 @@ int main(int argc,char **argv) {
    subprocess.run(['cc','-Wall','-Wextra','-Werror','-fsanitize=undefined','-fno-sanitize-recover=all','-I',str(inc),str(src),'-o',str(exe)],check=True)
    subprocess.run([str(exe),str(original),str(result)],check=True)
    data['com.apple.fairplayd.H2']=True;self.assertEqual(plistlib.loads(result.read_bytes()),data)
+
+   data={"com.apple.other":False}
+   original.write_bytes(plistlib.dumps(data))
+   subprocess.run([str(exe),str(original),str(result)],check=True)
+   data["com.apple.fairplayd.H2"]=True;self.assertEqual(plistlib.loads(result.read_bytes()),data)

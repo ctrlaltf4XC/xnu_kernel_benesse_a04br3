@@ -5,6 +5,7 @@
  */
 #ifndef A04BR3_BPLIST_H
 #define A04BR3_BPLIST_H
+#include "a04br3_xmlpolicy.h"
 #define A04_FP_MAX_INPUT 16384u
 #define A04_FP_MAX_OUTPUT 32768u
 static uint64_t a04_bp_uint(const unsigned char *p,unsigned n)
@@ -36,7 +37,8 @@ static size_t a04_bp_tag(unsigned char *p,unsigned type,uint64_t count)
 static int a04_bp_disable_fp(const unsigned char *s,size_t len,unsigned char *out,size_t cap,size_t *written)
 {
     static const char key[]="com.apple.fairplayd.H2";
-    if(len<40 || len>A04_FP_MAX_INPUT || memcmp(s,"bplist00",8))return ENOTSUP;
+    if(len<8 || memcmp(s,"bplist00",8))return fp_xml_disable(s,len,out,cap,written);
+    if(len<40 || len>A04_FP_MAX_INPUT)return ENOTSUP;
     const unsigned char *tr=s+len-32;
     unsigned os=tr[6],rs=tr[7];
     if(!os || os>8 || !rs || rs>8)return EINVAL;
