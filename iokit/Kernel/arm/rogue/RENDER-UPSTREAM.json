@@ -1,0 +1,43 @@
+{
+  "status": "New-file-only native BIF/context/client UPDATE + KCCB KICK candidate; source/host verified, not wired into frozen driver and not hardware tested; no rasterization claimed",
+  "ddk": "Imagination/MediaTek m1.11ED5425693, MT8167 user config, BVNC22.40.54.30",
+  "source_sha256": {
+    "hwdefs/km/rgxmmudefs_km.h": "bfedc5799e2b57b27cece82d3cd882c557f44ce3356895c9ffa5d7471cdffd28",
+    "services/server/devices/rgx/rgxmmuinit.c": "65ed4fe0ab91d8c1d7ffebbcd3d045789ff09b8e7f4595a57abdbfc30bef0564",
+    "services/server/devices/rgx/rgxmem.c": "a5693bed5edbfe6fdedbc5994c5c615cf185c16cdea683f93c198da2ca5dc633",
+    "services/server/devices/rgx/rgxfwutils.c": "7b5f667bc0c483628f7852a40824e8bdc3e0eeec7186e53e9ee77b8d801de2b5",
+    "services/server/devices/rgx/rgxta3d.c": "6ac7806dc55aba8b509b73cad0a968093b5e7a0f702fd1d5ee549f3d462e1b35",
+    "services/server/devices/rgx/rgxccb.c": "dc7ee47c4daa641ee373dc2d159e3066eb5b331db93a72f2feee01ed54a28b7a",
+    "services/include/rgx_fwif_km.h": "c9857eb9bcc4a8a70c3431266af3b39c4c2f996e06744ce5707f48dfe5059e9e",
+    "services/include/rgx_fwif_resetframework.h": "1c2cf14a28513985e846dd20f5b4e416b454d40557f475f2578bc060798fe104",
+    "hwdefs/km/configs/rgxconfig_km_22.V.54.30.h": "f16b6e17abcd2df6ebfb7fdbcd395d0e5ccec28ef3e49f8dde6e612c8a9191e1",
+    "services/server/devices/rgx/rgxheapconfig.h": "dbb55d164329624b1100d5ee95feca005fafc66f78f2306d9a2e4c2e3ba3d89f"
+  },
+  "license": {
+    "A04BR3RogueRenderABI.h": "Exact selected RF declarations with A04 names; original Imagination Dual MIT/GPLv2 license retained verbatim, MIT option selected",
+    "other_new_headers": "Original BSD-2-Clause-Patent implementations of documented DDK resource/encoding contracts; existing MIT ABI declarations included unchanged"
+  },
+  "implemented": [
+    "Native 40bitVA/32bitPA BIF 4KiB PC1024x32/PD512x64/PT512x64; up to16PT pages, single1GiB catalogue span, bounds/disjointness preflight and host walker",
+    "Owned low4GiB bank64KiB, PC/PD/PT4KiB each, scratch64KiB; normal-NC bank/scratch, cached table clean, cold MIPS firmware mapping at0xc0080000; pre-runtime code-PTE guard",
+    "Native FW memory context, FW render context TA/3D, suspend states4ISP pipes, disabled16byte reset framework, dedicated client CCBs/UFO",
+    "Client CCB48byte UPDATE packet,40byte PADDING header/reserved-tail rule, no CPU writes to FW-owned CCCB write offset",
+    "Typed KCCB KICK from owned context and current client write offset, no hardware task/shader bytes; finite100ms polling of KCCB and client read offsets plus exact UFO sequence; timeout quarantine"
+  ],
+  "integration_required": [
+    "Call owner.prepareCold after CPU memory.stage and BEFORE Runtime.prepare; new mapping is cold only",
+    "Pin owner before firmware release; keep Memory source alive longer than owner",
+    "After actual firmware ready and matching compatibility checks, call update under SAME producer/power/stop lock as existing KCCB SYNC",
+    "Frozen Runtime layout is currently private: parent must add trusted internal view/accessor in next integration change. No current CPP/Runtime file changed by this scope"
+  ],
+  "not_implemented": [
+    "Actual TA/3D task/raster/shader command ABI and validated resources/RT data/freelists",
+    "Live MIPS/BIF TLB invalidation, power-off drain and safe teardown, asynchronous FWCCB request handlers",
+    "Apple userspace GPU ABI translation or IOAccelerator registration; no fake acceleration property"
+  ],
+  "tests": [
+    "test_rogue_render.py",
+    "test_rogue_render_memory.py"
+  ],
+  "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE"
+}
