@@ -1,0 +1,20 @@
+{
+  "revision": "e1ef8f046c6e37ec1e2a13229560fbb824e5118f",
+  "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/",
+  "license": "MIT; original generated2024 Imagination notice preserved",
+  "generation": "python3 pco_isa.h.py; python3 pco_common.h.py, unmodified pinned source; no native bytes used",
+  "source_sha256": {
+    "pco_isa.py": "c10b5f64912efdeade613652036413f80db576265ad58d1dffb72015e1b4ad84",
+    "pco_ops.py": "178b6f09f4075e997cbd9fee577c68cc868084b5f7721559a2b53f127c6fe763",
+    "pco_map.py": "e6c6f12987dff874049b8171cb27fb0c2bc97414b56307b5b04158cf7ecda431",
+    "pco_pygen_common.py": "0077de8f24a9c469a4ed07d737e442eaae3439a7c49994162b9a4242d3bf46e1",
+    "pco_isa.h.py": "99f6d467048ddc9e655fd0cd3b9f7bf099177cae2d2642174f08b55bdb300d32",
+    "pco_common.h.py": "bc72d7ca0c10c464ea4f71b53f786cdb1b162e9b496377cedd09059d71f0f250"
+  },
+  "fixture_sha256": {
+    "pco_isa.h": "04f76333e678f3fa892169f26051b3b679d815a36182d4be3b74c6b7a5cf0399",
+    "pco_common.h": "9924f9b3fadd4e997f1eb5ada4fbe484390e655612b8a9cd33de561a3a0bffd6",
+    "util/macros.h": "0916a1512c78b6af2451a58f145958fea0fc013896d1eef31a5f5e0aa30b01d8"
+  },
+  "dependencies": "Compiler only for test. Generated headers checked in, no Mako/network/sibling tree required."
+}
