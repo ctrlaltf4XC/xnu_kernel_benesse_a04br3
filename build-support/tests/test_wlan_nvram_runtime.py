@@ -28,6 +28,41 @@ def image():
     return p
 
 class RuntimeNVRAM(unittest.TestCase):
+    def test_actual_gpt_discovery_never_enables_nvram_writes(self):
+        source=(ROOT/'bsd/dev/a04br3_msdc.c').read_text()
+        function=source[source.index('static int find_root_partition('):source.index('int a04br3_emmc_rootdev(dev_t *dev);')]
+        c=r'''#include <stdint.h>
+#include <string.h>
+#include <stdio.h>
+#include <errno.h>
+#include <assert.h>
+#define MIN(a,b) ((a)<(b)?(a):(b))
+static uint32_t root_first,root_sectors,nvram_first,nvram_sectors;
+static uint8_t disk[512];
+static uint32_t le32(const uint8_t *p){return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;}
+static uint64_t le64(const uint8_t *p){return le32(p)|((uint64_t)le32(p+4)<<32);}
+static void put32(uint8_t *p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(8*i));}
+static void put64(uint8_t *p,uint64_t n){put32(p,n);put32(p+4,n>>32);}
+static int read_block(unsigned op,uint32_t lba,uint8_t *out){assert(op==17 && lba==2);memcpy(out,disk,512);return 0;}
+static void entry(unsigned index,const char *name,unsigned first,unsigned last){uint8_t *p=disk+index*128;memset(p,0,128);put64(p+32,first);put64(p+40,last);for(unsigned i=0;name[i];i++)p[56+2*i]=name[i];}
+static int probe(void){uint8_t h[512]={0};uint32_t crc=~0u;for(unsigned i=0;i<512;i++){crc^=disk[i];for(unsigned j=0;j<8;j++)crc=(crc>>1)^(0xedb88320u&(0u-(crc&1u)));}put64(h+72,2);put32(h+80,4);put32(h+84,128);put32(h+88,~crc);put64(h+40,34);put64(h+48,9990);root_first=root_sectors=nvram_first=nvram_sectors=0;return find_root_partition(h,10000);}
+''' 
+        # Forward declaration keeps the real copied function after test helpers.
+        c=c.replace('static int probe(void)', 'static int find_root_partition(const uint8_t [512],uint32_t);\nstatic int probe(void)')
+        c+=function+r'''
+int main(void){
+ entry(0,"userdata",4000,9000);entry(1,"nvram",1000,1999);assert(probe()==0 && nvram_first==1000 && nvram_sectors==1000);
+ entry(2,"nvram",2000,2999);assert(probe()==0 && !nvram_sectors);
+ entry(2,"unused",2000,2999);entry(1,"nvram",3900,4100);assert(probe()==0 && !nvram_sectors);
+ entry(1,"nvram",20,30);assert(probe()==0 && !nvram_sectors);
+ entry(1,"other",1000,1999);assert(probe()==0 && !nvram_sectors);
+ return 0;}
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp);(d/'test.c').write_text(c)
+            subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(d/'test.c'),'-o',str(d/'test')],check=True)
+            subprocess.run([str(d/'test')],check=True,stdout=subprocess.DEVNULL)
+
     def test_actual_parser_reads_checksums_and_failures(self):
         c=r'''
 #include <stdio.h>

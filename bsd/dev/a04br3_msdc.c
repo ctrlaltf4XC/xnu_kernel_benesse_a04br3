@@ -441,17 +441,17 @@ static int find_root_partition(const uint8_t header[512],uint32_t sectors) {
     /* Discover original per-device NVRAM by the CRC-verified GPT name. No
      * fixed LBA, image input, extraction step, or write access is introduced. */
     static const char nvname[]="nvram";
-    uint32_t nvfirst=0,nvcount=0;
+    uint32_t nvfirst=0,nvcount=0;unsigned nvinvalid=0;
     for(unsigned i=0;i<count;i++) {
         const uint8_t *e=entries+i*size;unsigned n=0;
         while(n<sizeof(nvname)-1 && e[56+n*2]==nvname[n] && !e[57+n*2])n++;
         if(n!=sizeof(nvname)-1 || e[56+n*2] || e[57+n*2])continue;
         uint64_t first=le64(e+32),last=le64(e+40);
         if(nvcount || first<first_usable || last>last_usable || first>last || last>=sectors ||
-           (last-first+1)>0x4000000u/512)return EINVAL;
+           (last-first+1)>0x4000000u/512){nvinvalid=1;continue;}
         nvfirst=(uint32_t)first;nvcount=(uint32_t)(last-first+1);
     }
-    nvram_first=nvfirst;nvram_sectors=nvcount;
+    nvram_first=nvinvalid?0:nvfirst;nvram_sectors=nvinvalid?0:nvcount;
     static const char wanted[]="userdata";
     for (unsigned i=0;i<count;i++) {
         const uint8_t *e=entries+i*size;unsigned n=0;
@@ -461,6 +461,9 @@ static int find_root_partition(const uint8_t header[512],uint32_t sectors) {
         if (root_sectors || first<first_usable || last>last_usable || first>last || last>=sectors) return EINVAL;
         root_first=(uint32_t)first;root_sectors=(uint32_t)(last-first+1);
     }
+    if(nvram_sectors && root_sectors &&
+       (uint64_t)nvram_first<(uint64_t)root_first+root_sectors &&
+       (uint64_t)root_first<(uint64_t)nvram_first+nvram_sectors){nvram_first=nvram_sectors=0;}
     printf("A04BR3 MSDC0: GPT entries CRC verified; userdata first=%u sectors=%u\n",root_first,root_sectors);
     return root_sectors ? 0 : ENOENT;
 }
