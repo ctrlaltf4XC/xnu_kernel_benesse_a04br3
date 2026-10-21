@@ -10,6 +10,13 @@
 #include "A04BR3NetworkBackend.h"
 #define A04_APPLE80211_GET64 0xc02869c9UL
 #define A04_APPLE80211_MAX_BYTES 16384u
+/* Only observed scalar opcodes in iOS16 GetWithIOCTL's caseD5, corroborated
+ * by boot2 length0 calls. Other zero-length GETs remain rejected. */
+static inline int a04_native_scalar_type(uint32_t type)
+{
+    switch(type){case 5:case 8:case 13:case 15:case 18:case 57:case 96:return 1;}
+    return 0;
+}
 struct a04_apple80211_req64 {
     char name[16];uint32_t type,value,length,padding;uint64_t user_data;
 };
@@ -36,11 +43,11 @@ static inline int a04_network_get(const struct a04_network_backend *backend,
     if(n==16)return EINVAL;
     unsigned i=0;for(;i<n;i++)if(!name[i] || name[i]!=req->name[i])return ENXIO;
     if(name[i])return ENXIO;
-    /* iOS GetWithIOCTL case0x60 uses a zero-length/null-data request and
-     * consumes req.value as its scalar output. Normalize ONLY this observed
-     * opcode to a private4-byte backend buffer; no user pointer is touched.
+    /* iOS GetWithIOCTL caseD5 uses a zero-length/null-data request and
+     * consumes req.value as its scalar output. Normalize ONLY the observed
+     * scalar set above to a private4-byte backend buffer; no user pointer is touched.
      * Existing SDIO callback ABI remains unchanged. */
-    if(req->type==96){
+    if(a04_native_scalar_type(req->type)){
         if(req->length || req->user_data)return EINVAL;
         if(capacity<4)return EMSGSIZE;
         if(!a04_network_control_ready(state))return ENETDOWN;

@@ -24,6 +24,7 @@ int a04br3_wlan_read_calibration(void *,unsigned);
 #include <libkern/crypto/sha2.h>
 #include <libkern/c++/OSData.h>
 #include "../network/A04BR3NativeRendezvous.h"
+#include "../network/A04BR3StationPhase.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3SDIO : public IOService {
  OSDeclareDefaultStructors(A04BR3SDIO);
@@ -167,6 +168,8 @@ class A04BR3SDIO : public IOService {
    out->present=s->identityReady;out->firmware_running=s->wlanDownload.ready && s->wlanHost && !s->wlanHost->failed;
    out->control_ready=s->networkInitialized && !s->liveStopping && r->configured && !r->failed;
    out->radio_enabled=r->admin && out->control_ready;
+   out->station_phase=out->control_ready?a04_network_phase_from_station(&r->station):A04_NET_PHASE_UNKNOWN;
+   out->permitted_channels=out->control_ready?r->station.local.permitted_channels:0;
    out->mac_valid=r->mac_valid;bcopy(r->mac,out->mac,6);out->associated=r->station.sta_active && r->station.join.phase==4 && !r->failed;
    out->datapath_ready=out->control_ready && out->associated && s->nativeClient.packet && a04_wlan_port_allowed(&r->station,&r->security,0);
   }IOLockUnlock(s->transportLock);return 0;

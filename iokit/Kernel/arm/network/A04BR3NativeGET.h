@@ -18,13 +18,54 @@ static inline int a04_native_get(const struct a04_network_state *s,
     if(!s || !out || !bytes)return EINVAL;
     if(!a04_network_control_ready(s))return ENETDOWN;
     if(value)return EOPNOTSUPP;
-    unsigned size=type==0x13?24:(type==0x2b?256:(type==0xc?13:0));
+    if(type==27 || type==254){
+        /* iOS GetWithIOCTL case1b/fe: raw0x12d8, count at4,
+         * channel descriptors(version/channel/flags) at8, stride12.
+         * Publish only actual host-enforced policy, not all silicon channels.
+         * Unknown domain, widths/ACTIVE/DFS/5GHz remain unadvertised. */
+        unsigned mask=s->permitted_channels;
+        if(!mask || (mask&~0x3ffeu))return EOPNOTSUPP;
+        if(*bytes<4824)return EMSGSIZE;
+        uint8_t *p=(uint8_t *)out;memset(p,0,4824);a04_native_put32(p,1);
+        unsigned count=0;
+        for(unsigned channel=1;channel<=13;channel++)if(mask&(1u<<channel)){
+            uint8_t *entry=p+8+12*count++;
+            a04_native_put32(entry,1);a04_native_put32(entry+4,channel);
+            a04_native_put32(entry+8,0x8); // pinned C_FLAG_2GHZ, as in real scan records
+        }
+        a04_native_put32(p+4,count);*bytes=4824;return 0;
+    }
+    if(type==13){
+        if(*bytes<4)return EMSGSIZE;
+        if(s->station_phase<A04_NET_PHASE_IDLE || s->station_phase>A04_NET_PHASE_ASSOCIATED)return EOPNOTSUPP;
+        if(!!s->associated!=(s->station_phase==A04_NET_PHASE_ASSOCIATED))return EAGAIN;
+        // Pinned Apple state enum INIT/SCAN/AUTH/ASSOC/RUN =0/1/2/3/4.
+        a04_native_put32((uint8_t *)out,s->station_phase-A04_NET_PHASE_IDLE);*bytes=4;return 0;
+    }
+    /* CURRENT_NETWORK103 is NOT a scan cache. SSID/BSSID/current RSSI,
+     * noise and rate are likewise association data. Report actual absence;
+     * never substitute a scanned AP, zero RSSI, invented rate or empty success.
+     * Associated metadata is not exposed by this backend snapshot yet. */
+    unsigned associationSize=type==103?1164:(type==1?32:(type==9?6:
+        ((type==16 || type==17)?52:(type==8?4:0))));
+    if(associationSize){
+        if(*bytes<associationSize)return EMSGSIZE;
+        return s->associated?EOPNOTSUPP:ENOTCONN;
+    }
+    /* Existing runtime implements AIS infrastructure station only
+     * (A04BR3WLANStation.h activate_encode network0). Pinned Apple enum
+     * APPLE80211_M_STA=1; no association or carrier is implied.
+     * INT_MIT18 remains unsupported: polled host I/O does not establish
+     * the native firmware mitigation setting/GET enum semantics.
+     * Scalars are internal4-byte outputs; BSD puts them in req.value. */
+    unsigned size=type==15?4:(type==0x13?24:(type==0x2b?256:(type==0xc?13:0)));
     if(!size)return EOPNOTSUPP;
     if(*bytes<size)return EMSGSIZE;
     uint8_t *p=(uint8_t *)out;
     if(type==0x13 && (p[0]!=1 || p[1] || p[2] || p[3]))return EINVAL;
     memset(p,0,size);
-    if(type==0x13){a04_native_put32(p,1);a04_native_put32(p+4,1);a04_native_put32(p+8,!!s->radio_enabled);}
+    if(type==15)a04_native_put32(p,1);
+    else if(type==0x13){a04_native_put32(p,1);a04_native_put32(p+4,1);a04_native_put32(p+8,!!s->radio_enabled);}
     else if(type==0x2b) {static const char identity[]="A04BR3 MT6630 source SDIO runtime";memcpy(p,identity,sizeof(identity));}
     /* A zero optional capability mask is deliberate: unported MT6630 features
      * are not advertised as native Apple operations. This is not a statement

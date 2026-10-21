@@ -235,6 +235,25 @@ static void nativeCases(){
  bindReq.length=13;bindReq.user_data=(uintptr_t)userBuffer;memset(userBuffer,0xa5,sizeof(userBuffer));
  assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&bindReq) && bindReq.length==13);
  for(unsigned i=0;i<13;i++)assert(!userBuffer[i]);assert(userBuffer[13]==0xa5);
+ // Real Rendezvous scalar source state; no optional capability bits needed.
+ a04_apple80211_req64 scalar={};strcpy(scalar.name,"en7");scalar.type=15;
+ assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&scalar) && scalar.value==1 && !scalar.length);
+ scalar.type=18;scalar.value=0;assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EOPNOTSUPP && scalar.value==0);
+ scalar.type=13;scalar.value=0;
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EOPNOTSUPP);
+ for(unsigned phase=1;phase<=5;phase++){
+  realState.station_phase=phase;realState.associated=phase==5;scalar.value=0;
+  assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&scalar) && scalar.value==phase-1 && !scalar.length);
+ }
+ realState.station_phase=A04_NET_PHASE_UNKNOWN;realState.associated=0;
+ // Exact native hardware/permitted channel queries use actual snapshot mask.
+ realState.permitted_channels=(1u<<1)|(1u<<6);auto channels=bindReq;
+ channels.type=254;channels.length=4824;memset(userBuffer,0xa5,4825);
+ assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&channels) && userBuffer[4]==2 && userBuffer[12]==1 && userBuffer[24]==6 && userBuffer[4824]==0xa5);
+ realState.permitted_channels=0;
+
+ auto absent=bindReq;absent.type=103;absent.length=1164;memset(userBuffer,0xa5,1164);
+ assert(current->init.ioctl(current,A04_APPLE80211_GET64,&absent)==ENOTCONN && userBuffer[0]==0xa5 && absent.length==1164);
  // GET19 is firmware control/radio state even before any association.
  bindReq.type=19;bindReq.length=24;memset(userBuffer,0,24);userBuffer[0]=1;
  realState.radio_enabled=1;

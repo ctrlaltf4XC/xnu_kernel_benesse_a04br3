@@ -232,7 +232,7 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
         if(!data)error=EINVAL;
         else{
             auto *req=(a04_apple80211_req64 *)data;
-            const bool scalar=command==A04_APPLE80211_GET64 && req->type==96 && !req->length;
+            const bool scalar=command==A04_APPLE80211_GET64 && a04_native_scalar_type(req->type) && !req->length;
             if((command==A04_APPLE80211_GET64 && !req->length && !scalar) || req->length>A04_APPLE80211_MAX_BYTES)error=EINVAL;
             else{
                 unsigned bytes=scalar?4:(req->length?req->length:1);void *scratch=IOMallocZero(bytes);

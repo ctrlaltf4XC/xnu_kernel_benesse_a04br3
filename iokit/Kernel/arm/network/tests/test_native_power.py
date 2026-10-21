@@ -9,7 +9,7 @@ class NativePower(unittest.TestCase):
 #include "A04BR3NativePower.h"
 #include <assert.h>
 #include <string.h>
-static a04_network_state observed={1,1,1,1,0,0,{2,3,4,5,6,7},1};
+static a04_network_state observed={1,1,1,1,0,0,{2,3,4,5,6,7},1,0,0};
 static int calls,stateError,commandError;static unsigned desired;
 static int state(void *,a04_network_state *s){*s=observed;return stateError;}
 static int admin(void *,unsigned value){calls++;desired=value;return commandError;}
