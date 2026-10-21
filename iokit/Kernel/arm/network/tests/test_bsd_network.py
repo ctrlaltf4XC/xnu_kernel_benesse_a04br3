@@ -20,6 +20,7 @@ STUB=r'''
 using UInt32=uint32_t;using SInt32=int32_t;
 static SInt32 OSAddAtomic(SInt32 n,volatile SInt32 *p){return __atomic_fetch_add(p,n,__ATOMIC_SEQ_CST);}
 static bool OSCompareAndSwap(UInt32 old,UInt32 next,volatile SInt32 *p){SInt32 expected=(SInt32)old;return __atomic_compare_exchange_n(p,&expected,(SInt32)next,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST);}
+static void OSMemoryBarrier(){__atomic_thread_fence(__ATOMIC_SEQ_CST);}
 using clock_sec_t=int64_t;using clock_usec_t=int32_t;
 static inline void clock_get_system_microtime(clock_sec_t *s,clock_usec_t *u){*s=2;*u=234567;}
 static const unsigned IFNAMSIZ=16;
@@ -231,12 +232,18 @@ static void traceCases(){
   auto r=req();unsigned cmd=i%2?A04_APPLE80211_SET64:A04_APPLE80211_GET64;
   credentialRoot=i!=1;
   int result=current->init.ioctl(current,cmd,&r);assert(result==(i==1?EPERM:0));
-  if(i<32){
-   char expected[128];snprintf(expected,sizeof(expected),"A04BR3 native ioctl: type=12 value=7 length=8 errno=%d\n",i==1?EPERM:0);
-   assert(traceRows.size()==i+1 && traceRows.back()==expected);
-  }else assert(traceRows.size()==32);
+  unsigned expected=i==0?1:(i<3?2:3);
+  assert(traceRows.size()==expected && (unsigned)a04_native_trace_count==expected);
  }
- assert(a04_native_trace_count==32);credentialRoot=1;
+ // Repeated power is one metadata tuple, not1000 consumed slots.
+ for(unsigned i=0;i<1000;i++)a04_native_trace(A04_APPLE80211_GET64,19,0,24,0);
+ assert(traceRows.size()==4 && a04_native_trace_count==4);
+ a04_native_trace(A04_APPLE80211_SET64,10,0,5456,EOPNOTSUPP);
+ assert(traceRows.size()==5 && traceRows.back().find("type=10 value=0 length=5456 errno=")!=std::string::npos);
+ a04_native_trace(A04_APPLE80211_SET64,10,0,5456,0);
+ assert(traceRows.size()==6 && a04_native_trace_count==6);
+ a04_native_trace_busy=1;a04_native_trace(A04_APPLE80211_GET64,999,0,4,0);
+ assert(a04_native_trace_count==6);a04_native_trace_unlock();credentialRoot=1;
  // Scalar GET96 has no user payload: the only output is req.value, while
  // production backend uses an explicit normalized four-byte scratch buffer.
  auto scalar=req();scalar.type=96;scalar.value=0;scalar.length=0;scalar.user_data=0;
@@ -262,6 +269,10 @@ static void traceCases(){
  scalar=req();scalar.type=95;scalar.length=0;scalar.user_data=0;
  assert(current->init.ioctl(current,A04_APPLE80211_GET64,&scalar)==EINVAL);
  cleanup(bridge,service);
+ // Fill the remaining distinct tuple budget; repeated/novel calls after32
+ // cannot grow the log, nor can detach/reattach renew the boot budget.
+ for(unsigned type=200;type<264;type++)a04_native_trace(A04_APPLE80211_GET64,type,0,4,0);
+ assert(a04_native_trace_count==32 && traceRows.size()==32);
  // A detach/reattach does not renew the boot-wide quota.
  assert(!bridge.attach(&service,&b,7));auto r=req();assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&r));assert(traceRows.size()==32);
  cleanup(bridge,service);

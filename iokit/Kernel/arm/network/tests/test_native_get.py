@@ -45,7 +45,7 @@ for(unsigned type: {1u,9u,103u,16u,17u,8u}){
  n=0;assert(a04_native_get(&s,type,0,association,&n)==EMSGSIZE);
 }
 // Native27/254 share the original iOS channel-list carrier, with a real
-// policy mask; no hardcoded full-band support and no ACTIVE/width guesses.
+// policy mask; no hardcoded full-band support and actual programmed20MHz restriction; no wider/ACTIVE guesses.
 uint8_t channels[4825];
 for(unsigned type:{27u,254u}){
  memset(channels,0xa5,sizeof(channels));n=sizeof(channels);
@@ -54,7 +54,7 @@ for(unsigned type:{27u,254u}){
  assert(a04_native_get(&s,type,0,channels,&n)==EMSGSIZE && channels[0]==0xa5);
  n=sizeof(channels);assert(!a04_native_get(&s,type,0,channels,&n) && n==4824 && channels[0]==1 && channels[4]==3);
  unsigned expected[]={1,6,11};for(unsigned i=0;i<3;i++){
-  unsigned offset=8+12*i;assert(channels[offset]==1 && channels[offset+4]==expected[i] && channels[offset+8]==8);
+  unsigned offset=8+12*i;assert(channels[offset]==1 && channels[offset+4]==expected[i] && channels[offset+8]==0xa);
  }
  for(unsigned i=44;i<4824;i++){assert(!channels[i]);}
  assert(channels[4824]==0xa5);

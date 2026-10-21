@@ -20,18 +20,32 @@
 #include <net/if_ether.h>
 #include <net/ethernet.h>
 
-/* Boot-wide budget, shared by every interface/reattach. Metadata only. Use
- * real public OSAtomic operations so concurrent ioctl callers cannot exceed32.
- * Counter saturates: no wrap or recurring logs even under a request storm. */
-static volatile SInt32 a04_native_trace_count=0;
-static void a04_native_trace(uint32_t type,uint32_t value,uint32_t length,int error)
+/* Boot-wide, best-effort metadata budget shared across interface reattach.
+ * Record each (command,type,errno) once, maximum32. Repeated successful power
+ * queries cannot hide later scan/control selectors. No payload or identifiers.
+ * Try-lock only: contention may drop diagnostics, never delay an ioctl. The
+ * table is published under real OSAtomic + memory barriers; IOLog runs outside
+ * that short critical section and never reenters with the guard held. */
+struct a04_native_trace_key { unsigned long command;uint32_t type;int error; };
+static a04_native_trace_key a04_native_trace_keys[32]={};
+static volatile SInt32 a04_native_trace_count=0,a04_native_trace_busy=0;
+static void a04_native_trace_unlock()
 {
-    for(;;){
-        SInt32 used=OSAddAtomic(0,&a04_native_trace_count);
-        if(used>=32)return;
-        if(OSCompareAndSwap((UInt32)used,(UInt32)used+1,&a04_native_trace_count))break;
+    OSMemoryBarrier();(void)OSCompareAndSwap(1,0,&a04_native_trace_busy);
+}
+static void a04_native_trace(unsigned long command,uint32_t type,uint32_t value,uint32_t length,int error)
+{
+    if(!OSCompareAndSwap(0,1,&a04_native_trace_busy))return;
+    OSMemoryBarrier();
+    SInt32 used=OSAddAtomic(0,&a04_native_trace_count);
+    if(used>=32){a04_native_trace_unlock();return;}
+    for(SInt32 i=0;i<used;i++){
+        const auto &key=a04_native_trace_keys[i];
+        if(key.command==command && key.type==type && key.error==error){a04_native_trace_unlock();return;}
     }
-    IOLog("A04BR3 native ioctl: type=%u value=%u length=%u errno=%d\n",type,value,length,error);
+    a04_native_trace_keys[used]={command,type,error};
+    (void)OSAddAtomic(1,&a04_native_trace_count);a04_native_trace_unlock();
+    IOLog("A04BR3 native ioctl: command=0x%lx type=%u value=%u length=%u errno=%d\n",command,type,value,length,error);
 }
 
 static int a04_network_copyin(void *,uint64_t address,void *out,unsigned bytes)
@@ -197,7 +211,7 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
      * for this native command. Check the active calling thread, not cached
      * provider credentials or an untrusted field in the native request. */
     if(command==A04_APPLE80211_SET64 && !kauth_cred_issuser(kauth_cred_get())){
-        a04_native_trace(traceType,traceValue,traceLength,EPERM);return EPERM;
+        a04_native_trace(command,traceType,traceValue,traceLength,EPERM);return EPERM;
     }
     IOLockLock(s->gate);a04_network_state state={};int error=s->snapshot(&state);
     if(media){
@@ -248,7 +262,7 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
         }
     }
     IOLockUnlock(s->gate);
-    if(native)a04_native_trace(traceType,traceValue,traceLength,error);
+    if(native)a04_native_trace(command,traceType,traceValue,traceLength,error);
     return error;
 }
 

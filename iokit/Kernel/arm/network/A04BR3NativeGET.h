@@ -22,7 +22,7 @@ static inline int a04_native_get(const struct a04_network_state *s,
         /* iOS GetWithIOCTL case1b/fe: raw0x12d8, count at4,
          * channel descriptors(version/channel/flags) at8, stride12.
          * Publish only actual host-enforced policy, not all silicon channels.
-         * Unknown domain, widths/ACTIVE/DFS/5GHz remain unadvertised. */
+         * Unknown domain, wider widths/ACTIVE/DFS/5GHz remain unadvertised. */
         unsigned mask=s->permitted_channels;
         if(!mask || (mask&~0x3ffeu))return EOPNOTSUPP;
         if(*bytes<4824)return EMSGSIZE;
@@ -31,7 +31,10 @@ static inline int a04_native_get(const struct a04_network_state *s,
         for(unsigned channel=1;channel<=13;channel++)if(mask&(1u<<channel)){
             uint8_t *entry=p+8+12*count++;
             a04_native_put32(entry,1);a04_native_put32(entry+4,channel);
-            a04_native_put32(entry+8,0x8); // pinned C_FLAG_2GHZ, as in real scan records
+            // Runtime programs CMD_SET_DOMAIN_INFO with uc2G4Bandwidth20M=1
+            // (default_domain p[52]=1), then enforces this exact channel mask.
+            // Pinned flags: 2GHZ0x8 |20MHZ0x2. No40/80/ACTIVE/DFS inference.
+            a04_native_put32(entry+8,0xa);
         }
         a04_native_put32(p+4,count);*bytes=4824;return 0;
     }
