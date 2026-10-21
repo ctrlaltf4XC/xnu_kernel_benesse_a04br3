@@ -5,7 +5,14 @@
  */
 #ifndef A04BR3_ROGUE_MIPS_MMU_H
 #define A04BR3_ROGUE_MIPS_MMU_H
-static int a04_rgx_mips_map(uint32_t *table,unsigned entries,uint32_t offset,
+/* Shared by the device reservation and offline table construction. */
+static inline int a04_rgx_mips_physical_range(uint64_t pa,uint32_t bytes,uint32_t alignment)
+{
+ return alignment && !(alignment&(alignment-1)) && bytes && pa &&
+        !(pa&(alignment-1)) && !(bytes&4095) &&
+        pa<0x100000000ULL && bytes<=0x100000000ULL-pa;
+}
+static inline int a04_rgx_mips_map(uint32_t *table,unsigned entries,uint32_t offset,
     uint64_t physical,uint32_t bytes,int writable,int executable)
 {
  if(!table || !entries || entries>8192 || !bytes ||

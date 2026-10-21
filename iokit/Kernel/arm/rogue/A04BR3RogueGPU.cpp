@@ -6,12 +6,17 @@
 #include <IOKit/IOService.h>
 #include <pexpert/pexpert.h>
 #include "A04BR3RoguePower.h"
+#include "A04BR3RogueMemory.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3RogueGPU : public IOService {
     OSDeclareDefaultStructors(A04BR3RogueGPU);
 public:
     bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+    void stop(IOService *provider) APPLE_KEXT_OVERRIDE {
+        memory.reset(); IOService::stop(provider);
+    }
 private:
+    A04BR3RogueMemory memory;
     vm_offset_t regs[4];
     static uint32_t readReg(void *p,unsigned b,unsigned o) {
         A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
@@ -45,5 +50,22 @@ bool A04BR3RogueGPU::start(IOService *provider)
     __asm__ volatile("dmb oshld":::"memory");
     IOLog("A04BR3 GPU: BVNC=%u.%u.%u.%u raw=0x%llx; firmware/MMU/submission not enabled\n",hi>>16,hi&65535,lo>>16,lo&65535,bvnc);
     if(!bvnc || bvnc==~0ULL)return false;
+    /* This source-built display bring-up already requires display_probe=1.
+     * Reserve inert buffers by default; the optional override can disable it.
+     * Avoid requiring another boot argument in the bounded shim command line. */
+    unsigned reserve=1;
+    PE_parse_boot_argn("a04br3.gpu_memory_stage",&reserve,sizeof(reserve));
+    if (reserve==1) {
+        if (bvnc!=0x001600280036001eULL || !memory.reserve()) {
+            setProperty("BringupStage","memory-reservation-failed");
+            IOLog("A04BR3 GPU: inert memory reservation failed; firmware remains disabled\n");
+        } else {
+            setProperty("BringupStage","memory-reserved-empty");
+            setProperty("FirmwareRunning",kOSBooleanFalse);
+            setProperty("FirmwareMemoryBytes",(uint64_t)(A04BR3RogueMemory::TableBytes+
+                A04BR3RogueMemory::CodeBytes+A04BR3RogueMemory::DataBytes),32);
+            IOLog("A04BR3 GPU: low-4GiB empty memory reserved/cache cleaned; no firmware or MMU activation\n");
+        }
+    }
     setProperty("PowerVRBVNC",bvnc,64);setProperty("Model","MT8167 PowerVR Rogue");registerService();return true;
 }
