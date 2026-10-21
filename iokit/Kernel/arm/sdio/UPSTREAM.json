@@ -1,0 +1,17 @@
+{
+  "board_source_repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3.git",
+  "board_source_commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+  "source_paths": [
+    "arch/arm64/boot/dts/mediatek/a04br3.dts",
+    "arch/arm64/boot/dts/mediatek/mt8167.dtsi",
+    "arch/arm64/boot/dts/mediatek/mt8167-pinfunc.h",
+    "drivers/clk/mediatek/clk-mt8167.c",
+    "drivers/pinctrl/mediatek/pinctrl-mt8167.c",
+    "drivers/mmc/host/mtk-sdio.c",
+    "drivers/mmc/host/mtk-sdio.h",
+    "modules/connectivity/common/common_main/platform/mtk_wcn_cmb_hw.c",
+    "modules/connectivity/common/common_detect/sdio_detect.c"
+  ],
+  "credit": "MediaTek board hardware definitions and SDIO sequencing; new XNU implementation, not Linux source linked into XNU",
+  "status": "SDIO identification transport only; firmware, packet path and IO80211 integration unavailable"
+}
