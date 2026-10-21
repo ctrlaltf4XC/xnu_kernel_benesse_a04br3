@@ -1,5 +1,5 @@
 {
-  "status": "Restricted real owned-buffer clear candidate: native format0x22, linear32x32, source-generated USC EOT/PDS, original208byte TQ task then UPDATE; local host/ARM64 tests only. Clear PHYSICALLY UNTESTED.",
+  "status": "c546 first physical clear FAILED result8: zeroWords0/1024 guardErrors0. NEW bounded native SLC flush+GP SYNC readback candidate plus mismatch snapshots; host-tested only, hardware UNTESTED. PBE/EOT/PDS/task bytes unchanged.",
   "ddk": "Imagination/MediaTek m1.11ED5425693, MT8167 user config, BVNC22.40.54.30",
   "source_sha256": {
     "hwdefs/km/rgxmmudefs_km.h": "bfedc5799e2b57b27cece82d3cd882c557f44ce3356895c9ffa5d7471cdffd28",
@@ -15,7 +15,9 @@
     "services/server/devices/rgx/rgxkicksync.c": "da9e709937468240c15519055350fbead434b21dd9dfa50bc6c105f69ecbe7fa",
     "hwdefs/km/rgx_cr_defs_km.h": "a3ffc839b90eac0f52a11fa8aa65fde6fd02d4a97667e7d9f1f3090fd89d1f5b",
     "services/server/devices/rgx/rgxtransfer.c": "71caa5cde5e7389b48b96ada9a2347b460d2d6577271464f7e173ca3dda9109d",
-    "services/include/rgx_tq_shared.h": "a94576505c8a53ae1927b7810821e2efea8a046701d91b5a45d0abcad3e24473"
+    "services/include/rgx_tq_shared.h": "a94576505c8a53ae1927b7810821e2efea8a046701d91b5a45d0abcad3e24473",
+    "services/server/devices/rgx/rgxinit.c": "f0d775dd83eca868e6d9bd17deae1a94b998882c5c95737c36f7e60601aae3d2",
+    "services/server/devices/rgx/rgxcompute.c": "a06ee7fd331447233427baf2659f9b77087530e54cf33686b1fd0e66a7e4b4c2"
   },
   "license": {
     "A04BR3RogueRenderABI.h": "Exact selected RF declarations with A04 names; original Imagination Dual MIT/GPLv2 license retained verbatim, MIT option selected",
@@ -44,12 +46,14 @@
     "test_rogue_priority.py: standalone native PRIORITY bytes, two-DM changed priority and independent consumption checks; wrap, invalid inputs, timeout/partial response/terminal preservation; no UFO writes",
     "test_rogue_transfer.py: original208byte offline encoder and248byte envelope, all truncated record sizes, wrongtype/flags/overlap/unchanged-output rejection",
     "test_rogue_render_memory.py:11allocation failures/cache modes/sharedPC3heap full byte walks and teardown; parenttest_rogue_heapmap.py unchanged dependency",
-    "Actual-owner clear: independent scalar208byte oracle, FW-peer pixel/guard writes, UFO complete/no pixels, guard corruption, bounded timeout/no replay, USC/PDS tamper, pre-zero output, INIT mismatch; ASan/UBSan. Actual clear caller ARM64 compile with original barriers."
+    "Actual-owner clear: independent scalar208byte oracle, FW-peer pixel/guard writes, UFO complete/no pixels, guard corruption, bounded timeout/no replay, USC/PDS tamper, pre-zero output, INIT mismatch; ASan/UBSan. Actual clear caller ARM64 compile with original barriers.",
+    "test_rogue_readback.py: native scalar56byte flush/SYNC oracle, empty-ring2slot wrap126/127, queue-only/UFO-only/no response boundedtimeout, corrupt UFO/write, pendingFWCCB, ABI-ready/build checks, alias/busy/overflow rejection; owner simulatedGPU output visible only afterflush and mismatch HWR capture."
   ],
   "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE",
   "hardware_baseline": {
-    "source": "Parent report exact kernel157e6f267a938e97be1a13b729ce00555ea0c5f0/devicee910d23 initialboot after offset530222591",
-    "observed": "FWready; baselineSYNC0/2/3, GP UPDATE/postSYNC, TA/3D PRIORITY0/1/postSYNC, independent TQ_3D PRIORITY0/1/postSYNC3 all result0. No clear task in this baseline. After-Hello white regression reported; cause unresolved, not attributed to GPU."
+    "source": "integration/wifi-clear-first-boot.txt line184; parent confirms exact c546c42c3987f97f3f2ca0ee0f7bd489c888a2bb/device0596acc",
+    "log_sha256": "4804d26d4472d7a2872e884a2a6379f680d57f2952aed49dda6237f483394d72",
+    "observed": "All preceding FW/GP/render/TQ priority tests result0; owned clear result8 zeroWords0/1024 guardErrors0, no post-clear SYNC attempted. Client/KCCB/UFO completed, but no zero pixel observed. Nonzero pixels need not equal original A5: old code did not count poison words or log sample values. No HWR/trace snapshot on mismatch in this version. Clear hardware FAILED output validation; cause undetermined. Setup white/watchdog predates clear (parent), separate ownership."
   },
   "integration_implemented": [
     "GPU owns render after Memory/Runtime;11 cold allocations290816bytes before Runtime.prepare, pin before FW start, quarantine after exposure; full FW stage790528bytes.",
@@ -60,12 +64,13 @@
     "After all FW/GP/render/TQ-priority gates, one restricted TQ clear:208byte task+40byte header then48byte UPDATE. Verified requires1024 zero pixel words,61440 unchanged A5 guard bytes and postSYNC3 result0; UFO alone insufficient."
   ],
   "limits": [
-    "Clear candidate has no SDK-link or physical result. Host simulated firmware is not GPU execution. Hardware157e baseline proves FW/context scheduling, not BIF pixels.",
+    "Clear candidate has no SDK-link or physical result. Host simulated firmware is not GPU execution. c546 physical clear failed output validation.",
     "Only native format0x22, linear32x32, pitch32pixels, zero colour, source_count0, oneRT/sample, no blending. No arbitrary format/size/address/program/packet API. No guessed modern format-name equivalence.",
     "PDS/USC bases match unchanged native INIT and matching DDK BRN65273; independent global execution-base register readback and GPU BIF execution unverified.",
     "One attempt; no timeout increase/replay. Resources pinned until reboot, no live remap/safe teardown. Output mismatch8 distinct from transport timeout/corruption.",
     "No display/compositor bridge, Apple GPU userspace ABI translation or acceleration property; no screen drawing claimed.",
-    "Combined157e after-Hello white regression unresolved; no draw task present in that baseline."
+    "Combined157e after-Hello white regression unresolved; no draw task present in that baseline.",
+    "Current PTEs are SLC-bypass; missing flush is a readback-contract gap and bounded discriminant, not established failure cause. No PBE/USC fix claimed without evidence."
   ],
   "gp_source_contract": {
     "context": "rgxkicksync.c134-146: FWCommonContextAllocate DM_GP priority0, NULL context state and framework; separate common context, memory context supplied",
@@ -77,19 +82,19 @@
     "context flags/priority/run/wait nodes; bounded owned trace KCCB executed/trace pointer/power/HWR/faults; INIT started timestamp, FW idle time and RGX_CR_TIMER0x160 before/after",
     "Only terminal timeout/corrupt observation, no pointer-following or FWCCB consumption; driver logs three lines once. Main and render are normal-NC; acquire barrier before observation. Concurrent fields are observational, not an atomic firmware freeze."
   ],
-  "tests_result": "39 tests PASS in11.092s: ASan/UBSan actual-owner clear with independent208byte oracle, complete-UFO/no-pixel and guard mismatch failures, USC/PDS tamper/pre-zero/INITbase pre-kick rejection,10000poll timeout/no replay. Existing transport/lifetime/CCB/heap/EOT/PDS tests retained. Full production CPP and original owner.clear ARM64 freestanding target compiles pass; no SDK link or physical clear result.",
+  "tests_result": "40 tests PASS in12.357s: native scalar flush/SYNC batch oracle,2slot wrap/partial response/corrupt/pending request/ABI gates; ASan/UBSan actual owner including output visible only after flush, no-pixel/guard mismatch, HWR snapshot and pre-kick tamper rejection; full production CPP and original owner.clear ARM64 target compile; diff-check PASS. Not SDK link or physical clear success.",
   "hardware_previous": {
     "source": "user40907a9; integration/wlan-native-scan-first-boot.txt baseline528176210 lines167-173",
     "observed": "cold context prepared1, FWready, SYNC DM0/2/3 result0; DM2 standalone client UPDATE/KICK timeout4. No previous consumption/UFO/FWCCB snapshot, so exact hardware cause undetermined."
   },
   "new_candidate": {
-    "physical_status": "UNTESTED clear; previous independent TQ priority baseline157e hardware confirmed separately.",
+    "physical_status": "NEW readback follow-up UNTESTED; preceding c546 clear failed zeroWords0/1024 with completedCCB/UFO.",
     "context": "Independent native TQ_3D DM3, own4ISP/RF/CCB; TASK then UPDATE/UFO, no GP NULL reuse.",
     "heaps": "GENERAL65c0000000 RW/PDSa800000000 RW/USCba00000000 RO, sharedPC+separatePD/PT/data. All16pages per64KiB checked against exact owned PA before generation; INIT bases checked before submission.",
     "programs": "Source-generated singleRT12byte USC EOT temps0 and typed PDS event with actual GENERAL PBE address/shared words; copied cold to NC heaps. No opaque binary asset embedded.",
     "ownership": "11 allocations290816bytes retained. CPU initializes entire65536byte output+guard to A5 cold, never CPU-clears to expected zero. All poison bytes checked pre-kick.",
     "validation": "Re-derive exact task and programs from owned mappings; compare generated and installed bytes. SAME Runtime.commandBusy/GPU.bridgeLock as SYNC/power/stop. NC mappings/acquire barriers before readback, no cached output clean masquerading as invalidate.",
-    "completion": "KCCBread/clientread+write/UFO within10000*10us, then volatile1024u32 zero reads and61440 guard-byte checks. PostSYNC3 required for Verified. Timeout/corrupt poison shared transport, retain bounded terminal observation.",
+    "completion": "Exact task KCCB/client/UFO, followed by bounded GLOBAL SLC flush+GP SYNC and volatile1024 pixel words/61440 guard bytes, then postSYNC3 for Verified. One-shot, no replay; mismatch8 captures HWR/context.",
     "failure": "No replay. Result8 means completed transport but output/guard mismatch, not success. Pending FW request/full/busy/offline fail, no fake completion."
   },
   "hardware_history": [
@@ -100,6 +105,10 @@
     {
       "source": "integration/gpu-priority-verified-first-boot.txt (see gpu-priority-hardware-result.json); kernel4d516b7 initialboot offset529234761",
       "observed": "FWready, SYNC0/2/3, GP native context UPDATE/postSYNC and TA/3D PRIORITY0/1 plus each postSYNC all result0. This confirms scheduler/client execution, no GPU pixels."
+    },
+    {
+      "source": "Parent report exact kernel157e6f267a938e97be1a13b729ce00555ea0c5f0/devicee910d23 initialboot after offset530222591",
+      "observed": "FWready; baselineSYNC0/2/3, GP UPDATE/postSYNC, TA/3D PRIORITY0/1/postSYNC, independent TQ_3D PRIORITY0/1/postSYNC3 all result0. No clear task in this baseline. After-Hello white regression reported; cause unresolved, not attributed to GPU."
     }
   ],
   "transfer_binary_provenance": {
@@ -246,6 +255,39 @@
       "A04BR3RogueHeapMap.h": "cb13590afed21729c82b9acee5002625fb8af0b12ff02d5bbe6e547b18219968",
       "A04BR3RoguePixelEvent.h": "bd53d44a5ae9684123cce5d05bbd44617bfbd6f7254a3968990c0d712b5b3658",
       "A04BR3RogueEOT.h": "c22a5f6fa6df942f98eacf133aa51088c174b11c3b7ebed6419921d34e8f31ac"
+    }
+  },
+  "readback_failure_followup": {
+    "physical_failure": {
+      "source": "integration/wifi-clear-first-boot.txt line184; parent confirms exact c546c42c3987f97f3f2ca0ee0f7bd489c888a2bb/device0596acc",
+      "log_sha256": "4804d26d4472d7a2872e884a2a6379f680d57f2952aed49dda6237f483394d72",
+      "observed": "All preceding FW/GP/render/TQ priority tests result0; owned clear result8 zeroWords0/1024 guardErrors0, no post-clear SYNC attempted. Client/KCCB/UFO completed, but no zero pixel observed. Nonzero pixels need not equal original A5: old code did not count poison words or log sample values. No HWR/trace snapshot on mismatch in this version. Clear hardware FAILED output validation; cause undetermined. Setup white/watchdog predates clear (parent), separate ownership."
+    },
+    "diagnosis": "No definitive PBE/EOT/task defect established by saved native-producer evidence. The old result8 proves no ZERO words, not no writes or unchanged A5. Completion UPDATE may also follow firmware recovery; old mismatch path omitted HWR/context observation. Native SLC->CPU completion boundary was absent, but all current BIF PTEs already use SLC-bypass, so cache retention is an unproven hypothesis, not the established root cause.",
+    "source_basis": {
+      "rgxinit.c:3360-3410": "RGXFreeUFOBlock: global SLCFLUSHINVAL bInvalTRUE,bDMContextFALSE,eDM0,context0, scheduleGP then RGXWaitForFWOpGP. This proves global request contract, not that current clear needs a cache flush.",
+      "rgxcompute.c:890-938": "PVRSRVRGXFlushComputeDataKM: context-specific CDM flush followed by SYNC completion. Context-specific CDM is NOT blindly reused for TQ; candidate uses the independently proven GLOBAL GP contract.",
+      "rgx_fwif_km.h:916-923/1131/1186": "SLCFLUSHINVALDATA16bytes context/bInval/bDMContext/eDM at0/4/8/12; opcode0x2abc0069, KCCB unionoffset16, command56bytes. Existing original-license DDK ABI unchanged.",
+      "A04BR3RogueBIF.h": "PTE valid|SLC-bypass=9 (USC addsRO2); unchanged. This weakens the cache-retention explanation, so no cache-fix hardware-success claim.",
+      "restricted_clear_provenance": "Original format22/208byte field/PBE/PDS/EOT proof retained; no unverified task-word changes or changed USC bytes."
+    },
+    "implementation": "Inside existing Runtime.commandBusy + GPU.bridgeLock, after exact task/client-UFO completion: count1024 A5 words, publish one ordered GLOBAL SLC flush+GP SYNC batch, wait <=10000*10us for exact GP UFO plus KCCB read, then acquire/volatile output+guard read. Empty KCCB required,2slots wrapping127->0; no render replay or extended render timeout. Separate <=100ms readback operation. Exact ABI/DDK/BVNC checks.",
+    "failure": "Timeout/corrupt poisons shared transport and owner remains one-shot/pinned. Partial read offset or UFO alone cannot pass. No output writes by driver. Failed flush leaves pixelsReadfalse and no pixel-success assertion.",
+    "observability": "Log SLCresult/pixelsRead/beforeA5/afterA5/first/last/GP KCCBread-write-expected/UFOobserved-expected/FWCCBread-write/polls. Preserve existing actual context/client/UFO/trace/HWR/fault snapshot on readback failure or result8, not just task timeout. Snapshot is concurrent observation, not coherent history or proof that a particular HWR was caused by this task.",
+    "next_hardware_discriminant": [
+      "SLC0 + beforeA51024/afterA50 + zeroWords1024/guard0/postSYNC3=0: physical clear succeeds; cache visibility may explain old failure but one run alone does not prove root cause.",
+      "SLC0 + afterA51024 + zeroWords0: still no observed target write. Inspect same mismatch HWR/fwFaults/context flags; prioritize scheduling/discard/BIF/PBE/USC execution instead of retrying deadline.",
+      "SLC0 + afterA5<1024 + zeroWords0 or partial: target changed to nonzero/partial pattern; use first/last and guard to distinguish colour/packing/stride/coverage errors. Zero clear still failed.",
+      "SLC4/2: readback completion failure, pixelsReadfalse; no pixel conclusion from zero counters. Exact GP queue/UFO/partial response retained, no replay.",
+      "GuardErrors>0: owned64KiB outside4096 target changed; fail, no acceleration/draw claim."
+    ],
+    "physical_status": "NEW readback source candidate UNTESTED; old clear failed. Parent owns build/flash. No changes to targettask/EOT/PDS/heap policy/network/Setup/shim/device.",
+    "unchanged_dependency_sha256": {
+      "A04BR3RogueTransferFill.h": "36e78f68941d21bf190f09339d397b16c3125573c8676deeee19c8f6d20a539f",
+      "A04BR3RoguePixelEvent.h": "bd53d44a5ae9684123cce5d05bbd44617bfbd6f7254a3968990c0d712b5b3658",
+      "A04BR3RogueEOT.h": "c22a5f6fa6df942f98eacf133aa51088c174b11c3b7ebed6419921d34e8f31ac",
+      "A04BR3RogueHeapMap.h": "cb13590afed21729c82b9acee5002625fb8af0b12ff02d5bbe6e547b18219968",
+      "A04BR3RogueBIF.h": "63a0c4dbb0db68cca82a109affd2bbfaf9196dccc8e48ac678622d342f9bd995"
     }
   }
 }

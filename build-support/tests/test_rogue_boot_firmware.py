@@ -102,6 +102,7 @@ public:
             (root/'A04BR3RogueRenderMemory.h').write_text(r'''
 #pragma once
 #include "A04BR3RogueRenderSubmit.h"
+#include "A04BR3RogueReadback.h"
 static unsigned coldPrepares,renderPins,renderResets,renderUpdates;
 static bool coldOK=true;static int renderError;
 class A04BR3RogueRenderMemory {public:
@@ -110,6 +111,11 @@ class A04BR3RogueRenderMemory {public:
  bool clearPrepared()const{return coldOK;}
  unsigned clearedWords()const{return clearError?0:1024;}
  unsigned guardErrors()const{return 0;}
+ unsigned beforeA5()const{return 0;} unsigned afterA5()const{return 0;}
+ uint32_t firstWord()const{return 0;}uint32_t lastWord()const{return 0;}
+ int readbackResult()const{return 0;}bool readbackPixelsValid()const{return true;}
+ a04_rgx_readback_observation cache={};
+ const a04_rgx_readback_observation &readbackObservation()const{return cache;}
  unsigned ownedBytes()const{return coldOK?290816:0;}
  bool prepareCold(A04BR3RogueMemory &,unsigned id,uint64_t pdsVA,uint64_t uscVA){assert(id==1 && pdsVA==0xa800000000ULL && uscVA==0xba00000000ULL);++coldPrepares;return coldOK;}
  void pinForFirmware(){++renderPins;}

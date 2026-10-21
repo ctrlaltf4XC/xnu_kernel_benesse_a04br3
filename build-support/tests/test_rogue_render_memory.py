@@ -59,14 +59,25 @@ public:A04BR3RogueMemory(){memset(sourceTable,0,sizeof(sourceTable));
             (p/'test.cpp').write_text(r'''
 #include "A04BR3RogueRenderMemory.h"
 alignas(4096) static unsigned char mainbuf[A04_RGX_MAIN_BYTES],configbuf[A04_RGX_CONFIG_BYTES];
-static a04_rgx_fw_runtime kernel;
+static a04_rgx_fw_runtime kernel;static a04_rgx_command_state transport;
 static const a04_rgx_render_resources *view;
 static unsigned mode,kicks,waits,published;
 static uint32_t nextClient,sequence;
 static void acquire(void *){}
 static void publish(void *){++published;}
 static void kick(void *,uint32_t reg,uint32_t value){
- assert(reg==0xb00 && value==0x10 && published==2);++kicks;
+ assert(reg==0xb00 && value==0x10);++kicks;
+ if(kicks==2){
+  assert(published==4 && kernel.kctl->ui32ReadOffset==1 && kernel.kctl->ui32WriteOffset==3);
+  RGXFWIF_KCCB_CMD expected={};expected.eCmdType=RGXFWIF_KCCB_CMD_SLCFLUSHINVAL;expected.eDM=0;
+  expected.uCmdData.sSLCFlushInvalData.bInval=IMG_TRUE;
+  assert(!memcmp(&kernel.kcommands[1],&expected,56));
+  expected={};expected.eCmdType=RGXFWIF_KCCB_CMD_SYNC;expected.eDM=0;
+  expected.uCmdData.sSyncData.sSyncObjDevVAddr=kernel.command_sync_addr;
+  expected.uCmdData.sSyncData.uiUpdateVal=1;
+  assert(!memcmp(&kernel.kcommands[2],&expected,56));return;
+ }
+ assert(kicks==1 && published==2);
  auto &cmd=kernel.kcommands[kernel.kctl->ui32ReadOffset];
  assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_KICK && cmd.eDM==3);
  assert(cmd.uCmdData.sCmdKickData.psContext.ui32Addr==a04_rgx_render_fw_address(view,view->tq));
@@ -87,8 +98,14 @@ static void kick(void *,uint32_t reg,uint32_t value){
 }
 static void wait(void *,uint32_t us){
  assert(us==10);++waits;if(mode==3)return;
+ if(kicks==2){
+  if(mode==9)return; /* flush/SYNC unresponsive */
+  if(mode==8)memset(view->bif.data.cpu,0,4096); /* only visible after SLC flush */
+  *kernel.command_sync=1;kernel.kctl->ui32ReadOffset=3;return;
+ }
  /* Simulated FW only: CPU driver must never manufacture these pixels. */
- if(mode!=1)memset(view->bif.data.cpu,0,4096);
+ if(mode==1){kernel.trace->ui32FWFaults=7;kernel.trace->ui32HWRStateFlags=0x100;}
+ if(mode!=1 && mode!=8)memset(view->bif.data.cpu,0,4096);
  if(mode==2)((unsigned char *)view->bif.data.cpu)[4096]=0;
  *view->sync=sequence;
  view->control[3]->ui32ReadOffset=view->control[3]->ui32WriteOffset=view->control[3]->ui32DepOffset=nextClient;
@@ -96,8 +113,8 @@ static void wait(void *,uint32_t us){
 }
 static a04_rgx_command_io io={nullptr,publish,acquire,kick,wait};
 static void clearCases(){
- for(mode=0;mode<8;mode++){
-  attempts=0;kicks=waits=published=0;failAllocation=failPrepare=0;
+ for(mode=0;mode<10;mode++){
+  attempts=0;kicks=waits=published=0;failAllocation=failPrepare=0;transport={};
   A04BR3RogueMemory source;A04BR3RogueRenderMemory owner;
   assert(owner.prepareCold(source,10,0xa800000000ULL,0xba00000000ULL));
   assert(owner.clearPrepared());view=owner.view();owner.pinForFirmware();
@@ -112,14 +129,19 @@ static void clearCases(){
   if(mode==5)pds[0]^=1;
   if(mode==6)memset(view->bif.data.cpu,0,4096); /* pre-zero is rejected */
   if(mode==7)kernel.init->sPDSExecBase.uiAddr+=4096;
-  int result=owner.clear(kernel,io);
+  int result=owner.clear(kernel,io,transport);
   if(mode==0)assert(result==A04_CCB_OK && owner.clearedWords()==1024 && !owner.guardErrors());
-  if(mode==1)assert(result==8 && !owner.clearedWords() && !owner.guardErrors());
+  if(mode==1)assert(result==8 && !owner.clearedWords() && !owner.guardErrors() && owner.observation().valid && owner.observation().fwfaults==7 && owner.observation().hwr==0x100 && owner.readbackPixelsValid());
   if(mode==2)assert(result==8 && owner.clearedWords()==1024 && owner.guardErrors()==1);
   if(mode==3){assert(result==A04_CCB_TIMEOUT && waits==10000 && owner.observation().valid);
    auto &o=owner.observation();assert(o.kread==0 && o.kwrite==1 && o.cread==0 && !o.ufo && o.cexpected==296);}
-  if(mode<4){assert(kicks==1);assert(owner.clear(kernel,io)==A04_CCB_OFFLINE && kicks==1);}
-  else assert(result==A04_CCB_INPUT && !kicks && !published && !waits);
+  if(mode==8)assert(result==0 && owner.beforeA5()==1024 && !owner.afterA5() && owner.clearedWords()==1024);
+  if(mode==9)assert(result==A04_CCB_TIMEOUT && transport.poisoned && owner.readbackObservation().valid && owner.readbackObservation().polls==10000 && !owner.clearedWords() && !owner.readbackPixelsValid());
+  if(mode<4 || mode>=8){unsigned expectedKicks=mode==3?1:2;assert(kicks==expectedKicks);
+   assert(owner.clear(kernel,io,transport)==A04_CCB_OFFLINE && kicks==expectedKicks);
+   if(mode!=3 && mode!=9)assert(owner.readbackResult()==0);
+   if(mode==1)assert(owner.beforeA5()==1024 && owner.afterA5()==1024 && owner.firstWord()==0xa5a5a5a5U);
+  }else assert(result==A04_CCB_INPUT && !kicks && !published && !waits);
   owner.reset();assert(live==11);
   /* Test-only recovery after simulated power-off. Production quarantines. */
   for(unsigned n=0;n<total;n++)if(retained[n])retained[n]->release();assert(!live);
@@ -210,7 +232,7 @@ class A04BR3RogueMemory {public:bool stagedMemory(void **,uint64_t *);};
 bool prepare(A04BR3RogueRenderMemory *r,A04BR3RogueMemory *s){return r->prepareCold(*s,1);}
 void reset(A04BR3RogueRenderMemory *r){r->reset();}
 int submit(A04BR3RogueRenderMemory *r,a04_rgx_fw_runtime *k,a04_rgx_command_io *io){return r->update(*k,*io,3);}
-int clear(A04BR3RogueRenderMemory *r,a04_rgx_fw_runtime *k,a04_rgx_command_io *io){return r->clear(*k,*io);}
+int clear(A04BR3RogueRenderMemory *r,a04_rgx_fw_runtime *k,a04_rgx_command_io *io){a04_rgx_command_state s={};return r->clear(*k,*io,s);}
 ''')
             subprocess.run(['clang++','--target=arm64-apple-darwin','-std=c++14','-ffreestanding',
                 '-fno-exceptions','-fno-rtti','-O2','-Wall','-Wextra','-Werror','-Wframe-larger-than=8192',

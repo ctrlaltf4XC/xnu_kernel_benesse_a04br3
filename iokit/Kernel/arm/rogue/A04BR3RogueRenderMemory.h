@@ -9,13 +9,16 @@
 #include "A04BR3RogueMemory.h"
 #include "A04BR3RogueRenderSubmit.h"
 #include "A04BR3RogueHeapMap.h"
+#include "A04BR3RogueReadback.h"
 class A04BR3RogueRenderMemory {
     IOBufferMemoryDescriptor *owned[11]={};bool prepared[11]={};
     a04_rgx_render_resources resources={};a04_rgx_render_ring_state state={};
     a04_rgx_render_observation terminal={};
     uint32_t *mips=nullptr;bool mapped=false,pinned=false;
     a04_rgx_tq_clear clearImage={};bool clearReady=false,clearAttempted=false;
-    unsigned clearWords=0,clearGuardErrors=0;
+    unsigned clearWords=0,clearGuardErrors=0,clearBeforeA5=0,clearAfterA5=0;
+    uint32_t clearFirst=0,clearLast=0;int cacheResult=A04_CCB_OFFLINE;bool pixelsRead=false;
+    a04_rgx_readback_observation cacheObservation={};
     bool extraHeaps=false; a04_rgx_bif heapViews[2]={};
     static unsigned size(unsigned i) {return (i==0 || i==4 || i==7 || i==10)?65536:4096;}
     A04BR3RogueRenderMemory(const A04BR3RogueRenderMemory &)=delete;
@@ -39,6 +42,7 @@ public:
             owned[i]=nullptr;prepared[i]=false;
         }
         mapped=false;mips=nullptr;clearReady=clearAttempted=false;clearWords=clearGuardErrors=0;
+        clearBeforeA5=clearAfterA5=clearFirst=clearLast=0;cacheResult=A04_CCB_OFFLINE;pixelsRead=false;cacheObservation={};
         a04_rgx_fw_zero(&clearImage,sizeof(clearImage));extraHeaps=false;a04_rgx_fw_zero(heapViews,sizeof(heapViews));a04_rgx_fw_zero(&resources,sizeof(resources));
         a04_rgx_fw_zero(&state,sizeof(state));a04_rgx_fw_zero(&terminal,sizeof(terminal));
     }
@@ -105,7 +109,14 @@ public:
     bool clearPrepared()const{return mapped && clearReady;}
     unsigned clearedWords()const{return clearWords;}
     unsigned guardErrors()const{return clearGuardErrors;}
-    int clear(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io) {
+    unsigned beforeA5()const{return clearBeforeA5;}
+    unsigned afterA5()const{return clearAfterA5;}
+    uint32_t firstWord()const{return clearFirst;}
+    uint32_t lastWord()const{return clearLast;}
+    int readbackResult()const{return cacheResult;}
+    bool readbackPixelsValid()const{return pixelsRead;}
+    const a04_rgx_readback_observation &readbackObservation()const{return cacheObservation;}
+    int clear(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io,a04_rgx_command_state &transport) {
         if(!mapped || !pinned || !clearReady || clearAttempted)return A04_CCB_OFFLINE;
         if(!io.acquire || !kernel.init || kernel.init->sPDSExecBase.uiAddr!=heapViews[0].va ||
            kernel.init->sUSCExecBase.uiAddr!=heapViews[1].va)return A04_CCB_INPUT;
@@ -127,9 +138,25 @@ public:
         if(error)return error;
         io.acquire(io.context);
         auto words=(volatile uint32_t *)resources.bif.data.cpu;
-        for(unsigned n=0;n<A04_RGX_CLEAR_BYTES/4;n++)if(words[n]==0)++clearWords;
+        for(unsigned n=0;n<A04_RGX_CLEAR_BYTES/4;n++)if(words[n]==0xa5a5a5a5U)++clearBeforeA5;
+        /* A client UPDATE proves task order, not GPU SLC writeback to CPU.
+         * Native DDK flush+GP SYNC is a separate, single bounded operation. */
+        cacheResult=a04_rgx_command_readback(&kernel,&transport,&io,&cacheObservation);
+        if(cacheResult){
+            a04_rgx_render_observe(&terminal,&resources,&state,&kernel,3,0,kernel.kctl->ui32WriteOffset,0xffffffffU,true);
+            return cacheResult;
+        }
+        io.acquire(io.context);
+        pixelsRead=true;clearFirst=words[0];clearLast=words[A04_RGX_CLEAR_BYTES/4-1];
+        for(unsigned n=0;n<A04_RGX_CLEAR_BYTES/4;n++){
+            uint32_t value=words[n];if(value==0)++clearWords;if(value==0xa5a5a5a5U)++clearAfterA5;
+        }
         for(unsigned n=A04_RGX_CLEAR_BYTES;n<resources.bif.data.bytes;n++)if(output[n]!=A04_RGX_CLEAR_POISON)++clearGuardErrors;
-        return clearWords==A04_RGX_CLEAR_BYTES/4 && !clearGuardErrors?A04_CCB_OK:8; /* output mismatch */
+        if(clearWords==A04_RGX_CLEAR_BYTES/4 && !clearGuardErrors)return A04_CCB_OK;
+        /* Completed task+flush may still have been discarded/recovered by FW.
+         * Preserve trace/HWR/context words on pixel mismatch, not only timeout. */
+        a04_rgx_render_observe(&terminal,&resources,&state,&kernel,3,0,kernel.kctl->ui32WriteOffset,0xffffffffU,true);
+        return 8; /* output mismatch; snapshot is observational, no replay */
     }
     const a04_rgx_bif *executionHeap(unsigned n)const {return mapped && extraHeaps && n<2?&heapViews[n]:nullptr;}
     unsigned ownedBytes()const {return mapped?143360U+(extraHeaps?147456U:0U):0U;}

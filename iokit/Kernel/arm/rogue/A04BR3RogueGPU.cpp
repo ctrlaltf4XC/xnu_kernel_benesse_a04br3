@@ -199,6 +199,10 @@ private:
         setProperty("FirmwareOwnedClearResult",(uint64_t)error,32);
         IOLog("A04BR3 GPU: owned TQ_3D clear32x32 result=%d zeroWords=%u/1024 guardErrors=%u; native0x22, UFO + CCB consumption + pixel readback required\n",
             error,render.clearedWords(),render.guardErrors());
+        const auto &cache=render.readbackObservation();
+        IOLog("A04BR3 GPU: clear readback SLC result=%d pixelsRead=%u beforeA5=%u/1024 afterA5=%u/1024 first=0x%x last=0x%x observed=%u KCCB=%u/%u/%u UFO=%u/%u FWCCB=%u/%u polls=%u\n",
+            render.readbackResult(),(unsigned)render.readbackPixelsValid(),render.beforeA5(),render.afterA5(),render.firstWord(),render.lastWord(),
+            (unsigned)cache.valid,cache.kread,cache.kwrite,cache.kexpected,cache.ufo,cache.expected,cache.fread,cache.fwrite,cache.polls);
         if(error && render.observation().valid) {
             const auto &s=render.observation();
             IOLog("A04BR3 GPU: clear terminal polls=%u KCCB=%u/%u/%u client=%u/%u/%u/%u UFO=%u/%u FWCCB=%u/%u/0x%x HWR=0x%x faults=%u\n",
