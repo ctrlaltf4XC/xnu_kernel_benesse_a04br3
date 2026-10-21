@@ -30,6 +30,7 @@
 #include <sys/codesign.h>
 #include <sys/mount.h>
 #include <sys/proc.h>
+#include <sys/priv.h>
 #include <sys/systm.h>
 #include <sys/ubc_internal.h>
 #include <sys/vnode.h>
@@ -295,8 +296,24 @@ a04br3_sandbox_syscall(struct proc *p, int call, __unused user_addr_t arg)
     default: return 0;
     }
 }
+/* iOS grants CA work intervals through its platform MAC policy. */
+static int
+a04br3_sandbox_priv_grant(kauth_cred_t cred __unused, int priv)
+{
+    struct proc *p = current_proc();
+    int allowed = priv == PRIV_WORK_INTERVAL && a04br3_platform_root == 1 &&
+        p != PROC_NULL && csproc_get_platform_binary(p);
+    static unsigned reports;
+    if (__atomic_fetch_add(&reports, 1, __ATOMIC_RELAXED) < 32) {
+        char name[32];proc_selfname(name,sizeof(name));
+        printf("A04BR3 Sandbox: %s privilege=%d %s\n",name,priv,allowed?"granted":"not granted");
+    }
+    return allowed ? 0 : EPERM;
+}
+
 static const struct mac_policy_ops a04br3_sandbox_mac_ops = {
     .mpo_policy_syscall = a04br3_sandbox_syscall,
+    .mpo_priv_grant = a04br3_sandbox_priv_grant,
 };
 static struct mac_policy_conf a04br3_sandbox_mac_conf = {
     .mpc_name = "Sandbox",

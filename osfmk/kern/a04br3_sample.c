@@ -98,9 +98,9 @@ a04br3_sample_task(const char *name, int pid, task_t task)
 static void
 a04br3_crash_strings(const char *name)
 {
-    static unsigned scans[4];
+    static unsigned scans[6];
     unsigned bucket = !strcmp(name, "backboardd") ? 0 : !strcmp(name,"lsd") ? 1 :
-        !strcmp(name,"installd") ? 2 : 3;
+        !strcmp(name,"installd") ? 2 : !strcmp(name,"SpringBoard") ? 4 : !strcmp(name,"Setup") ? 5 : 3;
     if (scans[bucket]++) return;
     char *buf = kalloc_data(65536, Z_WAITOK);
     if (!buf) return;
@@ -171,7 +171,8 @@ a04br3_crash_registers(const char *name, int pid, int sig,
         name, pid, saved_state64(ss)->x[0], saved_state64(ss)->x[1],
         saved_state64(ss)->x[2], saved_state64(ss)->x[3]);
     if (sig == 6 && (!strcmp(name, "backboardd") || !strcmp(name, "lsd") ||
-        !strcmp(name,"installd") || !strcmp(name,"installcoordinationd"))) a04br3_crash_strings(name);
+        !strcmp(name,"installd") || !strcmp(name,"installcoordinationd") ||
+        !strcmp(name,"SpringBoard") || !strcmp(name,"Setup"))) a04br3_crash_strings(name);
     return fp;
 }
 #endif

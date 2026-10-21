@@ -470,3 +470,21 @@ PMIC long-press reset configuration are not changed. No automatic Home press
 is injected. Current corner calibration expands the measured sensor range
 to the full framebuffer and clamps samples outside it. Initial HID queue
 acceptance is logged to distinguish measured input from userland delivery.
+
+### PowerVR Rogue transport bring-up
+
+A04BR3RogueGPU sequences the three MT8167 MFG power domains and SRAM/bus
+acknowledgments with bounded waits before accessing the GPU register aperture.
+It reports the real BVNC and publishes a bring-up service only after a valid
+register read. It is deliberately not an IOAccelerator service and advertises
+GPUAccelerationSupported=false. GPU MMU, firmware loading, command submission,
+fences and the iOS Metal/IOAccelerator userland bridge remain unimplemented.
+Power-domain failure prevents core access and command/DMA submission. No GPU
+voltage/PLL frequency changes are made; enabled resources remain owned by the
+kernel until reboot. Native iOS rendering remains software at this stage.
+
+Setup and SpringBoard aborts now include longer bounded stacks and first-abort
+heap exception text. The opt-in platform-root MAC stand-in grants only the
+work-interval scheduling privilege to platform binaries; other privileges and
+nonplatform processes remain ungranted. Language selection itself can request
+a native respring; an observed process restart alone is not proof of a bug.

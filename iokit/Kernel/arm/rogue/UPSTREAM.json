@@ -1,0 +1,12 @@
+{
+  "board_source_repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3.git",
+  "board_source_commit": "eb47f42e1f84fe5716ef239620725f82718a620a",
+  "expected_bvnc": "22.40.54.30",
+  "source_paths": [
+    "drivers/soc/mediatek/mtk-scpsys-mt8167.c",
+    "drivers/soc/mediatek/mtk-infracfg.c",
+    "drivers/clk/mediatek/clk-mt8167.c",
+    "arch/arm64/boot/dts/mediatek/mt8167.dtsi"
+  ],
+  "status": "power/register transport; no rendering"
+}

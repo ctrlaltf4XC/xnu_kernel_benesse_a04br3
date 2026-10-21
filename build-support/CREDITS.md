@@ -232,3 +232,13 @@ definitions from the same board Linux revision: mem1 bit0 is Linux115
 (volume up), bit1 Linux102 (Home). The polling implementation is new.
 Touch calibration bounds (raw X150..3950/Y320..3830) derive from two passes
 of physical-corner taps captured in the project UART on 2026-10-21.
+
+The Rogue power-domain transport uses register facts from the board Linux
+revision eb47f42e1f84fe5716ef239620725f82718a620a:
+`mtk-scpsys-mt8167.c`, `mtk-infracfg.c`, `clk-mt8167.c`, and `mt8167.dtsi`.
+The implementation uses MT8167 bits24/25, not the different MT8173 bits22/23.
+Imagination's dual-MIT/GPLv2 `rgxcore_km_22.40.54.30.h` and `rgx_cr_defs_km.h`
+identify the source configuration and CORE_ID/PBVNC register format.
+No Apple AGX interface or Linux DMA/firmware implementation is claimed here.
+The development platform work-interval grant follows the ABI identified by
+ios-sweet patch0064, restricted to platform-signed processes and PRIV1008.

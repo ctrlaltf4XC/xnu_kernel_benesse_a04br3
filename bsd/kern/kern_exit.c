@@ -1910,14 +1910,14 @@ proc_prepareexit(proc_t p, int rv, boolean_t perf_notify)
             (!strcmp(p->p_name, "SpringBoard") || !strcmp(p->p_name, "backboardd") ||
              !strcmp(p->p_name, "lsd") || !strcmp(p->p_name, "mediaserverd") ||
              !strcmp(p->p_name,"installd") || !strcmp(p->p_name,"installcoordinationd") ||
-             !strcmp(p->p_name,"locationd") || strnstr(p->p_name, "datamigrat", sizeof(p->p_name))) &&
+             !strcmp(p->p_name,"locationd") || !strcmp(p->p_name,"Setup") || strnstr(p->p_name, "datamigrat", sizeof(p->p_name))) &&
             os_atomic_inc_orig(&a04br3_crash_count[a04br3_crash_bucket], relaxed) <
                 (a04br3_crash_bucket ? 2u : 16u)) {
             extern uint64_t a04br3_crash_registers(const char *, int, int, uint64_t, uint64_t);
             uint64_t fp = a04br3_crash_registers(p->p_name, proc_getpid(p),
                 WTERMSIG(rv), ((uint64_t)ut->uu_exception << 32) | (uint32_t)ut->uu_code,
                 ut->uu_subcode);
-            for (unsigned i = 0; i < 10 && fp && !(fp & 7); i++) {
+            for (unsigned i = 0; i < 32 && fp && !(fp & 7); i++) {
                 uint64_t frame[2];
                 if (copyin((user_addr_t)fp, frame, sizeof(frame))) break;
                 printf("A04BR3_CRASH %s[%d] bt%u=0x%llx\n",
