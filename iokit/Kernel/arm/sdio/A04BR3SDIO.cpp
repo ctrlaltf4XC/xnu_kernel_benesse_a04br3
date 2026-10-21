@@ -9,6 +9,9 @@
 #include "A04BR3SDIOPads.h"
 #include "A04BR3WMTDownload.h"
 #include "A04BR3WMTBootFirmware.h"
+#include "A04BR3WLANFirmware.h"
+#include "A04BR3WLANBootFirmware.h"
+#include <libkern/crypto/sha2.h>
 #include <libkern/c++/OSData.h>
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3SDIO : public IOService {
@@ -23,6 +26,12 @@ class A04BR3SDIO : public IOService {
  bool identityReady=false;
  void *firmwareSnapshot=nullptr;
  unsigned firmwareBytes=0;
+ void *wlanSnapshot=nullptr;
+ unsigned wlanBytes=0;
+ bool wlanAttempted=false;
+ struct a04_wlan_host wlanHost={};
+ struct a04_wlan_firmware wlanFirmware={};
+ struct a04_wlan_download_state wlanDownload={};
  struct a04_wmt_firmware_set firmwareSet={};
  struct a04_wmt_download_state downloadState={};
  struct a04_wmt_startup_options startupOptions={0,0,0,1,2,1};
@@ -66,10 +75,12 @@ public:
  void stop(IOService *provider) APPLE_KEXT_OVERRIDE {
   if(transportLock){IOLockLock(transportLock);identityReady=false;transportReady=false;IOLockUnlock(transportLock);}
   setProperty("WMTTransportReady",kOSBooleanFalse);
+  setProperty("WLANFirmwareReady",kOSBooleanFalse);
   IOService::stop(provider);
  }
  void free(void) APPLE_KEXT_OVERRIDE {
   if(firmwareSnapshot)IOFree(firmwareSnapshot,firmwareBytes);
+  if(wlanSnapshot)IOFree(wlanSnapshot,wlanBytes);
   if(transportLock)IOLockFree(transportLock);
   IOService::free();
  }
@@ -127,6 +138,71 @@ public:
   }
   IOLockUnlock(transportLock);return e;
  }
+ /* Explicit immutable CPU copy; no firmware file probing or raw PA aliasing.
+  * SHA256 pins the supplied stock asset, CRC validates its divided layout.
+  * WMT ID8a12/FVR8a11 + completed patch/STP/fn1 are required independently. */
+ int stageWLANFirmware(const void *bytes,unsigned length){
+  if(!transportLock || !bytes || length!=237008)return A04_WLAN_ARGUMENT;
+  IOLockLock(transportLock);
+  int e=(!identityReady || !transportReady || transport.failed || wlanSnapshot || wlanAttempted ||
+   downloadState.phase!=A04_WMT_DL_READY || !downloadState.function1_ready)?A04_WLAN_STATE:0;
+  void *snapshot=nullptr;uint8_t digest[SHA256_DIGEST_LENGTH]={};
+  if(!e){snapshot=IOMalloc(length);if(!snapshot)e=A04_WMT_FW_MEMORY;}
+  if(!e){
+   bcopy(bytes,snapshot,length);SHA256_CTX hash;
+   SHA256_Init(&hash);SHA256_Update(&hash,snapshot,length);SHA256_Final(digest,&hash);
+   e=a04_wlan_firmware_select(&identity,snapshot,length,digest,&wlanFirmware);
+  }
+  if(!e){wlanSnapshot=snapshot;wlanBytes=length;}
+  else if(snapshot){wlanFirmware.count=0;IOFree(snapshot,length);}
+  setProperty("WLANFirmwareStageError",(unsigned)e,32);
+  setProperty("WLANFirmwareStaged",wlanSnapshot?kOSBooleanTrue:kOSBooleanFalse);
+  IOLog("A04BR3 WLAN: CPU stage=%d bytes=%u sections=%u candidate=%u HW=0x%x ROM=0x%x\n",e,length,wlanFirmware.count,wlanFirmware.candidate,identity.hardware,identity.rom);
+  if(!e)for(unsigned i=0;i<wlanFirmware.count;i++)
+   IOLog("A04BR3 WLAN: section=%u address=0x%x bytes=%u\n",i+1,wlanFirmware.section[i].address,wlanFirmware.section[i].length);
+  IOLockUnlock(transportLock);return e;
+ }
+ int startWLANFirmware(){
+  if(!transportLock)return A04_WLAN_STATE;
+  IOLockLock(transportLock);
+  if(wlanAttempted || !wlanSnapshot || !transportReady || transport.failed ||
+     downloadState.phase!=A04_WMT_DL_READY || !downloadState.function1_ready){IOLockUnlock(transportLock);return A04_WLAN_STATE;}
+  wlanAttempted=true;
+  int e=a04_wlan_host_open(&wlanHost,&transport);
+  IOLog("A04BR3 WLAN: fn1 prepare=%d WCIR=0x%x WHLPCR=0x%x own-polls=%u enabled=0x%x\n",e,wlanHost.wcir,wlanHost.chlpcr,wlanHost.own_polls,transport.enabled);
+  if(!e)e=a04_wlan_download(&wlanHost,&wlanFirmware,&wlanDownload);
+  if(transport.failed)transportReady=false;
+  bool ready=!e && wlanDownload.ready && wlanHost.ready;
+  setProperty("WLANFirmwareDownloadError",(unsigned)e,32);
+  setProperty("WLANFirmwareReady",ready?kOSBooleanTrue:kOSBooleanFalse);
+  setProperty("WLANWCIR",wlanHost.wcir,32);
+  setProperty("WMTTransportReady",transportReady?kOSBooleanTrue:kOSBooleanFalse);
+  setProperty("NetworkDataPathAvailable",kOSBooleanFalse);
+  IOLog("A04BR3 WLAN: download result=%d attempted=%u section=%u/%u offset=%u configs=%u packets=%u start=%u ready=%u WCIR=0x%x rxlen=%u CPU-free=%u used=%u transport-error=%d\n",e,wlanDownload.attempted,wlanDownload.section,wlanFirmware.count,wlanDownload.offset,wlanDownload.configured,wlanDownload.packets,wlanDownload.started,ready?1u:0u,wlanHost.wcir,wlanHost.rx_length,wlanHost.cpu_free,wlanHost.cpu_used,transport.failed);
+  if(e && wlanHost.rx_length){
+   IOLog("A04BR3 WLAN: failing init event");
+   for(unsigned i=0;i<wlanHost.rx_length && i<32;i++)IOLog(" %02x",wlanHost.rx[i]);
+   IOLog("\n");
+  }
+  IOLockUnlock(transportLock);return e;
+ }
+ void loadBootWLANFirmware(IOService *provider){
+  setProperty("WLANFirmwareReady",kOSBooleanFalse);
+  const void *view=nullptr;unsigned bytes=0;
+  int boot=a04_wlan_boot_firmware_view(&view,&bytes),stage=A04_WLAN_STATE;
+  setProperty("WLANBootFirmwareError",(unsigned)boot,32);
+  IOLog("A04BR3 WLAN: boot view=%d bytes=%u\n",boot,bytes);
+  if(!boot)stage=stageWLANFirmware(view,bytes);
+  else if(boot==1){
+   OSObject *object=provider->copyProperty("WLANFirmware-A04BR3");
+   OSData *asset=OSDynamicCast(OSData,object);
+   if(asset)stage=stageWLANFirmware(asset->getBytesNoCopy(),asset->getLength());
+   else if(object)IOLog("A04BR3 WLAN: rejected non-OSData CPU firmware\n");
+   else IOLog("A04BR3 WLAN: explicit asset absent; WLAN download deferred\n");
+   if(object)object->release();
+  }else IOLog("A04BR3 WLAN: invalid DT range/mapping; no fallback\n");
+  if(!stage)startWLANFirmware();
+ }
  int copyWMTFirmware(unsigned sequence,unsigned offset,void *bytes,unsigned length){
   if(!transportLock)return A04_WMT_FW_STATE;
   IOLockLock(transportLock);
@@ -148,7 +224,7 @@ public:
   /* fn2 belongs to the serialized WMT channel: raw CHISR/FIFO accesses
    * would consume status/data behind its credit and response bookkeeping. */
   int e=!transportReady?A04_SDIO_POISONED:
-   (fn==2 && channel.initialized)?A04_SDIO_ARGUMENT:
+   ((fn==2 && channel.initialized) || (fn==1 && wlanHost.initialized))?A04_SDIO_ARGUMENT:
    a04_sdio_transfer(&transport,fn,address,write,increment,buffer,length);
   if(transport.failed){transportReady=false;setProperty("WMTTransportReady",kOSBooleanFalse);}
   IOLockUnlock(transportLock);return e;
@@ -254,12 +330,10 @@ bool A04BR3SDIO::start(IOService *provider)
   }
   if(!stageError){
    IOLog("A04BR3 WMT: SDIO mandatory STP, cfgExist=%u antenna=%u co-clock=%u merge=%u FM=%u; starting verified patch set\n",startupOptions.coex_present,startupOptions.antenna_mode,startupOptions.co_clock,startupOptions.merge_interface,startupOptions.fm_strap);
-   startWMTFirmware();
+   if(!startWMTFirmware())loadBootWLANFirmware(provider);
   }
  }
- /* Preserve the diagnostic service on query failure but expose no readiness.
-  * Firmware body transfer and WLAN startup remain gated until independently
-  * selected firmware and version-query hardware validation are available. */
+ /* Readiness stays separate: WCIR ready alone does not publish a network. */
  setProperty("WMTTransportReady",transportReady?kOSBooleanTrue:kOSBooleanFalse);
  setProperty("WMTCCIR",wmt.ccir,32);setProperty("WMTCHLPCR",wmt.chlpcr_after,32);
  setProperty("SDIOVendor",card.vendor,32);setProperty("SDIODevice",card.device,32);setProperty("NetworkDataPathAvailable",kOSBooleanFalse);registerService();return true;
@@ -280,4 +354,15 @@ extern "C" int a04br3_wmt_start_firmware(IOService *service)
 {
  A04BR3SDIO *sdio=OSDynamicCast(A04BR3SDIO,service);
  return sdio?sdio->startWMTFirmware():A04_WMT_DOWNLOAD_STATE;
+}
+
+extern "C" int a04br3_wlan_stage_firmware(IOService *service,const void *bytes,unsigned length)
+{
+ A04BR3SDIO *sdio=OSDynamicCast(A04BR3SDIO,service);
+ return sdio?sdio->stageWLANFirmware(bytes,length):A04_WLAN_STATE;
+}
+extern "C" int a04br3_wlan_start_firmware(IOService *service)
+{
+ A04BR3SDIO *sdio=OSDynamicCast(A04BR3SDIO,service);
+ return sdio?sdio->startWLANFirmware():A04_WLAN_STATE;
 }
