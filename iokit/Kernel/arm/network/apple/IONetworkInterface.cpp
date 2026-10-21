@@ -29,6 +29,7 @@
 
 /* Load real OSMetaClass ownership annotations before BSD bpf/skywalk. */
 #include <IOKit/IOLib.h>
+#include <libkern/c++/OSMetaClass.h> // ownership annotations before BSD skywalk includes
 /* XNU8796 headers declare their own C linkage and may include C++ templates. */
 #include <sys/param.h>
 #include <sys/systm.h>

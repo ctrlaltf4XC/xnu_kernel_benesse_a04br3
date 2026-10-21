@@ -120,7 +120,7 @@
       "path": "IONetworkInterface.cpp",
       "sha256": "b2cf42f7c621e0709d679ac599a3778983de5c72e42afcd90bd4d4b6d93b500a",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkInterface.cpp",
-      "vendored_sha256": "72bc52c9c89af21b8a71dfae01cb75df1f75b5d2752c5790959f51c67d07cd69"
+      "vendored_sha256": "54013556c8097a3779cacb5ca142f1caffe9d6ec1f208aa8f81e5028217a1feb"
     },
     {
       "path": "IONetworkInterface.h",
@@ -201,7 +201,7 @@
       "vendored_sha256": "da5de06d4e0a73f6161451650e89e4ad6428414387c367cf2f4ca692353c40c2"
     }
   ],
-  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained.; IOMbufMemoryCursor limits explicit C linkage to m_getpackets declaration, leaving XNU C++ template-bearing includes outside.",
+  "modifications": "Local quoted header includes; replace unused private net/dlil.h dependency with existing KPI include and IFNET_MODIDLEN/IFNET_MODARGLEN public aliases (same sizes20/12). Original licenses retained.; IOMbufMemoryCursor limits explicit C linkage to m_getpackets declaration, leaving XNU C++ template-bearing includes outside.; IONetworkInterface explicitly imports real OSMetaClass ownership annotations before BSD bpf/skywalk.",
   "build_adaptations": {
     "family_private_spi": "Parent-owned Makefile must define __PRIVATE_SPI__=1 for every network object; matches original pinned project GCC_PREPROCESSOR_DEFINITIONS, no declarations or enum values fabricated.",
     "target_conditionals": "IONetworkInterface.cpp and IOKernelDebugger.cpp include source-owned A04BR3FamilyTarget.h; only consumed TARGET_OS_IPHONE derived from explicit target or board/XNU defines. No SDK system header dependency.",
