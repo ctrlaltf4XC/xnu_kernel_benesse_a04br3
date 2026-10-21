@@ -198,7 +198,8 @@ static a04_rgx_command_io commandIO={nullptr,publishCommand,acquireCommand,kickC
 static void publishCommand(void *) {
  /* Reentrant producer cannot interleave a second command. */
  assert(active->fence(3,commandIO)==A04_CCB_BUSY);
- if(activeRender)assert(active->renderUpdate(*activeRender,2,commandIO)==A04_CCB_BUSY);
+ if(activeRender){assert(active->renderUpdate(*activeRender,2,commandIO)==A04_CCB_BUSY);
+ assert(active->renderClear(*activeRender,commandIO)==A04_CCB_BUSY);}
 }
 int main(){
  for(allocFault=1;allocFault<=3;allocFault++) {

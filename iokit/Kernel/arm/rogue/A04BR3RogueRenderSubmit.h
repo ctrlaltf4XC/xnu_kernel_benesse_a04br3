@@ -9,6 +9,7 @@
 #define A04BR3_ROGUE_RENDER_SUBMIT_H
 #include "A04BR3RogueCommand.h"
 #include "A04BR3RogueRenderResources.h"
+#include "A04BR3RogueTransferFill.h"
 /* One terminal observation, never a replay/extra poll. Values are a bounded
  * read-only snapshot of concurrently FW-owned words, not an atomic FW dump.
  * No following firmware pointers, no FWCCB consumption, no cache-line clean. */
@@ -53,12 +54,13 @@ static inline void a04_rgx_render_observe(a04_rgx_render_observation *out,
 }
 static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
     a04_rgx_render_ring_state *state,a04_rgx_fw_runtime *kernel,
-    const a04_rgx_command_io *io,unsigned dm,a04_rgx_render_observation *observation=nullptr,uint32_t priority=0xffffffffU,bool transfer=false)
+    const a04_rgx_command_io *io,unsigned dm,a04_rgx_render_observation *observation=nullptr,uint32_t priority=0xffffffffU,bool transfer=false,const a04_rgx_tq_clear *clear=nullptr)
 {
     if (!r || !state || !kernel || !io || !io->acquire || !io->publish || !io->kick ||
         !io->wait_us || !kernel->init || !a04_rgx_render_view_valid(r) ||
         (dm!=0 && dm!=2 && dm!=3) || state->sequence>=0xfffffffeU) return A04_CCB_INPUT;
-    if (transfer && (dm!=3 || priority==0xffffffffU)) return A04_CCB_INPUT;
+    if (clear && (!transfer || dm!=3 || priority!=0xffffffffU)) return A04_CCB_INPUT;
+    if (transfer && (dm!=3 || (priority==0xffffffffU && !clear))) return A04_CCB_INPUT;
     bool changePriority=priority!=0xffffffffU;
     if (changePriority && ((dm!=2 && dm!=3) || priority>1)) return A04_CCB_INPUT;
     if (state->poisoned) return A04_CCB_OFFLINE;
@@ -105,7 +107,8 @@ static inline int a04_rgx_render_submit_update(a04_rgx_render_resources *r,
     if (fctl->ui32ReadOffset!=fctl->ui32WriteOffset) return A04_CCB_FW_REQUEST;
     RGXFWIF_KCCB_CMD kick;
     ++state->sequence;
-    int error=a04_rgx_render_update(r,state,dm,&kick,priority,transfer);
+    int error=clear?a04_rgx_tq_clear_enqueue(r,state,clear,&kick):
+        a04_rgx_render_update(r,state,dm,&kick,priority,transfer);
     if (error) {--state->sequence;return error==2?A04_CCB_BUSY:A04_CCB_INPUT;}
     commands[write]=kick;
     io->publish(io->context);

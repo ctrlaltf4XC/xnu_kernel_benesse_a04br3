@@ -176,19 +176,41 @@ private:
         setProperty("FirmwarePriorityVerifiedDMs",(uint64_t)verified,32);
         return verified==0xc;
     }
-    void verifyTransferContext() {
+    bool verifyTransferContext() {
         /* rgxtransfer.c SetTransferContextPriorityKM explicitly uses DM3.
-         * No actual task until original register/PDS/EOT producer is complete. */
+         * PRIORITY-only preflight; the separate owned clear follows on success. */
         for (uint32_t priority=0;priority<=1;priority++) {
             int error=submitRenderUpdate(3,priority,true);
             setProperty("FirmwareTQContextResult",(uint64_t)error,32);
             IOLog("A04BR3 GPU: independent TQ_3D PRIORITY target=%u result=%d; no transfer task submitted\n",priority,error);
-            if (error) return;
+            if (error) return false;
         }
         int error=submitFence(3);
         setProperty("FirmwareTQPostFenceResult",(uint64_t)error,32);
         setProperty("FirmwareTQContextVerified",error?kOSBooleanFalse:kOSBooleanTrue);
-        IOLog("A04BR3 GPU: post-TQ-context SYNC DM=3 result=%d; pixel test not submitted\n",error);
+        IOLog("A04BR3 GPU: post-TQ-context SYNC DM=3 result=%d\n",error);
+        return !error;
+    }
+    void verifyOwnedClear() {
+        setProperty("FirmwareOwnedClearVerified",kOSBooleanFalse);
+        if(!render.clearPrepared() || !bridgeLock || !IOLockTryLock(bridgeLock))return;
+        a04_rgx_command_io io={this,commandPublish,commandAcquire,fwWrite32,fwWait};
+        int error=bridgeOnline?runtime.renderClear(render,io):A04_CCB_OFFLINE;
+        setProperty("FirmwareOwnedClearResult",(uint64_t)error,32);
+        IOLog("A04BR3 GPU: owned TQ_3D clear32x32 result=%d zeroWords=%u/1024 guardErrors=%u; native0x22, UFO + CCB consumption + pixel readback required\n",
+            error,render.clearedWords(),render.guardErrors());
+        if(error && render.observation().valid) {
+            const auto &s=render.observation();
+            IOLog("A04BR3 GPU: clear terminal polls=%u KCCB=%u/%u/%u client=%u/%u/%u/%u UFO=%u/%u FWCCB=%u/%u/0x%x HWR=0x%x faults=%u\n",
+                s.polls,s.kread,s.kwrite,s.kexpected,s.cread,s.cwrite,s.cdep,s.cexpected,s.ufo,s.expected,s.fread,s.fwrite,s.ftype,s.hwr,s.fwfaults);
+        }
+        IOLockUnlock(bridgeLock);
+        if(!error) {
+            int fence=submitFence(3);
+            setProperty("FirmwareOwnedClearPostFenceResult",(uint64_t)fence,32);
+            setProperty("FirmwareOwnedClearVerified",fence?kOSBooleanFalse:kOSBooleanTrue);
+            IOLog("A04BR3 GPU: post-owned-clear SYNC3 result=%d; no iOS acceleration bridge\n",fence);
+        }
     }
     uint32_t verifyCommandBridge() {
         const uint32_t domains[]={A04_RGX_DM_GP,A04_RGX_DM_TA,A04_RGX_DM_3D};
@@ -240,6 +262,7 @@ private:
          * failure leaves the proven firmware/SYNC path available. */
         bool renderPrepared=render.prepareCold(memory,1,0xa800000000ULL,0xba00000000ULL);
         setProperty("FirmwareRenderContextPrepared",renderPrepared?kOSBooleanTrue:kOSBooleanFalse);
+        setProperty("FirmwareOwnedClearPrepared",render.clearPrepared()?kOSBooleanTrue:kOSBooleanFalse);
         IOLog("A04BR3 GPU: cold render context prepared=%u; no tasks/shaders submitted\n",(unsigned)renderPrepared);
         if (!runtime.prepare(memory,26000000)) {
             render.reset();
@@ -266,7 +289,7 @@ private:
         setProperty("BringupStage","firmware-ready");
         IOLog("A04BR3 GPU: FW ready=1 ABI/DDK/BVNC verified; IRQ=0x%x; no acceleration bridge\n",fwRead32(this,0x8a8));
         bridgeOnline=true;
-        if (verifyCommandBridge()==0xd && verifyRenderBridge()==1 && verifyPriorityBridge()) verifyTransferContext();
+        if (verifyCommandBridge()==0xd && verifyRenderBridge()==1 && verifyPriorityBridge() && verifyTransferContext()) verifyOwnedClear();
     }
     void stageBootFirmware() {
         DTEntry map=nullptr;

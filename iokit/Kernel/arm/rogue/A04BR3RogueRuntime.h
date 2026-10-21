@@ -178,6 +178,15 @@ public:
         __atomic_store_n(&commandBusy,0,__ATOMIC_RELEASE);
         return error;
     }
+    int renderClear(A04BR3RogueRenderMemory &owner,const a04_rgx_command_io &io) {
+        unsigned expected=0;
+        if (!__atomic_compare_exchange_n(&commandBusy,&expected,1,false,__ATOMIC_ACQUIRE,__ATOMIC_RELAXED))
+            return A04_CCB_BUSY;
+        int error=firmwareOnline && !commandState.poisoned?owner.clear(layout,io):A04_CCB_OFFLINE;
+        if(error==A04_CCB_TIMEOUT || error==A04_CCB_CORRUPT)commandState.poisoned=true;
+        __atomic_store_n(&commandBusy,0,__ATOMIC_RELEASE);
+        return error;
+    }
     const RGXFWIF_INIT *init() const {return layout.init;}
     uint32_t readyPhysical() const {return (uint32_t)(pa[1]+offsetof(RGXFWIF_INIT,bFirmwareStarted));}
     uint32_t ready() {return readShared(readyPhysical());}

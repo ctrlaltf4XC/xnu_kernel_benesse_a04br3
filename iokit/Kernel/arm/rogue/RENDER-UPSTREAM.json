@@ -1,5 +1,5 @@
 {
-  "status": "NEW independent TQ_3D context/live PRIORITY preflight + cold GENERAL/PDS/USC heap integration + offline original208byte ABI encoder; 37 local tests pass, physical new candidate untested; no transfer task/pixels submitted.",
+  "status": "Restricted real owned-buffer clear candidate: native format0x22, linear32x32, source-generated USC EOT/PDS, original208byte TQ task then UPDATE; local host/ARM64 tests only. Clear PHYSICALLY UNTESTED.",
   "ddk": "Imagination/MediaTek m1.11ED5425693, MT8167 user config, BVNC22.40.54.30",
   "source_sha256": {
     "hwdefs/km/rgxmmudefs_km.h": "bfedc5799e2b57b27cece82d3cd882c557f44ce3356895c9ffa5d7471cdffd28",
@@ -26,7 +26,8 @@
     "Owned low4GiB bank64KiB, PC/PD/PT4KiB each, scratch64KiB; normal-NC bank/scratch, cached table clean, cold MIPS firmware mapping at0xc0080000; pre-runtime code-PTE guard",
     "Native FW memory context, FW render context TA/3D, suspend states4ISP pipes, disabled16byte reset framework, dedicated client CCBs/UFO",
     "Client CCB48byte UPDATE packet,40byte PADDING header/reserved-tail rule, no CPU writes to FW-owned CCCB write offset",
-    "Typed KCCB KICK from owned context and current client write offset, no hardware task/shader bytes; finite100ms polling of KCCB and client read offsets plus exact UFO sequence; timeout quarantine"
+    "Typed KCCB KICK/private client write; bounded100ms KCCB/client/UFO polling, shared producer gate, timeout poison/quarantine. Restricted TQ clear enabled only through immutable owner re-derivation.",
+    "Fixed trusted native clear producer: one owned GENERAL4096byte target plus61440byte upper guard; generated12byte USC EOT and64byte PDS image in separate cold-mapped heaps; no external raw task admission."
   ],
   "integration_required": [],
   "not_implemented": [
@@ -42,27 +43,29 @@
     "test_rogue_runtime_compile.py: full production CPP/headers and original ARM instructions target compile, not XNU link",
     "test_rogue_priority.py: standalone native PRIORITY bytes, two-DM changed priority and independent consumption checks; wrap, invalid inputs, timeout/partial response/terminal preservation; no UFO writes",
     "test_rogue_transfer.py: original208byte offline encoder and248byte envelope, all truncated record sizes, wrongtype/flags/overlap/unchanged-output rejection",
-    "test_rogue_render_memory.py:11allocation failures/cache modes/sharedPC3heap full byte walks and teardown; parenttest_rogue_heapmap.py unchanged dependency"
+    "test_rogue_render_memory.py:11allocation failures/cache modes/sharedPC3heap full byte walks and teardown; parenttest_rogue_heapmap.py unchanged dependency",
+    "Actual-owner clear: independent scalar208byte oracle, FW-peer pixel/guard writes, UFO complete/no pixels, guard corruption, bounded timeout/no replay, USC/PDS tamper, pre-zero output, INIT mismatch; ASan/UBSan. Actual clear caller ARM64 compile with original barriers."
   ],
   "scratch_gpu_va": "0x65c0000000 matching GENERAL_BRN_65273, single PCE",
   "hardware_baseline": {
-    "source": "integration/gpu-priority-verified-first-boot.txt (see gpu-priority-hardware-result.json); kernel4d516b7 initialboot offset529234761",
-    "observed": "FWready, SYNC0/2/3, GP native context UPDATE/postSYNC and TA/3D PRIORITY0/1 plus each postSYNC all result0. This confirms scheduler/client execution, no GPU pixels."
+    "source": "Parent report exact kernel157e6f267a938e97be1a13b729ce00555ea0c5f0/devicee910d23 initialboot after offset530222591",
+    "observed": "FWready; baselineSYNC0/2/3, GP UPDATE/postSYNC, TA/3D PRIORITY0/1/postSYNC, independent TQ_3D PRIORITY0/1/postSYNC3 all result0. No clear task in this baseline. After-Hello white regression reported; cause unresolved, not attributed to GPU."
   },
   "integration_implemented": [
-    "GPU.cpp owns render after Memory/Runtime; prepareCold before Runtime.prepare, pin before Runtime.start, reset render before runtime/base; five additional owned allocations total143360bytes",
+    "GPU owns render after Memory/Runtime;11 cold allocations290816bytes before Runtime.prepare, pin before FW start, quarantine after exposure; full FW stage790528bytes.",
     "Allocation failure preserves FW/SYNC baseline; no new required boot arguments or user command ABI",
     "Baseline SYNC0/2/3 mask0xd -> GP native NULL/UPDATE then GP SYNC (mask1). NEW: TA/3D standalone PRIORITY0 then1, post-SYNC perDM; mask0xc only if all succeed. TA/3D bare UPDATE stays disabled at boot.",
     "Runtime.renderUpdate accepts typed owner/private layout; shared commandBusy and bridgeLock; timeout/corrupt poisons common transport. Terminal observation retained before poison; one three-line UART report under bridgeLock, no replay.",
     "GP success requires exact own UFO + KCCB read + client read; post-UPDATE GP SYNC additionally required. Fixed10000 polls*10us unchanged; failures retain/quarantine all DMA resources.",
-    "NEW TQ context, parent cold HeapMap and original208byte offline encoder; live TQ validation remains PRIORITY-only until register/EOT semantics established."
+    "After all FW/GP/render/TQ-priority gates, one restricted TQ clear:208byte task+40byte header then48byte UPDATE. Verified requires1024 zero pixel words,61440 unchanged A5 guard bytes and postSYNC3 result0; UFO alone insufficient."
   ],
   "limits": [
-    "New TQ context/3heap candidate not yet hardware validated; no drawn pixels, no raw tasks/shaders dispatched. Prior GP and TA/3D priorities are confirmed on4d516b7.",
-    "Original208byte positions established, but all200byte register identities and complete task validation not established. Offline encoder is not a live submission permission.",
-    "USC EOT source/ISA still blocked. Parent/Popper PixelEvent PDS helper remains public offline only, not called with fake USC address or temporary count. Actual clear-to-owned-buffer execution not implemented.",
-    "PDS/USC VAs match unchanged native INIT and matching DDK BRN65273 selection. Cold mapping tested; global GPU execution register readback and actual BIF translation unverified.",
-    "No larger deadline, no task replay, no fake acceleration property."
+    "Clear candidate has no SDK-link or physical result. Host simulated firmware is not GPU execution. Hardware157e baseline proves FW/context scheduling, not BIF pixels.",
+    "Only native format0x22, linear32x32, pitch32pixels, zero colour, source_count0, oneRT/sample, no blending. No arbitrary format/size/address/program/packet API. No guessed modern format-name equivalence.",
+    "PDS/USC bases match unchanged native INIT and matching DDK BRN65273; independent global execution-base register readback and GPU BIF execution unverified.",
+    "One attempt; no timeout increase/replay. Resources pinned until reboot, no live remap/safe teardown. Output mismatch8 distinct from transport timeout/corruption.",
+    "No display/compositor bridge, Apple GPU userspace ABI translation or acceleration property; no screen drawing claimed.",
+    "Combined157e after-Hello white regression unresolved; no draw task present in that baseline."
   ],
   "gp_source_contract": {
     "context": "rgxkicksync.c134-146: FWCommonContextAllocate DM_GP priority0, NULL context state and framework; separate common context, memory context supplied",
@@ -74,23 +77,29 @@
     "context flags/priority/run/wait nodes; bounded owned trace KCCB executed/trace pointer/power/HWR/faults; INIT started timestamp, FW idle time and RGX_CR_TIMER0x160 before/after",
     "Only terminal timeout/corrupt observation, no pointer-following or FWCCB consumption; driver logs three lines once. Main and render are normal-NC; acquire barrier before observation. Concurrent fields are observational, not an atomic firmware freeze."
   ],
-  "tests_result": "37 tests PASS in9.350s (includes parent HeapMap/PixelEvent tests); actual full ARM64 CPP compile, ASan/UBSan host, TQ200 roundtrips and partial response bounds, all11 allocation/prepare failure points, every-byte3heap translation, original208 encoder record bounds/tail/alias/reject-unchanged; not full XNU link or hardware.",
+  "tests_result": "39 tests PASS in11.092s: ASan/UBSan actual-owner clear with independent208byte oracle, complete-UFO/no-pixel and guard mismatch failures, USC/PDS tamper/pre-zero/INITbase pre-kick rejection,10000poll timeout/no replay. Existing transport/lifetime/CCB/heap/EOT/PDS tests retained. Full production CPP and original owner.clear ARM64 freestanding target compiles pass; no SDK link or physical clear result.",
   "hardware_previous": {
     "source": "user40907a9; integration/wlan-native-scan-first-boot.txt baseline528176210 lines167-173",
     "observed": "cold context prepared1, FWready, SYNC DM0/2/3 result0; DM2 standalone client UPDATE/KICK timeout4. No previous consumption/UFO/FWCCB snapshot, so exact hardware cause undetermined."
   },
   "new_candidate": {
-    "physical_status": "UNTESTED; prior TA/3D success is recorded separately",
-    "context": "Independent TQ_3D FWCOMMONCONTEXT, DM3, own4ISP suspend state, disabled16byte RF, ownCCB/control, contextidfirst+3; rgxtransfer.c132-200/359-459; no reuse of render embedded or GP context",
-    "live_validation": "After all existing SYNC/GP/render-priority gates, TQ priority1->0->1 and postSYNC3; exact private TQ context pointer sent in KICK. Fixed10000x10us, same producer/power mutex and timeout poison/quarantine. No raw task accepted by live API.",
-    "heaps": "Parent HeapMap helper integrated cold: sharedPC with independentPD/PT/data for GENERAL65c0000000, PDSa800000000 RW, USCba00000000 RO. INIT unchanged and matches DDK rgxfwutils.c2505-2506. No executable bytes installed; GPU global execution-base register readback remains unverified and no task uses new VAs yet.",
-    "ownership": "11 low4GiB disjoint owned allocations,290816bytes render total,790528bytes full FW stage. GENERAL/PDS/USC data64KiB each normal-NC; tables cache-cleaned cold. Allocation failure1..11 transactional; source Memory outlives all owners; hardware-visible memory pinned to reboot.",
-    "payload": "TransferABI.h is offline bounded encoder only: 200 copied register bytes, u32producer_word_c8 from record+0x14, u32flags at0xcc; source record type2, hint0..7. Native task envelope40+208=248bytes. No invented register names, no hardware submission from this encoder."
+    "physical_status": "UNTESTED clear; previous independent TQ priority baseline157e hardware confirmed separately.",
+    "context": "Independent native TQ_3D DM3, own4ISP/RF/CCB; TASK then UPDATE/UFO, no GP NULL reuse.",
+    "heaps": "GENERAL65c0000000 RW/PDSa800000000 RW/USCba00000000 RO, sharedPC+separatePD/PT/data. All16pages per64KiB checked against exact owned PA before generation; INIT bases checked before submission.",
+    "programs": "Source-generated singleRT12byte USC EOT temps0 and typed PDS event with actual GENERAL PBE address/shared words; copied cold to NC heaps. No opaque binary asset embedded.",
+    "ownership": "11 allocations290816bytes retained. CPU initializes entire65536byte output+guard to A5 cold, never CPU-clears to expected zero. All poison bytes checked pre-kick.",
+    "validation": "Re-derive exact task and programs from owned mappings; compare generated and installed bytes. SAME Runtime.commandBusy/GPU.bridgeLock as SYNC/power/stop. NC mappings/acquire barriers before readback, no cached output clean masquerading as invalidate.",
+    "completion": "KCCBread/clientread+write/UFO within10000*10us, then volatile1024u32 zero reads and61440 guard-byte checks. PostSYNC3 required for Verified. Timeout/corrupt poison shared transport, retain bounded terminal observation.",
+    "failure": "No replay. Result8 means completed transport but output/guard mismatch, not success. Pending FW request/full/busy/offline fail, no fake completion."
   },
   "hardware_history": [
     {
       "source": "integration/wlan-bsd-registration-first-boot.txt, initialboot offset528674225, lines170-174; user kernel7fe9",
       "observed": "Baseline KCCB SYNC DM0/2/3 result0; native GP context UPDATE/KICK DM0 result0 and post-UPDATE SYNC0 result0 on hardware. This is firmware context/UFO execution, no BIF pixel/render proof."
+    },
+    {
+      "source": "integration/gpu-priority-verified-first-boot.txt (see gpu-priority-hardware-result.json); kernel4d516b7 initialboot offset529234761",
+      "observed": "FWready, SYNC0/2/3, GP native context UPDATE/postSYNC and TA/3D PRIORITY0/1 plus each postSYNC all result0. This confirms scheduler/client execution, no GPU pixels."
     }
   ],
   "transfer_binary_provenance": {
@@ -99,5 +108,144 @@
     "core": "ev_2643ceb73416945ad436c7b84268c9896d78dc0314e525becf17a84eb2b4ae98,129f88",
     "constructor": "ev_4af8a0b3258a7927efc7d7362d6183c9a08b4607dfef2bcd8cfdfa7d37ed6191: PDS Code and Data heap tocontext5518, USC Code heap tocontext5510; actual heap VAs obtained from kernel",
     "scope": "Saved original REA evidence plus isolated privateCLI copied snapshot; no binary patches/execution. Definitions encode observed copies, not a claim of original source recovery."
+  },
+  "restricted_clear_provenance": {
+    "method": "REA isolated CLI saved evidence from original board libsrv_um.so; reconstruction of observed producer semantics, not recovered upstream source. Comparison DDK1.6 client header/Mesa KMD stream is not target ABI.",
+    "binary_sha256": "d32a4a224d06302d9bec0a66cbb7d17dec663d3985f1c8592f5bb77353ca1d4b",
+    "base_rule": "AnalysisVA=ELFVA+0x100000. ProducerP=exported recordR+0x10; rawpayload=P+0x10=R+0x20. Submit copies200 register bytes then c8/cc tail:208 total.",
+    "profile": "Native format0x22; flagsFILL1/source_count0/destflags0/layout0 linear/32x32/pitch32pixels/samples1/singleRT/fullclip0..31/zerocolour/frame0/hint0.",
+    "register_ledger": [
+      [
+        "0x04/u32",
+        "0x1ffc",
+        "12bfb4->135818: one output region -> min2,nextPow2=2,slots10; ((-8<<10)^fffffffc)."
+      ],
+      [
+        "0x18/u32,0x1c/u32",
+        "0x20002,0",
+        "12bfb4:2x2 sixteen-pixel tiles, origin0."
+      ],
+      [
+        "0x20/u32",
+        "0xa3000",
+        "135818:4 tiles in flight, native0xa0000 control."
+      ],
+      [
+        "0x28/u32,0x2c/u32,0x30/u32",
+        "0x202,32,0",
+        "129f88: ((1*64+480)&0x7e00)|ceil(5/4); data5words padded32, native code reservation5words. PDS actual code2words."
+      ],
+      [
+        "0x60/u64",
+        "3",
+        "129f88 zero-source P+0x70."
+      ],
+      [
+        "0x80/u64",
+        "0x0200003c68800000",
+        "13e2e4:layout2<<56 | ((stride32-1)&1fffe)<<33 |swizzle1<<23|2<<26|3<<29, origin0."
+      ],
+      [
+        "0x88/u64",
+        "0x0000001f0000001f",
+        "13e2e4:clip xmax31<<32|ymax31."
+      ],
+      [
+        "remaining208 bytes",
+        "0",
+        "Queue zero scratch; no fragment/background/source, zero clear via1306c8; unusedRTs/frame0/flags0. Only this profile."
+      ],
+      [
+        "PDS shared0/1",
+        "GENERALva>>2 low32, (GENERALva>>34)|bit19",
+        "13e2e4 with general-format flags8; bounded real owned address, USCoffset0/temps0."
+      ]
+    ],
+    "format_records": {
+      "general": "Table195b60/28byte: fmt22 row20000000080000002000040008080808000000000000000000000000, flags8/bpp32/4x8bits. Native15 is64bpp and was rejected.",
+      "pbe": "Table19a270/12byte: fmt22 row220000000100000001020300, count1/PBEtype0/flags0/swizzle0/1/2/3.",
+      "channel": "Fmt22 record197cc0:20040104000000000100000001000000010000000100000082000201020204000808080800000000. Core postpatch skipped for destflags0."
+    },
+    "evidence": {
+      "rea-native-transfer-fill-core.json": {
+        "evidence_id": "ev_2643ceb73416945ad436c7b84268c9896d78dc0314e525becf17a84eb2b4ae98",
+        "sha256": "7e0b1c720dec36b5d85b887d0a31c2b21c7ba247a0ac74df7b82d8baf729c9fe"
+      },
+      "rea-native-transfer-submit-symbol.json": {
+        "evidence_id": "ev_81c5443c85f9a0d64be59e6b70c814460dac832358891dd322fedb68604cda18",
+        "sha256": "6593e995532d885e0f7f482d35ad8c19b155aa7ad76142fd0895de19bacb0cda"
+      },
+      "rea-fill-map-13e2e4.json": {
+        "evidence_id": "ev_a8b70e873cd2536b115a348ff0bc99a5802b311ce09299c99f127d837cf5ef13",
+        "sha256": "f603e24e8e0a57383441b32184fea2f29465612527efc1e6d5a2e8a14ddad803"
+      },
+      "rea-fill-map-12bfb4.json": {
+        "evidence_id": "ev_911334d07d74f42cec857ff9cc8729d3ec4f9cb2a673191e08b4303b58b8e660",
+        "sha256": "8bd389ed72a6c7afeea9a7a94ac5438261fed83446ae8cf17f6ae77c62b6405b"
+      },
+      "rea-fill-map-1306c8.json": {
+        "evidence_id": "ev_a5ef8d74135844c95dcd9b546504ad58255a362e2895f28c85dd76c16b55d375",
+        "sha256": "929a067c29aa5431360d91b76737c13b52aed8cdd6cc3b2cd36edb9280eed8cf"
+      },
+      "rea-fill-reg-135818.json": {
+        "evidence_id": "ev_e334566c42c618fdfef22ce59bd67b66d4786a76ab22f1ef6799720c796ac8ca",
+        "sha256": "5051df8e34badfed7787f8368da7fb7ba1645b5416523cc734a791588a97aab2"
+      },
+      "rea-fill-reg-12d758.json": {
+        "evidence_id": "ev_af450998c7d9e50a72685ddebf60de279bcd5cd4e11defd5cf5d5792f82aa551",
+        "sha256": "d74acafddbb9ff4ce2901b4391fdb5528f8dea39fea6950beb1cc447b9e845c9"
+      },
+      "rea-fill-reg-13f4c0.json": {
+        "evidence_id": "ev_d7297415046f04d4ed2dbd48ffc6c03ad573e6aba952c51131a29a7bcbf04e29",
+        "sha256": "742b9ead6ccaa6f0465809ec1a4c7b42b44ceef4b337fb11b3d39a056b8a8eb7"
+      },
+      "rea-fill-profile-195b60.json": {
+        "evidence_id": "ev_6ec1da1a57d4722b76346a6167b28bfe3e3132c4f9054614f2af3bc730d5ffff",
+        "sha256": "6e5bee8926e942533c544dd2f652edd86b89a7332fd1d2f992d11b3b1cbc4d79"
+      },
+      "rea-fill-profile-197cc0.json": {
+        "evidence_id": "ev_b878b6e378b775d15acfb8e8fe48683965c76748725f708f04e211d8384acd24",
+        "sha256": "797a7cef71d7a573c1db2c4e5ed07d88521915eef3e6c9a511b3857e35010a2e"
+      },
+      "rea-fill-tables-19a270.json": {
+        "evidence_id": "ev_f258fe4bda451891d9b1241508a07d5a5d67e7511dc3edc5e722a030529fef4f",
+        "sha256": "649b07b7ae37d7949c0b3682988fa751c63937f8ff090da64d002b24448e7e20"
+      },
+      "rea-fill-reg-13ee50.json": {
+        "evidence_id": "ev_cd8e50ea82c9dde9700c69edfff74468a93d3545d1cd27cda1371d0fc3c121dc",
+        "sha256": "d35320357367a0b793fdac939ab0ea053594d175ade3629c4e9af4cfd4be9773"
+      },
+      "rea-fill-reg-13ed50.json": {
+        "evidence_id": "ev_4749fa0b0bb2501c28830dcd82e7db5ce53658ba303fa3845c324ff9c398bdb0",
+        "sha256": "f10ec040189385a846edc22173f055d752b39274d0e98623963b994255aad2cf"
+      },
+      "rea-fill-reg-13ee34.json": {
+        "evidence_id": "ev_71a7d16da3b0957dc5ff3230530f624c743020b583913f128b237f07fb5df1ac",
+        "sha256": "2a43948274c42766fcf0fb007625aecdc5b43f1610d06bebc22a314b20805576"
+      },
+      "rea-fill-tables-13edfc.json": {
+        "evidence_id": "ev_f775623fa4b491fa3059224945d16edcafb1b1a1f68630bcd1014f8885676283",
+        "sha256": "824a9b948c44466d7dd42120ccf82a7200ca90cce82e0ff36fbe395c6d8806c0"
+      },
+      "rea-fill-tables-13ee18.json": {
+        "evidence_id": "ev_781fda8792262475b7ae742c7165fe52821a936debbb01f3673788a819e387c4",
+        "sha256": "077f460d7f8efe5c9b7b48aa54772b06af5fb09b796b1c0502b9a08a13176fc4"
+      },
+      "rea-fill-tables-13d720.json": {
+        "evidence_id": "ev_422f0caf648a5803d0162438cb29241ea7113cfcaeff39622dba2839b530a709",
+        "sha256": "8e2660055b7ccb613aed8542d4e71039c7024c827c7a6edbb131cead9273e944"
+      }
+    },
+    "dependencies": {
+      "A04BR3RogueHeapMap.h": "Parent cold sharedPC helper unchanged, no liveTLB/MMIO.",
+      "A04BR3RoguePixelEvent.h": "Popper typed generator: native5word data/5word code reservation, padded32data, actual2word code. wifi-worker/gpu-eot/FRANKLIN-PARENT-PIXEL-EVENT-HANDOFF.txt",
+      "A04BR3RogueEOT.h": "Popper singleRT12byte generator temps0/shared0/1; source15060c corroborated ev_17c477aab487149048079cfed5e93d567ea540da7ecba3aadfa54b7e44dcdac1. wifi-worker/gpu-eot/FRANKLIN-PARENT-USC-SINGLE-HANDOFF.txt"
+    },
+    "licensing": "TransferFill/owner/encoder original BSD-2-Clause-Patent reconstruction, no opaque binary bytes copied. Existing exact DDK declarations retain original dual MIT/GPL notice/MIT selection. Source-generated EOT/PDS retain their own credit/license unchanged.",
+    "dependency_sha256": {
+      "A04BR3RogueHeapMap.h": "cb13590afed21729c82b9acee5002625fb8af0b12ff02d5bbe6e547b18219968",
+      "A04BR3RoguePixelEvent.h": "bd53d44a5ae9684123cce5d05bbd44617bfbd6f7254a3968990c0d712b5b3658",
+      "A04BR3RogueEOT.h": "c22a5f6fa6df942f98eacf133aa51088c174b11c3b7ebed6419921d34e8f31ac"
+    }
   }
 }

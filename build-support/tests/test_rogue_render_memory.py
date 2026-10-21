@@ -22,14 +22,14 @@ static int kernel_task;
 enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,
  kIOMapWriteCombineCache=0x400,kIOReturnSuccess=0};
 class IOBufferMemoryDescriptor;
-static IOBufferMemoryDescriptor *retained[256];static unsigned live,total,attempts,cleaned;
+static IOBufferMemoryDescriptor *retained[512];static unsigned live,total,attempts,cleaned;
 static unsigned failAllocation,failPrepare;
 class IOBufferMemoryDescriptor {
 public:void *cpu;uint64_t bytes,pa;unsigned id,slot;
  static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(int,unsigned options,uint64_t size,uint64_t mask){
   assert(mask==0xfffff000);unsigned at=++attempts;if(at==failAllocation)return nullptr;
   assert(((options&kIOMapWriteCombineCache)!=0)==(size==65536));
-  auto b=new IOBufferMemoryDescriptor;b->id=total++;b->slot=at;assert(b->id<256);
+  auto b=new IOBufferMemoryDescriptor;b->id=total++;b->slot=at;assert(b->id<512);
   b->bytes=size;b->pa=0x90000000ULL+b->id*0x20000;
   assert(!posix_memalign(&b->cpu,4096,size));memset(b->cpu,0xcc,size);retained[b->id]=b;++live;return b;
  }
@@ -58,6 +58,73 @@ public:A04BR3RogueMemory(){memset(sourceTable,0,sizeof(sourceTable));
             (p/'A04BR3RogueRenderMemory.h').write_text(text)
             (p/'test.cpp').write_text(r'''
 #include "A04BR3RogueRenderMemory.h"
+alignas(4096) static unsigned char mainbuf[A04_RGX_MAIN_BYTES],configbuf[A04_RGX_CONFIG_BYTES];
+static a04_rgx_fw_runtime kernel;
+static const a04_rgx_render_resources *view;
+static unsigned mode,kicks,waits,published;
+static uint32_t nextClient,sequence;
+static void acquire(void *){}
+static void publish(void *){++published;}
+static void kick(void *,uint32_t reg,uint32_t value){
+ assert(reg==0xb00 && value==0x10 && published==2);++kicks;
+ auto &cmd=kernel.kcommands[kernel.kctl->ui32ReadOffset];
+ assert(cmd.eCmdType==RGXFWIF_KCCB_CMD_KICK && cmd.eDM==3);
+ assert(cmd.uCmdData.sCmdKickData.psContext.ui32Addr==a04_rgx_render_fw_address(view,view->tq));
+ nextClient=cmd.uCmdData.sCmdKickData.ui32CWoffUpdate;assert(nextClient==296);
+ auto header=(RGXFWIF_CCB_CMD_HEADER *)view->commands[3];
+ assert(header->eCmdType==0x2abc80cc && header->ui32CmdSize==208);
+ /* Independent scalar oracle of native producer bytes; remaining words zero. */
+ unsigned char expected[208]={};
+ const unsigned offsets[]={4,0x18,0x20,0x28,0x2c,0x60,0x80,0x88};
+ const uint64_t values[]={0x1ffc,0x20002,0xa3000,0x202,0x20,3,0x0200003c68800000ULL,0x0000001f0000001fULL};
+ for(unsigned i=0;i<8;i++)for(unsigned b=0;b<(i<5?4U:8U);b++)expected[offsets[i]+b]=(unsigned char)(values[i]>>(8*b));
+ assert(!memcmp(view->commands[3]+40,expected,208));
+ auto update=(RGXFWIF_CCB_CMD_HEADER *)(view->commands[3]+248);
+ assert(update->eCmdType==A04_RGX_CLIENT_UPDATE && update->ui32CmdSize==8);
+ auto ufo=(RGXFWIF_UFO *)(view->commands[3]+288);
+ assert(ufo->puiAddrUFO.ui32Addr==view->sync_addr.ui32Addr && *view->sync==0);
+ sequence=ufo->ui32Value;assert(sequence==1 && view->control[3]->ui32WriteOffset==0);
+}
+static void wait(void *,uint32_t us){
+ assert(us==10);++waits;if(mode==3)return;
+ /* Simulated FW only: CPU driver must never manufacture these pixels. */
+ if(mode!=1)memset(view->bif.data.cpu,0,4096);
+ if(mode==2)((unsigned char *)view->bif.data.cpu)[4096]=0;
+ *view->sync=sequence;
+ view->control[3]->ui32ReadOffset=view->control[3]->ui32WriteOffset=view->control[3]->ui32DepOffset=nextClient;
+ kernel.kctl->ui32ReadOffset=kernel.kctl->ui32WriteOffset;
+}
+static a04_rgx_command_io io={nullptr,publish,acquire,kick,wait};
+static void clearCases(){
+ for(mode=0;mode<8;mode++){
+  attempts=0;kicks=waits=published=0;failAllocation=failPrepare=0;
+  A04BR3RogueMemory source;A04BR3RogueRenderMemory owner;
+  assert(owner.prepareCold(source,10,0xa800000000ULL,0xba00000000ULL));
+  assert(owner.clearPrepared());view=owner.view();owner.pinForFirmware();
+  assert(!a04_rgx_fw_runtime_init(&kernel,mainbuf,0xa0000000,configbuf,0xa1000000,26000000));
+  kernel.init->bFirmwareStarted=IMG_TRUE;auto &c=kernel.init->sRGXCompChecks;
+  c.bUpdated=IMG_TRUE;c.ui32DDKVersion=0x1000b;c.ui32DDKBuild=5425693;c.ui32FWProcessorVersion=1;
+  c.sFWBVNC.ui64BVNC=c.sHWBVNC.ui64BVNC=0x001600280036001eULL;
+  auto pds=(unsigned char *)owner.executionHeap(0)->data.cpu;
+  assert(a04_rgx_fw_u32(pds+8)==(uint32_t)(view->bif.va>>2));
+  assert(a04_rgx_fw_u32(pds+12)==((uint32_t)(view->bif.va>>34)|(1U<<19)));
+  if(mode==4)((unsigned char *)owner.executionHeap(1)->data.cpu)[0]^=1;
+  if(mode==5)pds[0]^=1;
+  if(mode==6)memset(view->bif.data.cpu,0,4096); /* pre-zero is rejected */
+  if(mode==7)kernel.init->sPDSExecBase.uiAddr+=4096;
+  int result=owner.clear(kernel,io);
+  if(mode==0)assert(result==A04_CCB_OK && owner.clearedWords()==1024 && !owner.guardErrors());
+  if(mode==1)assert(result==8 && !owner.clearedWords() && !owner.guardErrors());
+  if(mode==2)assert(result==8 && owner.clearedWords()==1024 && owner.guardErrors()==1);
+  if(mode==3){assert(result==A04_CCB_TIMEOUT && waits==10000 && owner.observation().valid);
+   auto &o=owner.observation();assert(o.kread==0 && o.kwrite==1 && o.cread==0 && !o.ufo && o.cexpected==296);}
+  if(mode<4){assert(kicks==1);assert(owner.clear(kernel,io)==A04_CCB_OFFLINE && kicks==1);}
+  else assert(result==A04_CCB_INPUT && !kicks && !published && !waits);
+  owner.reset();assert(live==11);
+  /* Test-only recovery after simulated power-off. Production quarantines. */
+  for(unsigned n=0;n<total;n++)if(retained[n])retained[n]->release();assert(!live);
+ }
+}
 int main(){
  for(unsigned failure=1;failure<=5;failure++) {
   attempts=0;failAllocation=failure;A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
@@ -111,6 +178,7 @@ int main(){
  {A04BR3RogueMemory source;A04BR3RogueRenderMemory r;
   assert(r.prepareCold(source,10));r.pinForFirmware();r.reset();assert(live==5);}
  for(unsigned n=0;n<total;n++)if(retained[n])retained[n]->release();assert(!live && cleaned);
+ clearCases();
 }
 ''')
             subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-Wno-misleading-indentation',
@@ -142,6 +210,7 @@ class A04BR3RogueMemory {public:bool stagedMemory(void **,uint64_t *);};
 bool prepare(A04BR3RogueRenderMemory *r,A04BR3RogueMemory *s){return r->prepareCold(*s,1);}
 void reset(A04BR3RogueRenderMemory *r){r->reset();}
 int submit(A04BR3RogueRenderMemory *r,a04_rgx_fw_runtime *k,a04_rgx_command_io *io){return r->update(*k,*io,3);}
+int clear(A04BR3RogueRenderMemory *r,a04_rgx_fw_runtime *k,a04_rgx_command_io *io){return r->clear(*k,*io);}
 ''')
             subprocess.run(['clang++','--target=arm64-apple-darwin','-std=c++14','-ffreestanding',
                 '-fno-exceptions','-fno-rtti','-O2','-Wall','-Wextra','-Werror','-Wframe-larger-than=8192',

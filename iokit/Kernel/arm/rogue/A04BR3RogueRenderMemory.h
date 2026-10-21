@@ -14,6 +14,8 @@ class A04BR3RogueRenderMemory {
     a04_rgx_render_resources resources={};a04_rgx_render_ring_state state={};
     a04_rgx_render_observation terminal={};
     uint32_t *mips=nullptr;bool mapped=false,pinned=false;
+    a04_rgx_tq_clear clearImage={};bool clearReady=false,clearAttempted=false;
+    unsigned clearWords=0,clearGuardErrors=0;
     bool extraHeaps=false; a04_rgx_bif heapViews[2]={};
     static unsigned size(unsigned i) {return (i==0 || i==4 || i==7 || i==10)?65536:4096;}
     A04BR3RogueRenderMemory(const A04BR3RogueRenderMemory &)=delete;
@@ -36,7 +38,8 @@ public:
             if (owned[i] && !pinned) {if(prepared[i])owned[i]->complete();owned[i]->release();}
             owned[i]=nullptr;prepared[i]=false;
         }
-        mapped=false;mips=nullptr;extraHeaps=false;a04_rgx_fw_zero(heapViews,sizeof(heapViews));a04_rgx_fw_zero(&resources,sizeof(resources));
+        mapped=false;mips=nullptr;clearReady=clearAttempted=false;clearWords=clearGuardErrors=0;
+        a04_rgx_fw_zero(&clearImage,sizeof(clearImage));extraHeaps=false;a04_rgx_fw_zero(heapViews,sizeof(heapViews));a04_rgx_fw_zero(&resources,sizeof(resources));
         a04_rgx_fw_zero(&state,sizeof(state));a04_rgx_fw_zero(&terminal,sizeof(terminal));
     }
     bool prepareCold(A04BR3RogueMemory &source,uint32_t first_context_id,uint64_t pdsVA=0,uint64_t uscVA=0) {
@@ -80,6 +83,14 @@ public:
             if(i==4 || i==7 || i==10)a04_rgx_fw_zero(buffers[i].cpu,buffers[i].bytes);
             else flush_dcache((vm_offset_t)buffers[i].cpu,buffers[i].bytes,0);
         }
+        if(extraHeaps && !a04_rgx_tq_clear_build(&clearImage,&resources,&heapViews[0],&heapViews[1])) {
+            auto pds=(unsigned char *)heapViews[0].data.cpu;auto usc=(unsigned char *)heapViews[1].data.cpu;
+            for(unsigned n=0;n<sizeof(clearImage.pixel.image);n++)pds[n]=clearImage.pixel.image[n];
+            for(unsigned n=0;n<sizeof(clearImage.usc);n++)usc[n]=clearImage.usc[n];
+            auto output=(unsigned char *)resources.bif.data.cpu;
+            for(unsigned n=0;n<resources.bif.data.bytes;n++)output[n]=A04_RGX_CLEAR_POISON;
+            clearReady=true;
+        }
         flush_dcache((vm_offset_t)table,32768,0);
         __asm__ volatile("dsb sy":::"memory");
         return true;
@@ -90,6 +101,35 @@ public:
     int update(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io,unsigned dm,uint32_t priority=0xffffffffU,bool transfer=false) {
         if(!mapped || !pinned)return A04_CCB_OFFLINE;
         return a04_rgx_render_submit_update(&resources,&state,&kernel,&io,dm,&terminal,priority,transfer);
+    }
+    bool clearPrepared()const{return mapped && clearReady;}
+    unsigned clearedWords()const{return clearWords;}
+    unsigned guardErrors()const{return clearGuardErrors;}
+    int clear(a04_rgx_fw_runtime &kernel,const a04_rgx_command_io &io) {
+        if(!mapped || !pinned || !clearReady || clearAttempted)return A04_CCB_OFFLINE;
+        if(!io.acquire || !kernel.init || kernel.init->sPDSExecBase.uiAddr!=heapViews[0].va ||
+           kernel.init->sUSCExecBase.uiAddr!=heapViews[1].va)return A04_CCB_INPUT;
+        a04_rgx_tq_clear expected;
+        if(a04_rgx_tq_clear_build(&expected,&resources,&heapViews[0],&heapViews[1]))return A04_CCB_INPUT;
+        for(unsigned n=0;n<sizeof(expected.payload);n++)
+            if(((const unsigned char *)&expected.payload)[n]!=((const unsigned char *)&clearImage.payload)[n])return A04_CCB_INPUT;
+        for(unsigned n=0;n<sizeof(expected.pixel.image);n++)if(expected.pixel.image[n]!=clearImage.pixel.image[n])return A04_CCB_INPUT;
+        for(unsigned n=0;n<sizeof(expected.usc);n++)if(expected.usc[n]!=clearImage.usc[n])return A04_CCB_INPUT;
+        auto pds=(volatile unsigned char *)heapViews[0].data.cpu;
+        auto usc=(volatile unsigned char *)heapViews[1].data.cpu;
+        auto output=(volatile unsigned char *)resources.bif.data.cpu;
+        io.acquire(io.context);
+        for(unsigned n=0;n<sizeof(clearImage.pixel.image);n++)if(pds[n]!=clearImage.pixel.image[n])return A04_CCB_INPUT;
+        for(unsigned n=0;n<sizeof(clearImage.usc);n++)if(usc[n]!=clearImage.usc[n])return A04_CCB_INPUT;
+        for(unsigned n=0;n<resources.bif.data.bytes;n++)if(output[n]!=A04_RGX_CLEAR_POISON)return A04_CCB_INPUT;
+        clearAttempted=true;
+        int error=a04_rgx_render_submit_update(&resources,&state,&kernel,&io,3,&terminal,0xffffffffU,true,&clearImage);
+        if(error)return error;
+        io.acquire(io.context);
+        auto words=(volatile uint32_t *)resources.bif.data.cpu;
+        for(unsigned n=0;n<A04_RGX_CLEAR_BYTES/4;n++)if(words[n]==0)++clearWords;
+        for(unsigned n=A04_RGX_CLEAR_BYTES;n<resources.bif.data.bytes;n++)if(output[n]!=A04_RGX_CLEAR_POISON)++clearGuardErrors;
+        return clearWords==A04_RGX_CLEAR_BYTES/4 && !clearGuardErrors?A04_CCB_OK:8; /* output mismatch */
     }
     const a04_rgx_bif *executionHeap(unsigned n)const {return mapped && extraHeaps && n<2?&heapViews[n]:nullptr;}
     unsigned ownedBytes()const {return mapped?143360U+(extraHeaps?147456U:0U):0U;}
