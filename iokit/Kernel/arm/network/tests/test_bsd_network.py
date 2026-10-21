@@ -16,6 +16,12 @@ STUB=r'''
 #include <map>
 #include <string>
 #include <stdarg.h>
+#include <vector>
+using UInt32=uint32_t;using SInt32=int32_t;
+static SInt32 OSAddAtomic(SInt32 n,volatile SInt32 *p){return __atomic_fetch_add(p,n,__ATOMIC_SEQ_CST);}
+static bool OSCompareAndSwap(UInt32 old,UInt32 next,volatile SInt32 *p){SInt32 expected=(SInt32)old;return __atomic_compare_exchange_n(p,&expected,(SInt32)next,false,__ATOMIC_SEQ_CST,__ATOMIC_SEQ_CST);}
+using clock_sec_t=int64_t;using clock_usec_t=int32_t;
+static inline void clock_get_system_microtime(clock_sec_t *s,clock_usec_t *u){*s=2;*u=234567;}
 using errno_t=int;using user_addr_t=uint64_t;using protocol_family_t=uint32_t;
 struct Packet {bool freed;};using mbuf_t=Packet *;
 struct IF;using ifnet_t=IF *;
@@ -39,7 +45,12 @@ static int IOLockSleep(IOLock *,void *,int);
 static void IOLockWakeup(IOLock *p,void *,bool){assert(p->held);wakes++;}
 static void *IOMallocZero(unsigned n){if(failMemory)return nullptr;allocations++;return calloc(1,n);}
 static void IOFree(void *p,unsigned){assert(p&&allocations>0);allocations--;free(p);}
-static void IOLog(const char *,...) {}
+static std::vector<std::string> traceRows;
+static void IOLog(const char *format,...){
+ if(strncmp(format,"A04BR3 native ioctl:",19))return;
+ char text[128];va_list args;va_start(args,format);vsnprintf(text,sizeof(text),format,args);va_end(args);
+ traceRows.push_back(text);
+}
 class IOService {
 public:
  bool parent=true,heap=false;IOService *provider=nullptr;unsigned refs=1;std::map<std::string,std::string> text;std::map<std::string,uint64_t> number;
@@ -95,6 +106,17 @@ static int ifnet_set_mtu(ifnet_t,unsigned n){assert(n==1500);return failMtu;}
 static int ifnet_set_flags(ifnet_t p,unsigned v,unsigned mask){p->flags=(p->flags&~mask)|(v&mask);return failFlags;}
 static int ifnet_attach(ifnet_t p,const sockaddr_dl *a){assert(a->sdl_alen==6 && a->sdl_family==AF_LINK && !memcmp(LLADDR(a),p->init.uniqueid,6));if(failAttach)return failAttach;p->attached=true;return 0;}
 static int ifnet_release(ifnet_t p){assert(p->refs);p->refs--;if(p->refs)return 0;if(p==current)current=nullptr;if(p==pending)pending=nullptr;delete p;releaseCount++;return 0;}
+struct kern_event_msg {uint32_t total_size,vendor_code,kev_class,kev_subclass,id,event_code,event_data[1];};
+static int baseEvents,scanEvents,eventError;static ifnet_t lastBaseIfnet;
+static int ifnet_event(ifnet_t p,kern_event_msg *e){
+ assert(p && p==current && !heldLocks);lastBaseIfnet=p;baseEvents++;
+ if(e->event_code==10){
+  assert(e->total_size==40 && e->vendor_code==1 && e->kev_class==6 && e->kev_subclass==1);
+  assert(!memcmp((uint8_t *)e+24,"en7\0\0\0\0\0\0\0\0\0\0\0\0\0",16));
+  assert(p->refs>=2);scanEvents++;
+ }
+ return eventError;
+}
 static int ifnet_reference(ifnet_t p){assert(p&&p->refs);p->refs++;return 0;}
 static const char *ifnet_name(ifnet_t p){return p->init.name;}
 static unsigned ifnet_unit(ifnet_t p){return p->init.unit;}
@@ -123,13 +145,31 @@ static int set(void *,uint32_t type,uint32_t value,const void *p,uint32_t n){
 }
 static int admin(void *,unsigned enabled){adminCalls++;lastAdmin=enabled;return adminError;}
 static int tx(void *,void *p){txCalls++;if(transmitError)return transmitError;mbuf_freem((mbuf_t)p);return 0;}
-static void reset(){assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={1,1,0,0,0,0,{0,2,3,4,5,6},0};
+static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={1,1,0,0,0,0,{0,2,3,4,5,6},0};
  stateError=nativeError=adminError=transmitError=failAlloc=failMtu=failFlags=failAttach=failDetach=failMemory=copyInError=copyOutError=0;
  credentialRoot=1;credentialChecks=setCalls=setError=0;adminCalls=0;lastAdmin=99;registrations=releaseCount=packetFrees=txCalls=nativeCalls=copyIns=copyOuts=0;backendOutput=4;inlineDetach=false;}
 static a04_apple80211_req64 req(){a04_apple80211_req64 r={};strcpy(r.name,"en7");r.type=12;r.value=7;r.length=8;r.user_data=(uintptr_t)userBuffer;return r;}
 static void ready(){realState.firmware_running=realState.control_ready=realState.datapath_ready=realState.associated=1;}
 static void cleanup(A04BR3BSDNetwork &n,IOService &s){assert(n.detach()==0);if(pending)completeDetach();assert(n.isDetached() && n.finish()==0 && s.refs==1);assert(!lockCount && !current);}
+static void traceCases(){
+ reset();a04_network_backend b={nullptr,state,get,admin,tx,set};A04BR3BSDNetwork bridge;IOService service;
+ ready();assert(!bridge.attach(&service,&b,7));
+ for(unsigned i=0;i<64;i++){
+  auto r=req();unsigned cmd=i%2?A04_APPLE80211_SET64:A04_APPLE80211_GET64;
+  credentialRoot=i!=1;
+  int result=current->init.ioctl(current,cmd,&r);assert(result==(i==1?EPERM:0));
+  if(i<32){
+   char expected[128];snprintf(expected,sizeof(expected),"A04BR3 native ioctl: type=12 value=7 length=8 errno=%d\n",i==1?EPERM:0);
+   assert(traceRows.size()==i+1 && traceRows.back()==expected);
+  }else assert(traceRows.size()==32);
+ }
+ assert(a04_native_trace_count==32);credentialRoot=1;cleanup(bridge,service);
+ // A detach/reattach does not renew the boot-wide quota.
+ assert(!bridge.attach(&service,&b,7));auto r=req();assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&r));assert(traceRows.size()==32);
+ cleanup(bridge,service);
+}
 int main(){
+ traceCases();
  a04_network_backend b={nullptr,state,get,admin,tx,set};
  // No invented identity or parent; no ifnet allocated for absent hardware.
  for(unsigned fault=0;fault<5;fault++){
@@ -260,7 +300,7 @@ class BSDNetwork(unittest.TestCase):
     def test_actual_bridge(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'stub.h').write_text(STUB)
-            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h']:
+            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h']:
                 p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('#include "stub.h"\n')
             (root/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text())
             (root/'case.cpp').write_text(CASE);exe=root/'case'

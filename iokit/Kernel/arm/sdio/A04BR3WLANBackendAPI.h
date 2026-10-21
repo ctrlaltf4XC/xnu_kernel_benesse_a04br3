@@ -5,7 +5,9 @@
  */
 #ifndef A04BR3_WLAN_BACKEND_API_H
 #define A04BR3_WLAN_BACKEND_API_H
+#define A04_WLAN_SCAN_MODE_API 1
 #include "A04BR3WLANData.h"
+#include "A04BR3WLANScanSnapshot.h"
 #include "../network/A04BR3NetworkBackend.h"
 #ifdef __cplusplus
 class IOService;
@@ -35,9 +37,22 @@ int a04br3_wlan_acquire_backend(a04_wlan_service,struct a04_network_backend *);
 void a04br3_wlan_release_backend(a04_wlan_service);
 int a04br3_wlan_bind_native(a04_wlan_service,const struct a04_wlan_native_client *);
 int a04br3_wlan_unbind_native(a04_wlan_service);
+/* Legacy entry remains explicit PASSIVE. Mode API is one-shot unfiltered2G4:
+ * 0 PASSIVE /1 ACTIVE, canonical native normal active1 maps to mode1.
+ * Cached native policy3 is NOT an RF mode and MUST NOT call this API.
+ * EBUSY if another scan/join is pending; no cancellation/retry/coalescing. */
 int a04br3_wlan_scan(a04_wlan_service);
+/* acceptedGeneration is required. Success writes accepted nonzero generation
+ * under the SAME transport lock as start; every error writes0. No subsequent
+ * info read is needed to identify the accepted scan. */
+int a04br3_wlan_scan_mode(a04_wlan_service,unsigned mode,unsigned *acceptedGeneration);
 int a04br3_wlan_scan_count(a04_wlan_service,unsigned *count,unsigned *complete);
 int a04br3_wlan_scan_copy(a04_wlan_service,unsigned index,struct a04_wlan_ap *);
+/* Snapshot info is atomic under SDIO lock. A new successful scan increments
+ * generation; copy_record rejects a pending or changed generation with EAGAIN.
+ * Caller owns record storage (about3KiB); allocate it off the kernel stack. */
+int a04br3_wlan_scan_snapshot(a04_wlan_service,struct a04_wlan_scan_info *);
+int a04br3_wlan_scan_copy_record(a04_wlan_service,unsigned generation,unsigned index,struct a04_wlan_scan_record *);
 /* Explicit native association request for an ACTUALLY observed result. */
 int a04br3_wlan_join(a04_wlan_service,unsigned index,unsigned secured);
 int a04br3_wlan_eapol(a04_wlan_service,const void *ethernet,unsigned bytes);

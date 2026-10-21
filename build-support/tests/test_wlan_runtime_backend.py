@@ -94,7 +94,7 @@ int main(void){
  interrupt_status=0x40;wasr_value=0x10000;
  assert(a04_wlan_runtime_step(&r,&h,3,0,0)==A04_WLAN_STATUS && r.events==1 && r.cap_received);
  assert(h.status==0x40 && h.wasr==0x10000 && !h.wasr_error && wasr_reads==1 && r.phase==12);
- assert(h.last_cid==0x1a && h.last_cmd_type==0xa0 && h.last_cmd_set==1 && h.last_cmd_bytes==122);
+ assert(h.last_cid==3 && h.last_cmd_type==0xa0 && h.last_cmd_set==1 && h.last_cmd_bytes==502);
  assert(a04_wlan_runtime_step(&r,&h,4,0,0)==A04_WLAN_STATE && wasr_reads==1 && c.txs==tx);
  /* events1 need not be NIC success: one unrelated event, then assert. */
  init_live(&c,&io,&t,&h,&r);assert(!a04_wlan_runtime_calibration(&r,nv,512));assert(!a04_wlan_live_begin(&r,&h,1));
@@ -111,7 +111,7 @@ int main(void){
         self.run_c(LIVE+r'''
 int main(void){
  struct card c;struct a04_sdio_io io;struct a04_sdio_transport t;struct a04_wlan_host h;struct a04_wlan_runtime r;
- const unsigned expected_cid[]={0x24,0x0f,0x0f,0x48,2,0x11,0x0a,0x1a};
+ const unsigned expected_cid[]={0x24,0x0f,0x0f,0x48,2,0x11,0x0a,3};
  const unsigned expected_phase[]={4,7,8,10,11,11,11,12};
  for(unsigned failure=0;failure<8;failure++){
   uint8_t nv[512];board(nv);init_live(&c,&io,&t,&h,&r);assert(!a04_wlan_runtime_calibration(&r,nv,512));assert(!a04_wlan_live_begin(&r,&h,1));
@@ -138,7 +138,7 @@ int main(void){
  assert(a04_wlan_runtime_step(&r,&h,101,0,0)==A04_WLAN_PENDING && !r.configured);
  capability(&r,0);assert(!a04_wlan_runtime_step(&r,&h,102,0,0));
  assert(r.configured && r.mac_valid && r.mac_source==1 && r.calibration_sent && !r.station.sta_active && !r.security.authorized);
- const unsigned ids[]={0x80,0x24,0x0f,0x0f,0x48,2,0x11,0x0a,0x1a};assert(captures==9);
+ const unsigned ids[]={0x80,0x24,0x0f,0x0f,0x48,2,0x11,0x0a,3};assert(captures==9);
  for(unsigned i=0;i<captures;i++)assert(captured[i][4]==ids[i] && captured[i][6]==(i?1:0));
  assert(!memcmp(captured[1]+8,nv+12,40) && !memcmp(captured[4]+8,nv,512));
  /* Compare wire domain entries to primary default domain, including zero padding. */
@@ -146,9 +146,9 @@ int main(void){
  assert(a04_wmt_le16(captured[2]+10)==1 && !a04_wmt_le16(captured[3]+10));
  for(unsigned i=0;i<5;i++)assert(!memcmp(captured[3]+12+8*i,normal[i],5));
  assert(!memcmp(captured[6]+12,r.mac,6));
- uint8_t *scan=captured[8]+8;assert(!scan[2] && !scan[5] && scan[44]==4 && scan[45]==13);
- assert(a04_wmt_le16(scan+6)==50 && a04_wmt_le16(scan+8)==100 && a04_wmt_le16(scan+10)==3000);
- for(unsigned i=0;i<13;i++)assert(scan[48+2*i]==1 && scan[49+2*i]==i+1);
+ uint8_t *scan=captured[8]+8;assert(!scan[2] && !scan[5] && scan[382]==4 && scan[383]==13);
+ assert(scan[7]==3 && !a04_wmt_le16(scan+370) && !a04_wmt_le16(scan+372) && !a04_wmt_le16(scan+374));
+ for(unsigned i=0;i<13;i++)assert(scan[384+2*i]==1 && scan[385+2*i]==i+1);
  assert(!r.station.local.active_channels && r.station.scan.pending);
  /* Actual FIFO beacon and actual scan-done are separate observations. */
  uint8_t beacon[128]={0};unsigned off=40;beacon[off]=0x80;memset(beacon+off+4,255,6);

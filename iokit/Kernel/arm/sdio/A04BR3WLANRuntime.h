@@ -5,11 +5,15 @@
 #ifndef A04BR3_WLAN_RUNTIME_H
 #define A04BR3_WLAN_RUNTIME_H
 #include "A04BR3WLANData.h"
+#include "A04BR3WLANScanSnapshot.h"
 enum { A04_WLAN_DELIVERY_NONE=0,A04_WLAN_DELIVERY_ETHERNET=1,A04_WLAN_DELIVERY_EAPOL=2 };
 struct a04_wlan_runtime {
  struct a04_wlan_station station;struct a04_wlan_security security;
  struct a04_wlan_data_state data;struct a04_wlan_slots slots;
  struct a04_wlan_ap scan[16];unsigned scan_count,scan_dropped;
+ struct a04_wlan_scan_extra scan_extra[16];
+ unsigned scan_generation,scan_mode,sleepy_events,sleepy_state;uint64_t scan_started_us,scan_completed_us;
+ struct {unsigned id,sequence,bytes;} event_trace[16];unsigned event_trace_count;
  uint8_t calibration[512],mac[6];unsigned calibration_valid,calibration_sent,mac_valid,mac_source;
  unsigned begun,cap_pending,cap_sequence,configured,admin,scan_sequence,port;
  unsigned phase,cap_received,last_event_id,last_event_sequence,last_event_bytes;
@@ -62,15 +66,39 @@ static inline void a04_wlan_default_domain(uint8_t p[56],unsigned passive){
  unsigned count=passive?6:5;
  for(unsigned i=0;i<count;i++)for(unsigned j=0;j<5;j++)p[4+8*i+j]=passive?limited[i][j]:normal[i][j];
 }
+/* rlmDomainGetChnlList + legal normal default domain, not passive-scan table.
+ * Explicit active request only after original dynamic board/NIC/config state.
+ * Unsupported country/table/custom map never acquires active permission. */
+static inline int a04_wlan_runtime_scan_mode(struct a04_wlan_runtime *r,struct a04_wlan_host *h,uint64_t now,unsigned mode){
+ if(mode>A04_WLAN_SCAN_ACTIVE)return A04_WLAN_ARGUMENT;
+ if(!r || !h || !h->ready || !h->runtime || h->failed || !r->configured || !r->admin || r->failed ||
+  !r->cap_received || !r->mac_valid || !r->calibration_valid || !r->calibration_sent ||
+  r->station.scan.pending || r->station.selected || now>UINT64_MAX-30000000 || r->scan_generation==UINT32_MAX)return A04_WLAN_STATE;
+ if(r->calibration[10] || r->calibration[11] || r->calibration[202] || r->calibration[203])return A04_WLAN_UNSUPPORTED;
+ for(unsigned i=0;i<36;i++)if(r->calibration[204+i])return A04_WLAN_UNSUPPORTED;
+ uint8_t domain[56];a04_wlan_default_domain(domain,0);unsigned allowed=0;
+ for(unsigned i=0;i<6;i++){const uint8_t *entry=domain+4+8*i;if(entry[1]!=1)continue;
+  for(unsigned j=0;j<entry[4];j++){unsigned ch=entry[3]+j*entry[2];if(ch>=1 && ch<=13)allowed|=1u<<ch;}}
+ allowed&=r->station.local.permitted_channels;
+ if(!allowed)return A04_WLAN_UNSUPPORTED;
+ uint8_t channels[26];unsigned count=0;for(unsigned ch=1;ch<=13;ch++)if(allowed&(1u<<ch)){channels[2*count]=1;channels[2*count+1]=(uint8_t)ch;count++;}
+ struct a04_wlan_scan request;a04_wlan_zero((uint8_t *)&request,sizeof(request));
+ request.sequence=(r->scan_sequence+1)&255;request.bss=r->station.local.bss;
+ request.active=mode; /* exact native scan enum0 passive,1 active */
+ /* Native scnSendScanReqV2 leaves probe count0 (FW default), AIS timings0. */
+ request.channel_type=4;request.wire_version=3;request.channels=channels;request.channel_count=count;
+ unsigned previous=r->station.local.active_channels;
+ /* This temporary permission is scoped to this explicit legal request, not
+  * an init-time blanket promotion or a change to join/active-scan policy. */
+ if(mode==A04_WLAN_SCAN_ACTIVE)r->station.local.active_channels=allowed;
+ r->phase=12;int e=a04_wlan_station_scan(&r->station,h,&request,now,now+30000000);
+ r->station.local.active_channels=previous;
+ if(!e){r->scan_sequence=request.sequence;r->scan_mode=mode;r->scan_count=r->scan_dropped=0;
+  r->scan_generation++;r->scan_started_us=now;r->scan_completed_us=0;}
+ return e;
+}
 static inline int a04_wlan_runtime_scan(struct a04_wlan_runtime *r,struct a04_wlan_host *h,uint64_t now){
- if(!r || !r->configured || !r->admin || r->failed || r->station.scan.pending || r->station.selected || now>UINT64_MAX-5000000)return A04_WLAN_STATE;
- uint8_t channels[26];for(unsigned i=0;i<13;i++){channels[2*i]=1;channels[2*i+1]=(uint8_t)(i+1);}
- struct a04_wlan_scan request; a04_wlan_zero((uint8_t *)&request,sizeof(request));
- request.sequence=(++r->scan_sequence)&255;request.bss=r->station.local.bss;
- request.min_dwell=50;request.dwell=100;request.timeout=3000;request.channel_type=4;
- request.channels=channels;request.channel_count=13; /* passive0, probe0 */
- r->phase=12;int e=a04_wlan_station_scan(&r->station,h,&request,now,now+5000000);
- if(!e){r->scan_count=r->scan_dropped=0;}return e;
+ return a04_wlan_runtime_scan_mode(r,h,now,A04_WLAN_SCAN_PASSIVE);
 }
 static inline int a04_wlan_runtime_configure(struct a04_wlan_runtime *r,struct a04_wlan_host *h,uint64_t now){
  if(!r || !r->mac_valid || !r->calibration_valid || r->configured || r->failed)return A04_WLAN_STATE;
@@ -96,7 +124,11 @@ static inline int a04_wlan_runtime_configure(struct a04_wlan_runtime *r,struct a
 }
 static inline int a04_wlan_runtime_event(struct a04_wlan_runtime *r,struct a04_wlan_host *h,
  const struct a04_wlan_event *v,uint64_t now){
+ if(r->event_trace_count<16){unsigned i=r->event_trace_count++;r->event_trace[i].id=v->id;r->event_trace[i].sequence=v->sequence;r->event_trace[i].bytes=v->length;}
  r->events++;r->last_event_id=v->id;r->last_event_sequence=v->sequence;r->last_event_bytes=v->length;
+ /* EVENT_ID_SLEEPY_INFO7 is not SCAN_DONE0d. Never release ownership or
+  * finish a scan from a power notification. */
+ if(v->id==7){if(v->length!=4)return A04_WLAN_FORMAT;r->sleepy_events++;r->sleepy_state=v->payload[0];return 0;}
  if(r->cap_pending && v->id==1){
   if(v->sequence!=r->cap_sequence || v->length!=116)return a04_wlan_runtime_fail(r,h,A04_WLAN_SEQUENCE);
   r->phase=3;r->cap_received=1;r->firmware_product=a04_wmt_le16(v->payload);r->firmware_version=a04_wmt_le16(v->payload+2);
@@ -111,7 +143,7 @@ static inline int a04_wlan_runtime_event(struct a04_wlan_runtime *r,struct a04_w
  if(v->id==0x24 && r->security.ptk_pending)return a04_wlan_security_key_event(&r->security,&r->station,v,now);
  unsigned was_scan=r->station.scan.pending;
  int e=a04_wlan_station_event(&r->station,h,v,now);
- if(!e && was_scan && r->station.scan.complete && !r->station.selected)r->station.deadline_us=0;
+ if(!e && was_scan && r->station.scan.complete && !r->station.selected){r->station.deadline_us=0;r->scan_completed_us=now;}
  if(e==A04_WLAN_UNSUPPORTED){r->unknown++;return 0;}
  return e;
 }
@@ -132,7 +164,15 @@ static inline int a04_wlan_runtime_step(struct a04_wlan_runtime *r,struct a04_wl
  }else if(r->station.scan.pending){
   struct a04_wlan_ap observation;e=a04_wlan_scan_observe(&r->station,h->rx,h->rx_length,&observation);
   if(!e){unsigned slot=0;for(;slot<r->scan_count;slot++)if(a04_wlan_equal(r->scan[slot].mac,observation.mac,6))break;
-   if(slot<16){r->scan[slot]=observation;if(slot==r->scan_count)r->scan_count++;}else r->scan_dropped++;
+   if(slot<16){
+    struct a04_wlan_rx_frame frame;e=a04_wlan_rx_frame_parse(h->rx,h->rx_length,&frame);
+    if(!e && frame.length>=36 && frame.length-36<=A04_WLAN_SCAN_MAX_IE){
+     r->scan[slot]=observation;struct a04_wlan_scan_extra *extra=&r->scan_extra[slot];
+     extra->observed_us=now;extra->generation=r->scan_generation;extra->from_probe=frame.data[0]==0x50;extra->ie_bytes=frame.length-36;
+     for(unsigned i=0;i<extra->ie_bytes;i++)extra->ies[i]=frame.data[36+i];
+     if(slot==r->scan_count)r->scan_count++;
+    }else if(!e)e=A04_WLAN_FORMAT;
+   }else r->scan_dropped++;
   }else if(e==A04_WLAN_UNSUPPORTED || e==A04_WLAN_FORMAT || e==A04_WLAN_STATUS)e=0;
  }else if(r->station.sta_active && (a04_wmt_le16(h->rx+2)>>13)==2){
   struct a04_wlan_ethernet packet;e=a04_wlan_ethernet_rx(&r->station,&r->security,h->rx,h->rx_length,&packet);

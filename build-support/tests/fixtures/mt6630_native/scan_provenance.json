@@ -1,0 +1,20 @@
+{
+  "repository": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3.git",
+  "revision": "eb47f42e1f84fe5716ef239620725f82718a620a",
+  "license": "GPL-2.0-only; original MediaTek2016 notice retained; COPYING adjacent",
+  "fixture": "scan_native_fixture.h",
+  "purpose": "Executable original V2 layout and event enum comparison without sibling checkout",
+  "adaptations": "Copied exact struct declarations; constant prerequisites from source defines; enum prefix closed with test-only alias; no firmware included",
+  "source_sha256": {
+    "include/nic_cmd_event.h": "1df8708ffe64ad5a71b773551c8e646c9e1853e49573affabf340c90a361e4ff",
+    "include/wlan_oid.h": "85f2bbb54b1832fa30234a98ff72a6bcbcfa6b396181abd45a5e6d6f5de846fa",
+    "include/config.h": "1310756aa18791a2d4d5303b12fbc5cfb849571faa9ff08a12940e1b4561dd91",
+    "include/mgmt/cnm_scan.h": "c2e8e926fa6b339073c13ebd2f676407fc0e226ca3b0aecc57b86c5bec3ccec9",
+    "include/mgmt/ais_fsm.h": "383755f0b5b07df2b741406196c3a0d25c1433135801570b94dac4586c81da7c",
+    "mgmt/scan_fsm.c": "0c14c8502d1c64b4ac5efa32cccd42db08e918d475149e3d503e9f9481b0bb2b",
+    "mgmt/ais_fsm.c": "6a4e7ba14cfa7e66c34d5ae65092458df299606d793111970410300ce05cb518",
+    "nic/nic_rx.c": "7cac401d4348e08847b7c0a15beba8ec27559e7ce732c5a6876a7041d2e0ea3c",
+    "include/mgmt/scan.h": "7ecf5dcf1112d1365ca04aab36f13328d525aead3a2547b8e4ddca39ba144494"
+  },
+  "fixture_sha256": "0c7d75fa378053118ded4700c8f1a0beae8ba00a1b134ec6f84fae4e57ae3140"
+}

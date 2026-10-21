@@ -23,6 +23,7 @@ public:
     SInt32 performCommand(IONetworkController *,unsigned long,void *,void *) APPLE_KEXT_OVERRIDE;
     int shutdownBackend();
     int refreshBackend(){ return network.refresh(); }
+    int scanCompleted(){ return network.scanCompleted(); }
     int receive(mbuf_t m){ return network.input(m); }
 };
 class IO80211Controller : public IOEthernetController {
@@ -44,6 +45,7 @@ public:
     IOReturn disable(IONetworkInterface *) APPLE_KEXT_OVERRIDE;
     int shutdownBackend();
     int refreshBackend();
+    int scanCompleted();
     int receive(mbuf_t); /* consumes real DLIL-formatted mbuf, including failures */
 };
 /* Preserve the integration C++ type name while publishing the real controller

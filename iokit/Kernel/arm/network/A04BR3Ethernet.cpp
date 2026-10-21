@@ -146,6 +146,11 @@ int IO80211Controller::refreshBackend()
     auto *child=OSDynamicCast(IO80211Interface,interface);
     return child?child->refreshBackend():ENXIO;
 }
+int IO80211Controller::scanCompleted()
+{
+    auto *child=OSDynamicCast(IO80211Interface,interface);
+    return child?child->scanCompleted():ENXIO;
+}
 int IO80211Controller::receive(mbuf_t m)
 {
     auto *child=OSDynamicCast(IO80211Interface,interface);

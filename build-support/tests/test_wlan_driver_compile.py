@@ -65,7 +65,7 @@ struct boot_args {uint64_t physBase,memSize,topOfKernelData;};
     (p/'kern/clock.h').write_text('#pragma once\nusing clock_sec_t=unsigned;using clock_usec_t=unsigned;\nextern void clock_get_system_microtime(clock_sec_t *,clock_usec_t *);\nextern void clock_interval_to_deadline(unsigned,unsigned,uint64_t *);\n')
     (p/'net/init.h').write_text('extern int net_init_add(void (*)(void));\n')
     (p/'sys/kpi_mbuf.h').write_text('#include <stddef.h>\ntypedef void *mbuf_t;\nextern size_t mbuf_pkthdr_len(mbuf_t);extern int mbuf_copydata(mbuf_t,size_t,size_t,void *);extern void mbuf_freem(mbuf_t);\n')
-    (p/'sys/errno.h').write_text('enum {EINVAL=22,ENXIO=6,ENOMEM=12,EALREADY=37,EBUSY=16,EOPNOTSUPP=45,ENOBUFS=55,EMSGSIZE=40,ENETDOWN=50,EIO=5,ENOENT=2};\n')
+    (p/'sys/errno.h').write_text('enum {EAGAIN=35,EINVAL=22,ENXIO=6,ENOMEM=12,EALREADY=37,EBUSY=16,EOPNOTSUPP=45,ENOBUFS=55,EMSGSIZE=40,ENETDOWN=50,EIO=5,ENOENT=2};\n')
 
 class WLANDriverCompile(unittest.TestCase):
     def test_arm64_cpp_including_wmt_and_wlan_owned_boot_path(self):

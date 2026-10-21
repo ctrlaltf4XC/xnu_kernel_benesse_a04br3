@@ -171,7 +171,7 @@ static inline int a04_wlan_scan_observe(const struct a04_wlan_station *s,const u
 static inline int a04_wlan_station_scan(struct a04_wlan_station *s,struct a04_wlan_host *h,
  const struct a04_wlan_scan *request,uint64_t now,uint64_t deadline){
  if(!s || !s->configured || s->failed || !request || request->bss!=s->local.bss ||
-  s->selected || deadline<=now || deadline-now>10000000)return A04_WLAN_STATE;
+  s->selected || deadline<=now || deadline-now>30000000)return A04_WLAN_STATE;
  if(request->channel_type!=4 || !request->channels || !request->channel_count || request->channel_count>14)return A04_WLAN_ARGUMENT;
  for(unsigned i=0;i<request->channel_count;i++){
   unsigned band=request->channels[2*i],ch=request->channels[2*i+1];

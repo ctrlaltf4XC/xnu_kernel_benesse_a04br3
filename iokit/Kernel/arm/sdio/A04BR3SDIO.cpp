@@ -151,6 +151,7 @@ class A04BR3SDIO : public IOService {
   setProperty("WLANScanComplete",r->station.scan.complete?kOSBooleanTrue:kOSBooleanFalse);
   setProperty("WLANScanResults",r->scan_count,32);
   if(r->failed){live->count=0;IOLog("A04BR3 WLAN: runtime stopped error=%d phase=%u events=%u cap=%u event=0x%x/%u/%u lastCMD=0x%x type=0x%x set=%u seq=%u bytes=%u WHISR=0x%x WASR=0x%x wasr-error=%d; no retry\n",r->failed,r->phase,r->events,r->cap_received,r->last_event_id,r->last_event_sequence,r->last_event_bytes,wlanHost->last_cid,wlanHost->last_cmd_type,wlanHost->last_cmd_set,wlanHost->last_cmd_sequence,wlanHost->last_cmd_bytes,wlanHost->status,wlanHost->wasr,wlanHost->wasr_error);}
+  if(r->failed)for(unsigned i=0;i<r->event_trace_count;i++)IOLog("A04BR3 WLAN: event-trace[%u] id=0x%x seq=%u bytes=%u\n",i,r->event_trace[i].id,r->event_trace[i].sequence,r->event_trace[i].bytes);
   else if(!liveStopping)scheduleLive((r->cap_pending || r->station.scan.pending || r->station.selected || r->data.pending || live->count)?20:50);
   IOLockUnlock(transportLock);
   if(ready)client.ready(client.context,this);
@@ -220,16 +221,54 @@ public:
   if(live){live->runtime.security.authorized=0;live->count=0;}
   IOLockUnlock(transportLock);if(c.owner)c.owner->release();return 0;
  }
- int requestScan(){IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:a04_wlan_runtime_scan(&live->runtime,wlanHost,liveNow());if(!e){scanAnnounced=false;scheduleLive();}IOLockUnlock(transportLock);return e?EIO:0;}
+ int requestScanMode(unsigned mode,unsigned *acceptedGeneration){
+  if(!acceptedGeneration)return EINVAL;
+  *acceptedGeneration=0;
+  if(mode>A04_WLAN_SCAN_ACTIVE)return EINVAL;
+  IOLockLock(transportLock);int e=0;
+  if(!live || liveStopping || live->runtime.failed)e=ENXIO;
+  else if(live->runtime.station.scan.pending || live->runtime.station.selected)e=EBUSY;
+  else{int wire=a04_wlan_runtime_scan_mode(&live->runtime,wlanHost,liveNow(),mode);
+   if(wire && wlanHost->failed)a04_wlan_runtime_fail(&live->runtime,wlanHost,wire);
+   e=wire?(wire==A04_WLAN_UNSUPPORTED?EOPNOTSUPP:(wire==A04_WLAN_ARGUMENT?EINVAL:EIO)):0;
+   if(!e){*acceptedGeneration=live->runtime.scan_generation;scanAnnounced=false;scheduleLive();}}
+  IOLockUnlock(transportLock);return e;
+ }
+ int requestScan(){unsigned generation=0;return requestScanMode(A04_WLAN_SCAN_PASSIVE,&generation);}
  int scanCount(unsigned *count,unsigned *complete){if(!count || !complete)return EINVAL;IOLockLock(transportLock);int e=live?0:ENXIO;if(!e){*count=live->runtime.scan_count;*complete=live->runtime.station.scan.complete;}IOLockUnlock(transportLock);return e;}
  int scanCopy(unsigned i,struct a04_wlan_ap *out){if(!out)return EINVAL;IOLockLock(transportLock);int e=(!live || i>=live->runtime.scan_count)?ENOENT:0;if(!e)*out=live->runtime.scan[i];IOLockUnlock(transportLock);return e;}
+ int scanSnapshot(struct a04_wlan_scan_info *out){
+  if(!out)return EINVAL;
+  IOLockLock(transportLock);int e=(!live || liveStopping)?ENXIO:0;
+  if(!e){const struct a04_wlan_runtime *r=&live->runtime;bzero(out,sizeof(*out));
+   out->generation=r->scan_generation;out->count=r->scan_count;out->complete=r->station.scan.complete;out->dropped=r->scan_dropped;
+   out->started_us=r->scan_started_us;out->completed_us=r->scan_completed_us;out->error=r->failed;out->mode=r->scan_mode;}
+  IOLockUnlock(transportLock);return e;
+ }
+ int scanCopyRecord(unsigned generation,unsigned index,struct a04_wlan_scan_record *out){
+  if(!out || !generation)return EINVAL;
+  IOLockLock(transportLock);int e=0;
+  if(!live || liveStopping || live->runtime.failed)e=ENXIO;
+  else{const struct a04_wlan_runtime *r=&live->runtime;
+   if(generation!=r->scan_generation || !r->station.scan.complete || r->station.scan.pending)e=EAGAIN;
+   else if(index>=r->scan_count)e=ENOENT;
+   else{const struct a04_wlan_scan_extra *x=&r->scan_extra[index];
+    if(x->generation!=generation || x->ie_bytes>A04_WLAN_SCAN_MAX_IE)e=EIO;
+    else{bzero(out,sizeof(*out));out->ap=r->scan[index];out->observation.observed_us=x->observed_us;
+     out->observation.generation=x->generation;out->observation.from_probe=x->from_probe;out->observation.ie_bytes=x->ie_bytes;
+     bcopy(x->ies,out->observation.ies,x->ie_bytes);}
+   }
+  }IOLockUnlock(transportLock);return e;
+ }
  int requestJoin(unsigned index,unsigned secure){
   IOLockLock(transportLock);int e=EINVAL;
   if(live && !liveStopping && index<live->runtime.scan_count && secure<=1 && (!secure || (nativeClient.verify && nativeClient.packet))){
    struct a04_wlan_runtime *r=&live->runtime;
    /* Explicit native request, source null-country domain only: channels1..13. */
+   uint64_t now=liveNow();const struct a04_wlan_scan_extra *observed=&r->scan_extra[index];
+   if(observed->generation!=r->scan_generation || now<observed->observed_us || now-observed->observed_us>=10000000){IOLockUnlock(transportLock);return EAGAIN;}
    r->station.local.active_channels=r->station.local.permitted_channels;
-   uint64_t now=liveNow();e=a04_wlan_station_select(&r->station,wlanHost,&r->scan[index],secure,1,1000,now,now+1500000);
+   e=a04_wlan_station_select(&r->station,wlanHost,&r->scan[index],secure,1,1000,now,now+1500000);
    if(!e)scheduleLive();
   }IOLockUnlock(transportLock);return e?EIO:0;
  }
@@ -596,3 +635,11 @@ extern "C" int a04br3_wlan_join(IOService *p,unsigned i,unsigned secure){auto s=
 extern "C" int a04br3_wlan_eapol(IOService *p,const void *b,unsigned n){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->sendEAPOL(b,n):ENXIO;}
 extern "C" int a04br3_wlan_install_key(IOService *p,unsigned pair,unsigned id,const uint8_t k[16],const uint8_t r[8]){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->installKey(pair,id,k,r):ENXIO;}
 extern "C" int a04br3_wlan_authorize(IOService *p,int result){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->authorize(result):ENXIO;}
+
+extern "C" int a04br3_wlan_scan_snapshot(IOService *p,struct a04_wlan_scan_info *out){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->scanSnapshot(out):ENXIO;}
+extern "C" int a04br3_wlan_scan_copy_record(IOService *p,unsigned generation,unsigned index,struct a04_wlan_scan_record *out){auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->scanCopyRecord(generation,index,out):ENXIO;}
+
+extern "C" int a04br3_wlan_scan_mode(IOService *p,unsigned mode,unsigned *acceptedGeneration){
+ if(!acceptedGeneration)return EINVAL;
+ *acceptedGeneration=0;auto s=OSDynamicCast(A04BR3SDIO,p);return s?s->requestScanMode(mode,acceptedGeneration):ENXIO;
+}

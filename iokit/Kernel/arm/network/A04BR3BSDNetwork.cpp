@@ -7,6 +7,8 @@
 #include "A04BR3Apple80211IOCTL.h"
 #include "A04BR3Apple80211SET.h"
 #include <sys/kauth.h>
+#include <libkern/OSAtomic.h>
+#include <sys/kern_event.h>
 #include <kern/thread.h>
 #include <sys/systm.h>
 #include <sys/sockio.h>
@@ -16,6 +18,20 @@
 #include <net/if_types.h>
 #include <net/if_ether.h>
 #include <net/ethernet.h>
+
+/* Boot-wide budget, shared by every interface/reattach. Metadata only. Use
+ * real public OSAtomic operations so concurrent ioctl callers cannot exceed32.
+ * Counter saturates: no wrap or recurring logs even under a request storm. */
+static volatile SInt32 a04_native_trace_count=0;
+static void a04_native_trace(uint32_t type,uint32_t value,uint32_t length,int error)
+{
+    for(;;){
+        SInt32 used=OSAddAtomic(0,&a04_native_trace_count);
+        if(used>=32)return;
+        if(OSCompareAndSwap((UInt32)used,(UInt32)used+1,&a04_native_trace_count))break;
+    }
+    IOLog("A04BR3 native ioctl: type=%u value=%u length=%u errno=%d\n",type,value,length,error);
+}
 
 static int a04_network_copyin(void *,uint64_t address,void *out,unsigned bytes)
 {return copyin((user_addr_t)address,out,bytes);}
@@ -117,6 +133,26 @@ int A04BR3BSDNetwork::input(mbuf_t packet)
     return error;
 }
 
+int A04BR3BSDNetwork::scanCompleted()
+{
+    if(!gate)return ENXIO;
+    IOLockLock(gate);a04_network_state state={};int error=snapshot(&state);
+    if(!error && (!interface || !a04_network_control_ready(&state)))error=ENETDOWN;
+    ifnet_t ifp=interface;
+    if(!error)error=ifnet_reference(ifp);
+    struct { struct kern_event_msg header; uint8_t tail[12]; } event={};
+    static_assert(offsetof(struct kern_event_msg,event_data)==24,"native event header");
+    static_assert(sizeof(event)==40,"native event payload is exact ifname16");
+    event.header.total_size=sizeof(event);event.header.vendor_code=1;
+    event.header.kev_class=6;event.header.kev_subclass=1;event.header.event_code=10;
+    memcpy((uint8_t *)&event+offsetof(struct kern_event_msg,event_data),name,16);
+    IOLockUnlock(gate);
+    if(error)return error;
+    // Like input(), no bridge gate over DLIL callbacks. Independent reference
+    // survives asynchronous detach. Exact native filter, not KEV_DL code10.
+    error=ifnet_event(ifp,&event.header);ifnet_release(ifp);return error;
+}
+
 int A04BR3BSDNetwork::refresh()
 {
     if(!gate)return ENXIO;
@@ -147,10 +183,16 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);if(!s || !s->gate)return ENXIO;
     if(command!=A04_APPLE80211_GET64 && command!=A04_APPLE80211_SET64 && command!=SIOCSIFFLAGS)return EOPNOTSUPP;
+    const bool native=command!=SIOCSIFFLAGS;
+    const auto *request=native?(const a04_apple80211_req64 *)data:nullptr;
+    const uint32_t traceType=request?request->type:0,traceValue=request?request->value:0;
+    const uint32_t traceLength=request?request->length:0;
     /* Default BSD ioctl fallback does not supply a write authorization check
      * for this native command. Check the active calling thread, not cached
      * provider credentials or an untrusted field in the native request. */
-    if(command==A04_APPLE80211_SET64 && !kauth_cred_issuser(kauth_cred_get()))return EPERM;
+    if(command==A04_APPLE80211_SET64 && !kauth_cred_issuser(kauth_cred_get())){
+        a04_native_trace(traceType,traceValue,traceLength,EPERM);return EPERM;
+    }
     IOLockLock(s->gate);a04_network_state state={};int error=s->snapshot(&state);
     if(command==SIOCSIFFLAGS){
         bool enabled=(ifnet_flags(ifp)&IFF_UP)!=0;
@@ -189,7 +231,9 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
             }
         }
     }
-    IOLockUnlock(s->gate);return error;
+    IOLockUnlock(s->gate);
+    if(native)a04_native_trace(traceType,traceValue,traceLength,error);
+    return error;
 }
 
 int A04BR3BSDNetwork::dispatch(unsigned long command,void *data)

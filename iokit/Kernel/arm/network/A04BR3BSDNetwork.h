@@ -29,6 +29,7 @@ public:
     ifnet_t ifnet() const { return interface; } /* borrowed; owner serialized */
     int dispatch(unsigned long command,void *data);
     int refresh();
+    int scanCompleted(); /* caller must have observed real matching FW completion */
     int detach();
     bool isDetached();
     int finish(); /* releases retained registry/gate only after detach callback */
