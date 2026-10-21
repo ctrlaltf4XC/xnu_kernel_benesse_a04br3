@@ -9,17 +9,21 @@ class PowerWrapper(unittest.TestCase):
 #include <errno.h>
 #include <assert.h>
 #include <stdio.h>
-static unsigned pwrap,init=1,status,reads,delays,stuck;
+static unsigned pwrap,init=1,status,reads,delays,stuck,held;
+/* Single-thread power-sequence fixture. Actual cross-client lock definitions
+ * and 3-client contention are executed by test_pwrap_shared.py. */
+void a04br3_pwrap_lock(void){assert(!held);held=1;}
+void a04br3_pwrap_unlock(void){assert(held);held=0;}
 static uint16_t voltage=0x1f,enable=0x41;
 static uint32_t rd(unsigned b,unsigned o){assert(b==pwrap);reads++;assert(reads<5000);if(o==0x9c)return init;assert(o==0xa4);return stuck?0x20000:status;}
-static void wr(unsigned b,unsigned o,uint32_t value){assert(b==pwrap);
+static void wr(unsigned b,unsigned o,uint32_t value){assert(b==pwrap&&held);
  if(o==0xa8){assert(value==1);status=0;return;}
  assert(o==0xa0);unsigned addr=((value>>16)&0x7fff)*2;assert(addr==0x530 || addr==0x50a);
  uint16_t *v=addr==0x530?&voltage:&enable;
  if(value&0x80000000){*v=(uint16_t)value;status=0;}else status=0x60000|*v;
 }
 static void delay(unsigned us){assert(us==10);delays++;}
-static void pause_ms(unsigned ms){assert(ms==20);}
+static void pause_ms(unsigned ms){assert(ms==20&&!held);}
 '''+body+r'''
 int main(void){
  assert(power_on()==0);assert(voltage==0x7f && enable==0x8041);

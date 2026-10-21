@@ -66,7 +66,7 @@ static void *devfs_make_node(dev_t d,int type,int uid,int gid,int m,const char *
 static int PE_parse_boot_argn(const char *s,void *p,unsigned n){assert(!strcmp(s,"a04br3.usb")&&n==4);*(unsigned *)p=bootarg;return bootarg!=0;}
 static int kernel_thread_start(void (*f)(void *,int),void *p,thread_t *t){(void)f;(void)p;threads++;*t=(void *)1;return 0;}
 static void thread_deallocate(thread_t t){(void)t;}
-static void thread_terminate(thread_t t){(void)t;}
+kern_return_t thread_terminate(thread_t t){(void)t;return KERN_SUCCESS;}
 static thread_t current_thread(void){return NULL;}
 static void clock_interval_to_deadline(unsigned v,unsigned n,uint64_t *d){*d=fake_now+(uint64_t)v*n;}
 static uint64_t mach_absolute_time(void){return fake_now;}

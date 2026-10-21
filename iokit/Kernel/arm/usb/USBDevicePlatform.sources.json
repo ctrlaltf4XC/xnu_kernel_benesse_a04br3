@@ -61,5 +61,5 @@
     "tests": "test_pwrap_shared: actual functions/lockdefinitions+pthread 3threads600loops,3timeoutphases,contention/uninit; actualdisplay/touchtransaction ARM64compile. test_touch_pwrap actualpowersequence/regression no lockheldacross20mssleep.",
     "third_review": "Full actualMacSDK display.c andtouch.c translation units REQUIRED(newkern/locks.h dependency), aswell asparentUSBcontrollerlink. LocalARM64transactioncompile doesnotreplaceactualSDKgate."
   },
-  "runtime_owner": "Parent owns actual bsd/dev/a04br3_usb_controller.c start/poll/stop + supplies sharedPWRAPtrylock/unlock. Franklin confirmed EP0/PIO ownership, no duplicate bridge."
+  "runtime_owner": "Franklin now owns actual bsd/dev/a04br3_usb_controller.c per latest parentauthorization, no duplicate. Parent finalSDK/physicalgate."
 }
