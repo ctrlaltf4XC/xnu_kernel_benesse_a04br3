@@ -5,9 +5,13 @@
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
 #include <pexpert/pexpert.h>
+#include <pexpert/device_tree.h>
+#include <pexpert/arm64/boot.h>
 #include "A04BR3RoguePower.h"
 #include "A04BR3RogueMemory.h"
+#include "A04BR3RogueBootFirmware.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
+extern "C" vm_offset_t ml_static_ptovirt(vm_offset_t);
 class A04BR3RogueGPU : public IOService {
     OSDeclareDefaultStructors(A04BR3RogueGPU);
 public:
@@ -17,6 +21,51 @@ public:
     }
 private:
     A04BR3RogueMemory memory;
+    void stageBootFirmware() {
+        DTEntry map=nullptr;
+        const void *value=nullptr;unsigned size=0;
+        setProperty("FirmwarePayloadStatus","absent");
+        if (SecureDTLookupEntry(nullptr,"/chosen/memory-map",&map)!=kSuccess ||
+            SecureDTGetProperty(map,"GPUFirmware-A04BR3",&value,&size)!=kSuccess) return;
+        uint64_t asset[2]={},reserved[2]={};
+        bool valid=value && size==sizeof(asset);
+        if (valid) bcopy(value,asset,sizeof(asset));
+        value=nullptr;size=0;
+        valid=valid && SecureDTGetProperty(map,"Kernel-A04BR3",&value,&size)==kSuccess &&
+            value && size==sizeof(reserved);
+        if (valid) bcopy(value,reserved,sizeof(reserved));
+        /* A firmware asset must never be interpreted as a root RAMDisk. */
+        const void *ramdisk=nullptr;unsigned ramdiskSize=0;
+        valid=valid && SecureDTGetProperty(map,"RAMDisk",&ramdisk,&ramdiskSize)!=kSuccess;
+        const boot_args *ba=(const boot_args *)PE_state.bootArgs;
+        valid=valid && ba && a04_rgx_boot_firmware_range(asset[0],asset[1],
+            reserved[0],reserved[1],ba->physBase,ba->memSize,ba->topOfKernelData);
+        vm_offset_t source=0;
+        if (valid) {
+            source=ml_static_ptovirt((vm_offset_t)asset[0]);
+            valid=source && a04_rgx_fw_pointer((const void *)source,(size_t)asset[1]) &&
+                ml_static_ptovirt((vm_offset_t)(asset[0]+asset[1]-1))==source+asset[1]-1;
+        }
+        if (!valid) {
+            memory.reset();
+            setProperty("FirmwarePayloadStatus","rejected-reservation");
+            setProperty("BringupStage","firmware-input-invalid");
+            IOLog("A04BR3 GPU: firmware input reservation rejected; no firmware execution\n");
+            return;
+        }
+        int error=memory.stage((const void *)source,(size_t)asset[1]);
+        setProperty("FirmwareStageResult",(uint64_t)error,32);
+        setProperty("FirmwareRunning",kOSBooleanFalse);
+        if (error) {
+            setProperty("FirmwarePayloadStatus","rejected-image");
+            setProperty("BringupStage","firmware-stage-failed");
+            IOLog("A04BR3 GPU: CPU firmware stage rejected error=%d; no firmware execution\n",error);
+        } else {
+            setProperty("FirmwarePayloadStatus","cpu-staged");
+            setProperty("BringupStage","firmware-cpu-staged");
+            IOLog("A04BR3 GPU: reserved payload CPU-staged/cache cleaned bytes=%llu; GPU MMU/wrapper/execution disabled\n",asset[1]);
+        }
+    }
     vm_offset_t regs[4];
     static uint32_t readReg(void *p,unsigned b,unsigned o) {
         A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
@@ -65,6 +114,7 @@ bool A04BR3RogueGPU::start(IOService *provider)
             setProperty("FirmwareMemoryBytes",(uint64_t)(A04BR3RogueMemory::TableBytes+
                 A04BR3RogueMemory::CodeBytes+A04BR3RogueMemory::DataBytes),32);
             IOLog("A04BR3 GPU: low-4GiB empty memory reserved/cache cleaned; no firmware or MMU activation\n");
+            stageBootFirmware();
         }
     }
     setProperty("PowerVRBVNC",bvnc,64);setProperty("Model","MT8167 PowerVR Rogue");registerService();return true;
