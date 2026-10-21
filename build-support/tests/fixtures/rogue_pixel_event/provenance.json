@@ -1,0 +1,18 @@
+{
+  "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/",
+  "revision": "e1ef8f046c6e37ec1e2a13229560fbb824e5118f",
+  "license": "MIT; complete original2022 Imagination notice retained",
+  "source_directory": "src/imagination/vulkan/pds",
+  "source_sha256": {
+    "pvr_pds.c": "dfa8cd8b3fcfedcc44f181fc0e2e4ed6fbfc2ada92dd8a00fc1072f777a6339d",
+    "pvr_pds.h": "43b2bc22ea75c778ba1f1316b4f8cf6f5117dd4c7d44c0f35065b8d002d19e12",
+    "pvr_rogue_pds_encode.h": "9559113eb4894220462153e23366b7c4a661fc9c0e52486914465790db032bd2",
+    "pvr_rogue_pds_defs.h": "ec127fdc17d922eb69240815302d95f11dd02cb1fccd11abefd470c373995662"
+  },
+  "fixture_sha256": "ad9c263db02e7d5b37ae8f52399f846e8e1d6f6fd869ea09e0cba899f1376065",
+  "adaptations": [
+    "Selected exact functions/macros/structs only",
+    "Test-only feature/dependency shim, no compiler instructions or GPU runtime emulation"
+  ],
+  "scope": "Independent PDS encoder comparison, does not assemble USC or prove rendering"
+}
