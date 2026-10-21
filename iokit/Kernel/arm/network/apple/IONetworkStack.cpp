@@ -53,6 +53,9 @@
 #include "IONetworkStack.h"
 #include "IONetworkDebug.h"
 #include "IONetworkControllerPrivate.h"
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#include "A04BR3StackAuthorization.h"
+#endif
 
 #define super IOService
 OSDefineMetaClassAndFinalStructors( IONetworkStack, IOService )
@@ -1115,13 +1118,23 @@ bool IONetworkStackUserClient::initWithTask(	task_t			owningTask,
 		return false;
 
     entitlement = copyClientEntitlement(owningTask, kIONetworkStackUserClientEntitlement);
-    if (entitlement == nullptr) {
-        DLOG("IONetworkStack::initWithTask - No Entitlement %p\n", this);
-        return false;
+    if (entitlement != nullptr) {
+        // An explicit dedicated policy wins, including false/malformed denial.
+        ret = (entitlement == kOSBooleanTrue);
+        entitlement->release();
+    } else {
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+        // Native iOS16 configd has the signed per-class allowlist, not the
+        // newer macOS family's dedicated boolean. Keep the administrator
+        // check above and use only the actual owningTask's entitlement.
+        entitlement = copyClientEntitlement(owningTask,
+            "com.apple.security.iokit-user-client-class");
+        ret = a04_stack_class_authorized(entitlement);
+        if (entitlement != nullptr) entitlement->release();
+#else
+        ret = false;
+#endif
     }
-
-    ret = (entitlement == kOSBooleanTrue);
-    entitlement->release();
 
     DLOG("IONetworkStack::initWithTask %p = 0x%08x\n", this, ret);
 

@@ -144,7 +144,7 @@
       "path": "IONetworkStack.cpp",
       "sha256": "a2b5d2302fdb7fceed1060e8ddcef9f4379a71ee229ad277f8ca56fd11b2da6c",
       "url": "https://raw.githubusercontent.com/apple-oss-distributions/IONetworkingFamily/bb910e2b458939f6b1f53c0fa6907f258b431ea4/IONetworkStack.cpp",
-      "vendored_sha256": "9d2df3467eb60fcd3eb997ecb34869ebd904a3b73060d6ec7328f043417381c0"
+      "vendored_sha256": "006de2e5a6b1fb286ad60f758527a47143916185337db47c89bbb1d796256d8b"
     },
     {
       "path": "IONetworkStack.h",
@@ -208,7 +208,8 @@
     "xnu8796_header_linkage": "Removed blanket extern-C around BSD/header-only types; real XNU headers own linkage and may import kern/startup C++ templates. Explicit C function declarations in IOMbufMemoryCursor/IOKernelDebugger preserved.",
     "ownership_annotations": "IONetworkInterface/IONetworkStack load real IOKit/IOLib before BSD headers, so OSMetaClass LIBKERN_CONSUMED exists before bpf/skywalk.",
     "bpf_mode_names": "if_set_bpf_tap switch now uses exact exported kpi_interface.h BPF_MODE_DISABLED/INPUT/OUTPUT/INPUT_OUTPUT values (0/1/2/3) rather than private dlil aliases.",
-    "shared_backing_lifecycle": "Protected nonvirtual adopt/clear seam adds independent ifnet_reference to actual base private _backingIfnet; adopts before bridge ifnet_attach, clears and releases after actual bridge detach completes. Default allocation not called; genuine base free is fallback reference cleanup. No parent IOEthernetInterface.cpp changes."
+    "shared_backing_lifecycle": "Protected nonvirtual adopt/clear seam adds independent ifnet_reference to actual base private _backingIfnet; adopts before bridge ifnet_attach, clears and releases after actual bridge detach completes. Default allocation not called; genuine base free is fallback reference cleanup. No parent IOEthernetInterface.cpp changes.",
+    "ios16_stack_authorization": "A04BR3-only compatibility: retain superclass init and actual administrator check. Dedicated com.apple.networking.ionetworkstack.user-client, if present, must be canonical true; false/malformed denies without fallback. Only if absent, accept an actual owning-task signed com.apple.security.iokit-user-client-class array containing exact IONetworkStackUserClient; malformed arrays and root-only callers denied. Observed donor configd signed XML supplies that exact class grant. No task-name, process-name or fabricated entitlement. Runtime IOServiceOpen errno remains unobserved."
   },
   "local_files": [
     {
@@ -218,6 +219,10 @@
     {
       "path": "A04BR3IONetworkBacking.inc",
       "sha256": "90c66a211550ce8b3a846c6f245530d81e463682f32e4e020c2eedc53ea9ada8"
+    },
+    {
+      "path": "A04BR3StackAuthorization.h",
+      "sha256": "8ddeff49a15521b665914b79314eefd7891f7ceaaff2857105189b2f7c903481"
     }
   ],
   "a04_kernel_registration": "Original nonvirtual registerKernelInterface reuses interfacePublished then registerNetworkInterface (reserve/open/name/BSDattach). Board controller delays nub publication until this synchronous path. No second ifnet or IOClass/BSDname property substitution; no private ABI emulation."
