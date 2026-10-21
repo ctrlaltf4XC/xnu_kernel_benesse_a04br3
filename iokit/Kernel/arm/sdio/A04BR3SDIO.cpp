@@ -6,6 +6,7 @@
 #include <IOKit/IOService.h>
 #include <pexpert/pexpert.h>
 #include "A04BR3SDIOProtocol.h"
+#include "A04BR3SDIOPads.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3SDIO : public IOService {
  OSDeclareDefaultStructors(A04BR3SDIO);
@@ -15,13 +16,14 @@ class A04BR3SDIO : public IOService {
  static bool wait(vm_offset_t b,unsigned o,uint32_t mask,uint32_t value){for(unsigned n=0;n<10000;n++){if((rd(b,o)&mask)==value)return true;IODelay(10);}return false;}
  void pin(unsigned p,unsigned mode){unsigned o=0x300+(p/5)*16,s=(p%5)*3;wr(gpio,o,(rd(gpio,o)&~(7u<<s))|(mode<<s));}
  void output(unsigned p,bool high){pin(p,0);wr(gpio,(high?0x104:0x108)+(p/32)*16,1u<<(p%32));wr(gpio,4+(p/32)*16,1u<<(p%32));}
+ static void padWrite(void *p,unsigned off,uint32_t v){wr(((A04BR3SDIO *)p)->gpio,off,v);}
  static int command(void *p,unsigned op,uint32_t arg,unsigned response,uint32_t *out){
   A04BR3SDIO *s=(A04BR3SDIO *)p;
   if(!wait(s->host,0x3c,1,0))return 1;
   wr(s->host,0x0c,rd(s->host,0x0c));wr(s->host,0x38,arg);wr(s->host,0x34,op|(response<<7));
   for(unsigned n=0;n<10000;n++){
    uint32_t st=rd(s->host,0x0c)&0x700;
-   if(st){wr(s->host,0x0c,st);if(st&0x600)return 2;*out=rd(s->host,0x40);if(response==7&&!wait(s->host,0x3c,1,0))return 3;return 0;}
+   if(st){wr(s->host,0x0c,st);if(st&0x600){IOLog("A04BR3 SDIO: CMD%u arg=0x%x interrupt=0x%x pins=0x%x cfg=0x%x\n",op,arg,st,rd(s->host,8),rd(s->host,0));return 2;}*out=rd(s->host,0x40);if(response==7&&!wait(s->host,0x3c,1,0))return 3;return 0;}
    IODelay(10);
   }
   return 4;
@@ -34,6 +36,8 @@ bool A04BR3SDIO::start(IOService *provider)
 {
  unsigned enabled=0;
  if(!PE_parse_boot_argn("a04br3.display_probe",&enabled,sizeof(enabled))||enabled!=1||!IOService::start(provider))return false;
+ static bool attempted=false;
+ if(__atomic_exchange_n(&attempted,true,__ATOMIC_RELAXED))return false;
  top=ml_io_map(0x10000000,0x1000);gpio=ml_io_map(0x10005000,0x1000);if(!top||!gpio)return false;
  /* Select 26MHz with source gated. TOP2 bit30 is an inverted gate. */
  wr(top,0xa0,2);wr(top,0x40,rd(top,0x40)&~(7u<<3));wr(top,0x9c,1);wr(top,0x6c,1u<<30);wr(top,0xb0,2);
@@ -43,6 +47,7 @@ bool A04BR3SDIO::start(IOService *provider)
   * Do not touch UART or the separate eMMC controller. */
  output(4,false);output(7,false);IOSleep(10);output(4,true);IOSleep(30);output(7,true);IOSleep(30);
  for(unsigned p=68;p<=73;p++)pin(p,1);
+ a04_sdio_pad_pulls(this,padWrite);
  wr(gpio,0x934,0x7e); /* MSDC2 input enables; board IES offsets are +4 set. */
  wr(host,0x10,0);wr(host,0,rd(host,0)|4);
  if(!wait(host,0,4,0)){IOLog("A04BR3 SDIO: reset timeout\n");return false;}
