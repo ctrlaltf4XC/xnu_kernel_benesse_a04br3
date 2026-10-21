@@ -202,11 +202,17 @@ private:
         IOLog("A04BR3 GPU: owned TQ_3D clear32x32 result=%d zeroWords=%u/1024 guardErrors=%u; native0x22, UFO + CCB consumption + pixel readback required\n",
             error,render.clearedWords(),render.guardErrors());
         const auto &cache=render.readbackObservation();
-        IOLog("A04BR3 GPU: clear readback SLC result=%d pixelsRead=%u beforeA5=%u/1024 afterA5=%u/1024 first=0x%x last=0x%x observed=%u KCCB=%u/%u/%u UFO=%u/%u FWCCB=%u/%u polls=%u\n",
-            render.readbackResult(),(unsigned)render.readbackPixelsValid(),render.beforeA5(),render.afterA5(),render.firstWord(),render.lastWord(),
+        IOLog("A04BR3 GPU: clear readback SLC result=%d submitted=%u pixelsRead=%u beforeA5=%u/1024 afterA5=%u/1024 first=0x%x last=0x%x observed=%u KCCB=%u/%u/%u UFO=%u/%u FWCCB=%u/%u polls=%u\n",
+            render.readbackResult(),(unsigned)cache.submitted,(unsigned)render.readbackPixelsValid(),render.beforeA5(),render.afterA5(),render.firstWord(),render.lastWord(),
             (unsigned)cache.valid,cache.kread,cache.kwrite,cache.kexpected,cache.ufo,cache.expected,cache.fread,cache.fwrite,cache.polls);
         if(error && render.observation().valid) {
             const auto &s=render.observation();
+            for(unsigned n=0;n<s.requests.count;n++){
+                const auto &v=s.requests.first[n];
+                IOLog("A04BR3 GPU: terminal FWCCB slot=%u type=0x%x flags=0x%x reset=%u ctx=%u expectedCtx=%u reason=%u job=%u pageFault=%u PC=0x%llx faultVA=0x%llx; read-only, not ACKed\n",
+                    v.slot,v.type,v.flags,(unsigned)v.reset,v.context,s.contextID,v.reason,v.job,v.pageFault,
+                    (unsigned long long)v.pc,(unsigned long long)v.fault);
+            }
             IOLog("A04BR3 GPU: clear terminal polls=%u KCCB=%u/%u/%u client=%u/%u/%u/%u UFO=%u/%u FWCCB=%u/%u/0x%x HWR=0x%x faults=%u\n",
                 s.polls,s.kread,s.kwrite,s.kexpected,s.cread,s.cwrite,s.cdep,s.cexpected,s.ufo,s.expected,s.fread,s.fwrite,s.ftype,s.hwr,s.fwfaults);
         }

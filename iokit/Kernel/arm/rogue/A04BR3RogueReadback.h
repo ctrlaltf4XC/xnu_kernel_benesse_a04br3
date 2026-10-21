@@ -15,7 +15,7 @@
 #include "A04BR3RogueCommand.h"
 struct a04_rgx_readback_observation {
     uint32_t polls,kread,kwrite,kexpected,ufo,expected,fread,fwrite;
-    bool valid;
+    bool valid,submitted;
 };
 static inline int a04_rgx_command_readback(a04_rgx_fw_runtime *r,
     a04_rgx_command_state *state,const a04_rgx_command_io *io,
@@ -47,7 +47,14 @@ static inline int a04_rgx_command_readback(a04_rgx_fw_runtime *r,
     if(ctl->ui32WrapMask!=127 || ctl->ui32CmdSize!=56 || read>127 || write>127 ||
        fctl->ui32WrapMask!=31 || fctl->ui32CmdSize!=40 ||
        fctl->ui32ReadOffset>31 || fctl->ui32WriteOffset>31){state->poisoned=true;return A04_CCB_CORRUPT;}
-    if(fctl->ui32ReadOffset!=fctl->ui32WriteOffset)return A04_CCB_FW_REQUEST;
+    if(fctl->ui32ReadOffset!=fctl->ui32WriteOffset){
+        /* No flush/SYNC was issued. Preserve real blocked ring coordinates;
+         * zero-filled observations are not evidence that either ring is0. */
+        *out={};out->kread=read;out->kwrite=write;out->kexpected=write;
+        out->ufo=*sync;out->expected=state->sequence;
+        out->fread=fctl->ui32ReadOffset;out->fwrite=fctl->ui32WriteOffset;out->valid=true;
+        return A04_CCB_FW_REQUEST;
+    }
     /* One producer, require an empty ring; two slots fit even across127->0. */
     if(read!=write)return A04_CCB_BUSY;
     uint32_t sequence=++state->sequence;
@@ -74,7 +81,7 @@ static inline int a04_rgx_command_readback(a04_rgx_fw_runtime *r,
         io->wait_us(io->context,10);
     }
     io->acquire(io->context);
-    out->polls=polls;out->kread=ctl->ui32ReadOffset;out->kwrite=ctl->ui32WriteOffset;out->kexpected=next;
+    out->submitted=true;out->polls=polls;out->kread=ctl->ui32ReadOffset;out->kwrite=ctl->ui32WriteOffset;out->kexpected=next;
     out->ufo=*sync;out->expected=sequence;out->fread=fctl->ui32ReadOffset;out->fwrite=fctl->ui32WriteOffset;out->valid=true;
     if(result==A04_CCB_TIMEOUT || result==A04_CCB_CORRUPT)state->poisoned=true;
     return result;

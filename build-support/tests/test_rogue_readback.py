@@ -58,8 +58,9 @@ int main(){
   if(m<4)assert(waits==10000 && observed.polls==10000);
   assert(a04_rgx_command_readback(&r,&state,&io,&observed)==A04_CCB_OFFLINE && kicks==1);
  }
- reset();r.fctl->ui32WriteOffset=1;
- assert(a04_rgx_command_readback(&r,&state,&io,&observed)==A04_CCB_FW_REQUEST && !kicks && !state.sequence);
+ reset(15);state.sequence=6;*r.command_sync=6;r.fctl->ui32WriteOffset=2;
+ assert(a04_rgx_command_readback(&r,&state,&io,&observed)==A04_CCB_FW_REQUEST && !kicks && state.sequence==6);
+ assert(observed.valid && !observed.submitted && !observed.polls && observed.kread==15 && observed.kwrite==15 && observed.kexpected==15 && observed.fread==0 && observed.fwrite==2 && observed.ufo==6 && observed.expected==6);
  reset();r.kctl->ui32ReadOffset=1;auto before=r.kcommands[0];
  assert(a04_rgx_command_readback(&r,&state,&io,&observed)==A04_CCB_BUSY && !kicks && !memcmp(&before,r.kcommands,56));
  reset();r.kctl->ui32WrapMask=63;

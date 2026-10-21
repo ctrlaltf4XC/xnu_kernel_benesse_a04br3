@@ -1,0 +1,35 @@
+{
+  "license": "BSD-2-Clause-Patent original bounded observer; exact DDK type definitions/copyright/license retained in A04BR3RogueDDKABI.h",
+  "matching_ddk": "m1.11ED5425693",
+  "source_sha256": {
+    "services/include/rgx_fwif_km.h": "c9857eb9bcc4a8a70c3431266af3b39c4c2f996e06744ce5707f48dfe5059e9e",
+    "services/server/devices/rgx/rgxfwutils.c": "7b5f667bc0c483628f7852a40824e8bdc3e0eeec7186e53e9ee77b8d801de2b5"
+  },
+  "FWCCB105": "0x2abc0069 CONTEXT_RESET_NOTIFICATION, distinct command namespace from KCCB105=SLCFLUSHINVAL",
+  "wire": {
+    "command_bytes": 40,
+    "flags_offset": 4,
+    "union_offset": 8,
+    "context": 8,
+    "reason": 12,
+    "job": 16,
+    "page_fault": 20,
+    "pc": 24,
+    "fault_va": 32
+  },
+  "reason_values": {
+    "0": "NONE",
+    "1": "GUILTY_LOCKUP",
+    "2": "INNOCENT_LOCKUP",
+    "3": "GUILTY_OVERRUNING",
+    "4": "INNOCENT_OVERRUNING",
+    "5": "HARD_CONTEXT_SWITCH"
+  },
+  "HWR_flags": "rgx_fwif_km.h198: HARDWARE_OK bit0 says HW state is ok OR locked up; HWR=1 is not a reset count or proof that no reset occurred",
+  "contract": "External ring buffer size checked before reading, fixed32x40/indices0..31, at most first2 pending records, raw unknown enum values retained. Volatile byte copy from NC mapping after caller acquire; no writes/ACK/consume/recovery or pointer follow. Concurrent FW state snapshot, not atomic trace.",
+  "new_hardware": "7d3/device565989b UART records FWCCB0/2/type2abc0069, KCCB15/15/client392/UFO8; readback was never submitted. Actual context ID/reason/job/pageFault/PC/faultVA not captured by this image.",
+  "integration": "Render terminal snapshot includes first2 records; GPU logs only on existing clear terminal failure. SLC pending-request early return now retains actual ring/UFO coordinates and submitted=false. No clear task/PDS/EOT/BIF/clock/timeout or FWCCB-read offset changes.",
+  "original_REA": "Six existing full original board libsrv exports verified in external gpu-worker/fwreset-original-rea-review.json. Source profile remains original shaderless/zero-source208; no152B background substitution. Static producer match is not firmware acceptance.",
+  "tests": "1024 read/pending wrap cases, every short ring byte length, invalid pointer/index/alias, exact named reset fields/unknown types/no ring mutation. Actual owner case10 simulates task+UPDATE completion followed by2 reset records, no SLC kick/pixel read, retains resources and refuses replay. ARM64 pure caller/full driver compile.",
+  "remaining": "Minimal missing evidence: first2 reset payloads (context/reason/job/pageFault/PC/faultVA) and their match to owned TQ context ID. Current UART has opcode only. No specific task/mapping/shader correction is substantiated. No device operation requested."
+}

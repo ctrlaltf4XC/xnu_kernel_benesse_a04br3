@@ -105,15 +105,25 @@ static void wait(void *,uint32_t us){
  }
  /* Simulated FW only: CPU driver must never manufacture these pixels. */
  if(mode==1){kernel.trace->ui32FWFaults=7;kernel.trace->ui32HWRStateFlags=0x100;}
- if(mode!=1 && mode!=8)memset(view->bif.data.cpu,0,4096);
+ if(mode!=1 && mode!=8 && mode!=10)memset(view->bif.data.cpu,0,4096);
  if(mode==2)((unsigned char *)view->bif.data.cpu)[4096]=0;
  *view->sync=sequence;
  view->control[3]->ui32ReadOffset=view->control[3]->ui32WriteOffset=view->control[3]->ui32DepOffset=nextClient;
  kernel.kctl->ui32ReadOffset=kernel.kctl->ui32WriteOffset;
+ if(mode==10){
+  auto fw=(RGXFWIF_FWCCB_CMD *)a04_rgx_command_memory(&kernel,kernel.init->psFirmwareCCB.ui32Addr,32*40);
+  assert(fw);fw[0]={};fw[0].eCmdType=RGXFWIF_FWCCB_CMD_CONTEXT_RESET_NOTIFICATION;
+  auto &reset=fw[0].uCmdData.sCmdContextResetNotification;
+  reset.ui32ServerCommonContextID=view->tq->ui32ServerCommonContextID;
+  reset.eResetReason=RGXFWIF_CONTEXT_RESET_REASON_GUILTY_LOCKUP;reset.ui32ResetJobRef=17;
+  reset.bPageFault=IMG_TRUE;reset.ui64PCAddress=view->bif.pc.pa;reset.sFaultAddress.uiAddr=0xa800001000ULL;
+  fw[1]=fw[0];fw[1].uCmdData.sCmdContextResetNotification.eResetReason=RGXFWIF_CONTEXT_RESET_REASON_INNOCENT_LOCKUP;
+  kernel.fctl->ui32WriteOffset=2;
+ }
 }
 static a04_rgx_command_io io={nullptr,publish,acquire,kick,wait};
 static void clearCases(){
- for(mode=0;mode<10;mode++){
+ for(mode=0;mode<11;mode++){
   attempts=0;kicks=waits=published=0;failAllocation=failPrepare=0;transport={};
   A04BR3RogueMemory source;A04BR3RogueRenderMemory owner;
   assert(owner.prepareCold(source,10,0xa800000000ULL,0xba00000000ULL));
@@ -137,9 +147,16 @@ static void clearCases(){
    auto &o=owner.observation();assert(o.kread==0 && o.kwrite==1 && o.cread==0 && !o.ufo && o.cexpected==296);}
   if(mode==8)assert(result==0 && owner.beforeA5()==1024 && !owner.afterA5() && owner.clearedWords()==1024);
   if(mode==9)assert(result==A04_CCB_TIMEOUT && transport.poisoned && owner.readbackObservation().valid && owner.readbackObservation().polls==10000 && !owner.clearedWords() && !owner.readbackPixelsValid());
-  if(mode<4 || mode>=8){unsigned expectedKicks=mode==3?1:2;assert(kicks==expectedKicks);
+  if(mode==10){
+   assert(result==A04_CCB_FW_REQUEST && kicks==1 && !transport.sequence && !owner.readbackPixelsValid());
+   const auto &cache=owner.readbackObservation();assert(cache.valid && !cache.submitted && !cache.polls && cache.kread==1 && cache.kwrite==1 && cache.fwrite==2);
+   const auto &o=owner.observation();assert(o.contextID==13 && o.requests.valid && o.requests.pending==2 && o.requests.count==2 && o.ftype==0x2abc0069);
+   assert(o.requests.first[0].reset && o.requests.first[0].context==13 && o.requests.first[0].reason==1 && o.requests.first[0].job==17 && o.requests.first[0].pageFault==1 && o.requests.first[0].pc==view->bif.pc.pa && o.requests.first[0].fault==0xa800001000ULL);
+   assert(o.requests.first[1].reason==2 && kernel.fctl->ui32ReadOffset==0 && kernel.fctl->ui32WriteOffset==2 && owner.beforeA5()==1024);
+  }
+  if(mode<4 || mode>=8){unsigned expectedKicks=(mode==3 || mode==10)?1:2;assert(kicks==expectedKicks);
    assert(owner.clear(kernel,io,transport)==A04_CCB_OFFLINE && kicks==expectedKicks);
-   if(mode!=3 && mode!=9)assert(owner.readbackResult()==0);
+   if(mode!=3 && mode!=9 && mode!=10)assert(owner.readbackResult()==0);
    if(mode==1)assert(owner.beforeA5()==1024 && owner.afterA5()==1024 && owner.firstWord()==0xa5a5a5a5U);
   }else assert(result==A04_CCB_INPUT && !kicks && !published && !waits);
   owner.reset();assert(live==11);

@@ -8,6 +8,7 @@
 #ifndef A04BR3_ROGUE_RENDER_SUBMIT_H
 #define A04BR3_ROGUE_RENDER_SUBMIT_H
 #include "A04BR3RogueCommand.h"
+#include "A04BR3RogueFWRequests.h"
 #include "A04BR3RogueRenderResources.h"
 #include "A04BR3RogueTransferFill.h"
 /* One terminal observation, never a replay/extra poll. Values are a bounded
@@ -18,8 +19,9 @@ struct a04_rgx_render_observation {
     uint32_t dm,polls,kread,kwrite,kexpected,cread,cwrite,cdep,cexpected;
     uint32_t ufo,expected,fread,fwrite,ftype,flags,priority;
     uint32_t runPrev,runNext,waitPrev,waitNext,kexecuted,tracePointer,power,hwr,fwfaults;
-    uint32_t startedTime,priorityExpected,prioritySequence,transfer;
+    uint32_t startedTime,priorityExpected,prioritySequence,transfer,contextID;
     uint64_t idleTime;
+    a04_rgx_fw_requests requests;
 };
 static inline void a04_rgx_render_observe(a04_rgx_render_observation *out,
     const a04_rgx_render_resources *r,const a04_rgx_render_ring_state *state,
@@ -33,11 +35,13 @@ static inline void a04_rgx_render_observe(a04_rgx_render_observation *out,
     out->cread=client->ui32ReadOffset;out->cwrite=client->ui32WriteOffset;out->cdep=client->ui32DepOffset;
     out->cexpected=state->write[a04_rgx_render_index(dm,transfer)];out->ufo=*r->sync;out->expected=state->sequence;
     out->fread=kernel->fctl->ui32ReadOffset;out->fwrite=kernel->fctl->ui32WriteOffset;
-    out->ftype=0xffffffffU;
+    out->ftype=0xffffffffU;out->requests={};
     auto fcommands=(volatile RGXFWIF_FWCCB_CMD *)a04_rgx_command_memory(kernel,
         kernel->init->psFirmwareCCB.ui32Addr,32*sizeof(RGXFWIF_FWCCB_CMD));
-    if (fcommands && out->fread<32 && out->fwrite<32 && out->fread!=out->fwrite)
-        out->ftype=fcommands[out->fread].eCmdType;
+    if (fcommands && !a04_rgx_fw_requests_snapshot(&out->requests,sizeof(out->requests),
+        (const void *)fcommands,32*sizeof(RGXFWIF_FWCCB_CMD),out->fread,out->fwrite) && out->requests.count)
+        out->ftype=out->requests.first[0].type;
+    out->contextID=context->ui32ServerCommonContextID;
     out->priorityExpected=priority;out->prioritySequence=context->ui32PrioritySeqNum;
     out->flags=context->ui32FWComCtxFlags;out->priority=context->ui32Priority;
     out->runPrev=context->sRunNode.p.ui32Addr;out->runNext=context->sRunNode.n.ui32Addr;
