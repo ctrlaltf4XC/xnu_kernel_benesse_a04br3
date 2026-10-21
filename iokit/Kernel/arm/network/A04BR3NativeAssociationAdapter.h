@@ -3,6 +3,7 @@
 #define A04BR3_NATIVE_ASSOCIATION_ADAPTER_H
 #include "A04BR3NativeAssociation.h"
 #include "A04BR3NativeCurrentNetwork.h"
+#include "A04BR3NativePeerIdentity.h"
 #include "../sdio/A04BR3WLANBackendAPI.h"
 #if !defined(A04_WLAN_JOIN_TARGET_API) || A04_WLAN_JOIN_TARGET_API != 1
 #error "Native association requires atomic target admission API1"
@@ -54,6 +55,32 @@ static inline int a04_assoc_provider_current(IOService *provider,uint32_t value,
  if(!error)error=a04br3_wlan_current_record(provider,&work->raw);
  if(!error)error=a04_native_current_encode(work,now,out,bytes);
  if(work)IOFree(work,sizeof(*work));
+ a04br3_wlan_release_backend(provider);return error;
+}
+/* Same positive currentRecord producer as GET103, but SSID/BSSID do not
+ * require its optional RSSI/IE<=1024 result codec. Still open-only: producer's
+ * secure gate is unchanged. No preauth/authenticated-success inference.
+ * Temporary provider ref acquired once; record is heap-owned, transport lock
+ * is held only by state/current_record. No callback, refresh or scan lock.
+ */
+static inline int a04_assoc_provider_peer(IOService *provider,uint32_t type,uint32_t value,void *out,uint32_t *bytes){
+ if(!provider)return ENXIO;
+ if(!out || !bytes)return EINVAL;
+ unsigned size=a04_native_peer_capacity(type);if(!size || value)return EOPNOTSUPP;
+ if(*bytes<size)return EMSGSIZE;
+ struct a04_network_backend backend={};int error=a04br3_wlan_acquire_backend(provider,&backend);if(error)return error;
+ struct a04_network_state state={};error=backend.state(backend.context,&state);
+ if(!error && !a04_network_control_ready(&state))error=ENETDOWN;
+ if(!error && !state.associated)error=ENOTCONN;
+ struct a04_wlan_scan_record *record=nullptr;
+ if(!error){record=(a04_wlan_scan_record *)IOMallocZero(sizeof(*record));if(!record)error=ENOMEM;}
+ if(!error)error=a04br3_wlan_current_record(provider,record);
+ if(!error && ((record->ap.capability&16) || record->ap.rsn_length))error=EOPNOTSUPP;
+ if(!error){struct a04_native_peer_identity identity={};identity.ssid_length=record->ap.ssid_length;
+  memcpy(identity.bssid,record->ap.mac,6);
+  if(identity.ssid_length<=32)memcpy(identity.ssid,record->ap.ssid,identity.ssid_length);
+  error=a04_native_peer_encode(&identity,type,value,out,bytes);}
+ if(record)IOFree(record,sizeof(*record));
  a04br3_wlan_release_backend(provider);return error;
 }
 #endif

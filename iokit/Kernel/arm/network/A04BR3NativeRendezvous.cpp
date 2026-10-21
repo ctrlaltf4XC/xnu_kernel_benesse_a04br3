@@ -58,6 +58,7 @@ class A04BR3NativeNetwork : public IOService {
     static int get(void *context,uint32_t type,uint32_t value,void *out,uint32_t *bytes){
         auto *self=(A04BR3NativeNetwork *)context;
         if(!self->backendProvider)return ENXIO;
+        if(type==1 || type==9)return a04_assoc_provider_peer(self->backendProvider,type,value,out,bytes);
         if(type==103)return a04_assoc_provider_current(self->backendProvider,value,out,bytes,a04_scan_provider_now());
         if(type==11){
             if(!self->scanLock)return ENXIO;

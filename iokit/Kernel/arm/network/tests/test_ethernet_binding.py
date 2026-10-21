@@ -343,6 +343,43 @@ static void nativeCases(){
  // exact zero-version native query and observed IEs/RSSI, never scan-cache
  // substitution while unassociated. Source currentRecord is separately run.
  scanRecords[0].ap.capability&=~16u;realState.associated=1;
+ // Original native GET1 has capacity32 and returns actual SSID length; GET9 is raw6. Full real BSD -> Rendezvous
+ // -> current-record producer path; no scalar/native snapshot substitution.
+ for(unsigned type:{1u,9u}){
+  auto peerReq=association;peerReq.type=type;peerReq.length=type==1?32:6;
+  memset(userBuffer,0xa5,65);unsigned refs=provider.refs,a=acquires,r=releases;
+  assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&peerReq));
+  assert(peerReq.length==(type==1?3u:6u) && userBuffer[peerReq.length]==0xa5);
+  if(type==1){assert(!memcmp(userBuffer,"abc",3));for(unsigned i=3;i<32;i++)assert(userBuffer[i]==0xa5);}
+  else assert(!memcmp(userBuffer,scanRecords[0].ap.mac,6));
+  assert(provider.refs==refs && acquires==a+1 && releases==r+1);
+  uint8_t peerBytes[33];
+  auto ownership=[&](int expected,bool acquired){
+   memset(peerBytes,0xa5,sizeof(peerBytes));uint32_t length=type==1?32:6;
+   unsigned acq=acquires,rel=releases,ref=provider.refs;int storage=allocations;
+   assert(a04_assoc_provider_peer(&provider,type,0,peerBytes,&length)==expected);
+   assert(acquires==acq+(acquired?1u:0u) && releases==rel+(acquired?1u:0u));
+   assert(provider.refs==ref && allocations==storage && length==(type==1?(expected?32u:3u):6u));
+   if(expected)assert(peerBytes[0]==0xa5);
+  };
+  ownership(0,true);
+  stateError=EIO;ownership(EIO,true);stateError=0;
+  failMemory=1;ownership(ENOMEM,true);failMemory=0;
+  currentRecordError=EAGAIN;ownership(EAGAIN,true);currentRecordError=0;
+  // Association snapshot may become stale before the producer locks again.
+  currentRecordError=ENOTCONN;ownership(ENOTCONN,true);currentRecordError=0;
+  currentRecordError=ESTALE;ownership(ESTALE,true);currentRecordError=0;
+  realState.associated=0;ownership(ENOTCONN,true);realState.associated=1;
+  realState.control_ready=0;ownership(ENXIO,false);realState.control_ready=1;
+  // Optional RSSI/large IE do not gate valid SSID/BSSID identity.
+  unsigned priorRCPI=scanRecords[0].ap.rcpi_valid;scanRecords[0].observation.ie_bytes=1025;scanRecords[0].ap.rcpi_valid=0;
+  ownership(0,true);scanRecords[0].observation.ie_bytes=9;scanRecords[0].ap.rcpi_valid=priorRCPI;
+  scanRecords[0].ap.capability|=16;ownership(EOPNOTSUPP,true);scanRecords[0].ap.capability&=~16u;
+  scanRecords[0].ap.rsn_length=2;ownership(EOPNOTSUPP,true);scanRecords[0].ap.rsn_length=0;
+  auto savedPeer=scanRecords[0].ap;memset(scanRecords[0].ap.mac,0,6);
+  ownership(ESTALE,true);scanRecords[0].ap=savedPeer;
+ }
+
  auto currentReq=association;currentReq.type=103;currentReq.length=1164;
  memset(userBuffer,0,1164);userBuffer[0x8b]=4;userBuffer[1164]=0xa5;
  assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&currentReq));

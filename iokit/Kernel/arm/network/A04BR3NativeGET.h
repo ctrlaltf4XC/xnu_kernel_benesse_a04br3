@@ -69,7 +69,7 @@ static inline int a04_native_get(const struct a04_network_state *s,
      * noise and rate are likewise association data. Report actual absence;
      * never substitute a scanned AP, zero RSSI, invented rate or empty success.
      * Snapshot-only associated metadata remains unsupported here. Production
-     * Rendezvous serves103 via the separate real current-record API. */
+     * Rendezvous serves1/9/103 via the separate real current-record API. */
     unsigned associationSize=type==103?1164:(type==1?32:(type==9?6:
         ((type==16 || type==17)?52:(type==8?4:0))));
     if(associationSize){

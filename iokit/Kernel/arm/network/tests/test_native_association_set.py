@@ -15,6 +15,7 @@ CASE=r'''
 #include "A04BR3WLANJoinAdmission.h"
 #include "A04BR3WLANCurrentNetwork.h"
 #include "A04BR3NativeCurrentNetwork.h"
+#include "A04BR3NativePeerIdentity.h"
 #include <strings.h>
 static bool locked;static unsigned scheduled;
 static void IOLockLock(void *){assert(!locked);locked=true;}
@@ -106,6 +107,14 @@ int main(){
  assert(!a04_wlan_station_event(&r.station,&h,&event,2006000));
  assert(a04_network_join_from_station(&r.station)==A04_NET_JOIN_OPEN_COMPLETE);
  assert(!device->currentRecord(&current->raw));
+ // Identity uses the actual associated station snapshot just obtained after
+ // real auth/assoc + matching ACTIVATE_STA_REC; scan-only was ENOTCONN above.
+ a04_native_peer_identity identity={};identity.ssid_length=current->raw.ap.ssid_length;
+ memcpy(identity.ssid,current->raw.ap.ssid,identity.ssid_length);memcpy(identity.bssid,current->raw.ap.mac,6);
+ uint8_t peerWire[33];uint32_t peerLength=32;memset(peerWire,0xa5,sizeof(peerWire));
+ assert(!a04_native_peer_encode(&identity,1,0,peerWire,&peerLength) && peerLength==4 && peerWire[4]==0xa5 && !memcmp(peerWire,"test",4));
+ for(unsigned i=4;i<32;i++)assert(peerWire[i]==0xa5);
+ peerLength=6;assert(!a04_native_peer_encode(&identity,9,0,peerWire,&peerLength) && !memcmp(peerWire,r.station.ap.mac,6));
  memset(output,0,1164);output[0x8b]=4; // observed GET103 input version0
  assert(!a04_native_current_encode(current,2007000,output,&length));
  assert(output[0]==1 && output[0x60]==4 && !memcmp(output+0x61,"test",4) && output[1164]==0xa5);
