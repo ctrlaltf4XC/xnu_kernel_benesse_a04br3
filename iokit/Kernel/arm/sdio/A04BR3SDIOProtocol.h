@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
- * SDIO identification only. No firmware download or network registration.
+ * SDIO identification and common command callbacks.
  */
 #ifndef A04BR3_SDIO_PROTOCOL_H
 #define A04BR3_SDIO_PROTOCOL_H
@@ -9,14 +9,14 @@ struct a04_sdio_io {
  void (*delay)(void *,unsigned);
 };
 struct a04_sdio_card {uint32_t ocr,rca;uint16_t vendor,device;uint8_t revision,functions;};
-static int a04_sdio_read(const struct a04_sdio_io *io,uint32_t address,uint8_t *value)
+static inline int a04_sdio_read(const struct a04_sdio_io *io,uint32_t address,uint8_t *value)
 {
  uint32_t response=0;
  if(address>0x1ffff || io->command(io->ctx,52,address<<9,1,&response))return 1;
  if(response&0xcb00)return 1;
  *value=(uint8_t)response;return 0;
 }
-static int a04_sdio_identify(const struct a04_sdio_io *io,struct a04_sdio_card *card)
+static inline int a04_sdio_identify(const struct a04_sdio_io *io,struct a04_sdio_card *card)
 {
  uint32_t r=0;uint8_t v=0;
  if(io->command(io->ctx,0,0,0,&r))return 1;

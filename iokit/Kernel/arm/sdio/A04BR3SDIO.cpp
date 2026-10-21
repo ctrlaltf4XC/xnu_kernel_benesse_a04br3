@@ -5,12 +5,33 @@
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
 #include <pexpert/pexpert.h>
-#include "A04BR3SDIOProtocol.h"
+#include "A04BR3SDIOPIO.h"
 #include "A04BR3SDIOPads.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 class A04BR3SDIO : public IOService {
  OSDeclareDefaultStructors(A04BR3SDIO);
  vm_offset_t host,top,gpio;
+ IOLock *transportLock=nullptr;
+ struct a04_sdio_io io;
+ struct a04_sdio_transport transport;
+ bool transportReady=false;
+ static uint32_t dataRead(void *p,unsigned off,unsigned width){
+  A04BR3SDIO *s=(A04BR3SDIO *)p;
+  if(width==4)return rd(s->host,off);
+  uint32_t v=*(volatile uint8_t *)(s->host+off);__asm__ volatile("dmb oshld":::"memory");return v;
+ }
+ static void dataWrite(void *p,unsigned off,uint32_t v,unsigned width){
+  A04BR3SDIO *s=(A04BR3SDIO *)p;
+  if(width==4){wr(s->host,off,v);return;}
+  *(volatile uint8_t *)(s->host+off)=(uint8_t)v;__asm__ volatile("dsb oshst":::"memory");
+ }
+ static void dataDelay(void *,unsigned us){IODelay(us);}
+ static int transfer(void *p,uint32_t arg,void *buffer,unsigned length){
+  struct a04_sdio_regs regs={p,dataRead,dataWrite,dataDelay};
+  int e=a04_sdio_pio(&regs,arg,buffer,length);
+  if(e)IOLog("A04BR3 SDIO: CMD53 error=%d arg=0x%x len=%u status=0x%x fifo=0x%x (transport stopped)\n",e,arg,length,rd(((A04BR3SDIO *)p)->host,0x0c),rd(((A04BR3SDIO *)p)->host,0x14));
+  return e;
+ }
  static uint32_t rd(vm_offset_t b,unsigned o){uint32_t v=*(volatile uint32_t *)(b+o);__asm__ volatile("dmb oshld":::"memory");return v;}
  static void wr(vm_offset_t b,unsigned o,uint32_t v){*(volatile uint32_t *)(b+o)=v;__asm__ volatile("dsb oshst":::"memory");}
  static bool wait(vm_offset_t b,unsigned o,uint32_t mask,uint32_t value){for(unsigned n=0;n<10000;n++){if((rd(b,o)&mask)==value)return true;IODelay(10);}return false;}
@@ -29,7 +50,32 @@ class A04BR3SDIO : public IOService {
   return 4;
  }
  static void delay(void *,unsigned us){IOSleep((us+999)/1000);}
-public:bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+public:
+ bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+ void stop(IOService *provider) APPLE_KEXT_OVERRIDE {
+  if(transportLock){IOLockLock(transportLock);transportReady=false;IOLockUnlock(transportLock);}
+  setProperty("WMTTransportReady",kOSBooleanFalse);
+  IOService::stop(provider);
+ }
+ void free(void) APPLE_KEXT_OVERRIDE {
+  if(transportLock)IOLockFree(transportLock);
+  IOService::free();
+ }
+ /* Synchronous kernel transport entry points. Never call from interrupt context.
+  * Function1 is enabled on demand; WMT preparation only touches function2. */
+ int enableFunction(unsigned fn){
+  if(!transportLock)return A04_SDIO_POISONED;
+  IOLockLock(transportLock);
+  int e=transportReady?a04_sdio_enable(&transport,fn):A04_SDIO_POISONED;
+  IOLockUnlock(transportLock);return e;
+ }
+ int transferFunction(unsigned fn,unsigned address,int write,int increment,void *buffer,unsigned length){
+  if(!transportLock)return A04_SDIO_POISONED;
+  IOLockLock(transportLock);
+  int e=transportReady?a04_sdio_transfer(&transport,fn,address,write,increment,buffer,length):A04_SDIO_POISONED;
+  if(transport.failed){transportReady=false;setProperty("WMTTransportReady",kOSBooleanFalse);}
+  IOLockUnlock(transportLock);return e;
+ }
 };
 OSDefineMetaClassAndStructors(A04BR3SDIO,IOService);
 bool A04BR3SDIO::start(IOService *provider)
@@ -55,8 +101,18 @@ bool A04BR3SDIO::start(IOService *provider)
  if(!wait(host,0,0x80,0x80)){IOLog("A04BR3 SDIO: clock timeout cfg=0x%x\n",rd(host,0));return false;}
  wr(host,0x30,(rd(host,0x30)&~(3u<<16))|(1u<<19)|(0xffu<<24));
  IOSleep(10);
- struct a04_sdio_io io={this,command,delay};struct a04_sdio_card card={};int error=a04_sdio_identify(&io,&card);
+ io={this,command,delay};struct a04_sdio_card card={};int error=a04_sdio_identify(&io,&card);
  IOLog("A04BR3 SDIO: identify=%d OCR=0x%x RCA=0x%x functions=%u CCCR=0x%x vendor=0x%x device=0x%x\n",error,card.ocr,card.rca,card.functions,card.revision,card.vendor,card.device);
  if(error)return false;
+ if(card.vendor!=0x037a || card.device!=0x6630 || card.functions<2)return false;
+ transportLock=IOLockAlloc();if(!transportLock)return false;
+ transport={&io,transfer,card.functions,0,0};
+ struct a04_sdio_wmt_state wmt={};
+ error=a04_sdio_wmt_prepare(&transport,&wmt);
+ IOLog("A04BR3 SDIO: WMT fn2 prepare=%d CCIR=0x%x CHLPCR=0x%x->0x%x polls=%u enabled=0x%x\n",error,wmt.ccir,wmt.chlpcr_before,wmt.chlpcr_after,wmt.polls,transport.enabled);
+ if(error)return false;
+ transportReady=true;
+ setProperty("WMTTransportReady",kOSBooleanTrue);
+ setProperty("WMTCCIR",wmt.ccir,32);setProperty("WMTCHLPCR",wmt.chlpcr_after,32);
  setProperty("SDIOVendor",card.vendor,32);setProperty("SDIODevice",card.device,32);setProperty("NetworkDataPathAvailable",kOSBooleanFalse);registerService();return true;
 }
