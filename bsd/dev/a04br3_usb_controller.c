@@ -98,6 +98,13 @@ int a04br3_usb_controller_poll(void) {
   printf("A04BR3 USB: peripheral softconnect; private console 0e8d:20ff\n");
  }
  unsigned before=device.configured;int e=a04_usb_device_poll(&device,1);
+ /* Bounded enumeration diagnostics: never read clear-on-read INTRUSB here. */
+ { static unsigned ticks;
+   if(device.active && !device.configured && (++ticks%400)==0 && ticks<=400*60)
+    printf("A04BR3 USB DIAG: t=%u power=0x%x devctl=0x%x faddr=0x%x addr=%u pending=%u phy18=0x%x phy1a=0x%x phy68=0x%x phy6c=0x%x phy6d=0x%x\n",
+     ticks,mac8(&board,1),mac8(&board,0x60),mac8(&board,0),device.address,device.pending,
+     read8(&board,A04_USB_PHY,0x18),read8(&board,A04_USB_PHY,0x1a),read32(&board,A04_USB_PHY,0x68),
+     read8(&board,A04_USB_PHY,0x6c),read8(&board,A04_USB_PHY,0x6d)); }
  if(board.fault)return -EIO;
  if(e==A04_MUSB_FAULT)return -EIO;
  if(e==A04_MUSB_NOT_READY){a04br3_usb_console_online(0);return 0;}
