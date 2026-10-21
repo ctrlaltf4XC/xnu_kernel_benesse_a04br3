@@ -163,7 +163,7 @@ class A04BR3SDIO : public IOService {
    if(!e && r->personal_admitted && a04_psk_authenticated(&r->personal) && !r->security.authorized)
     e=a04_wlan_security_authorize(&r->security,0,now);
    if(!e && r->security.authorized && r->personal_admitted && !r->personal.completion_reported){
-    e=a04_psk_completion_take(&r->personal);if(!e)authenticatedGeneration=r->association_generation;
+    authenticatedGeneration=r->association_generation;
    }
    if(!e && !r->teardown.pending && live->count && !r->data.pending){
     unsigned at=live->head;uint64_t until=0;
@@ -193,10 +193,18 @@ class A04BR3SDIO : public IOService {
   if(r->failed){live->count=0;IOLog("A04BR3 WLAN: runtime stopped error=%d phase=%u events=%u cap=%u event=0x%x/%u/%u lastCMD=0x%x type=0x%x set=%u seq=%u bytes=%u WHISR=0x%x WASR=0x%x wasr-error=%d; no retry\n",r->failed,r->phase,r->events,r->cap_received,r->last_event_id,r->last_event_sequence,r->last_event_bytes,wlanHost->last_cid,wlanHost->last_cmd_type,wlanHost->last_cmd_set,wlanHost->last_cmd_sequence,wlanHost->last_cmd_bytes,wlanHost->status,wlanHost->wasr,wlanHost->wasr_error);}
   if(r->failed)for(unsigned i=0;i<r->event_trace_count;i++)IOLog("A04BR3 WLAN: event-trace[%u] id=0x%x seq=%u bytes=%u\n",i,r->event_trace[i].id,r->event_trace[i].sequence,r->event_trace[i].bytes);
   else if(!liveStopping)scheduleLive((r->cap_pending || r->station.scan.pending || r->station.selected || r->data.pending || live->count)?20:50);
+  uint64_t completionConsumer=nativeEpoch;
   IOLockUnlock(transportLock);
   if(ready)client.ready(client.context,this);
-  if(authenticatedGeneration && client.authenticated)client.authenticated(client.context,authenticatedGeneration);
   if(changed && client.changed)client.changed(client.context);
+  if(authenticatedGeneration && client.authenticated && !client.authenticated(client.context,authenticatedGeneration)){
+   IOLockLock(transportLock);
+   if(!liveStopping && live && nativeEpoch==completionConsumer && nativeClient.owner==client.owner &&
+      live->runtime.association_generation==authenticatedGeneration && live->runtime.security.authorized &&
+      !live->runtime.personal.completion_reported)
+    (void)a04_psk_completion_take(&live->runtime.personal);
+   IOLockUnlock(transportLock);
+  }
   if(client.owner)client.owner->release();
  }
  IOService *nativeOwner=nullptr;

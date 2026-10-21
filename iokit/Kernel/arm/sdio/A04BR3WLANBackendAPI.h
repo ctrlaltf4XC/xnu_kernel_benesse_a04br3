@@ -35,7 +35,7 @@ struct a04_wlan_native_client {
  /* Crypto-only verifier; runs under SDIO lock and MUST NOT reenter driver.
   * Actual native supplicant owns KCK/GTK crypto, no success stub is permitted. */
  a04_wlan_mic_verify verify;
- void (*authenticated)(void *,uint64_t); /* actual auth completion + owner generation */
+ int (*authenticated)(void *,uint64_t); /* 0 only after link + auth notification published; retry otherwise */
 };
 int a04br3_wlan_acquire_backend(a04_wlan_service,struct a04_network_backend *);
 void a04br3_wlan_release_backend(a04_wlan_service);

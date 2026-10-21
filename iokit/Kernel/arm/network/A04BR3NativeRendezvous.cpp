@@ -105,19 +105,22 @@ class A04BR3NativeNetwork : public IOService {
         mbuf_adj(m,14); // header remains owned by the mbuf, payload starts at L3
         (void)self->controller->receive(m); // consumes on every return
     }
-    static void authenticated(void *context,uint64_t epoch){
+    static int authenticated(void *context,uint64_t epoch){
         auto *self=(A04BR3NativeNetwork *)context;
-        if(!epoch || epoch==self->authenticatedEpoch || !self->backendProvider || !self->controller)return;
+        if(!epoch || !self->backendProvider || !self->controller)return ENXIO;
+        int published=self->controller->refreshBackend();if(published)return published;
         a04_network_backend backend={};int e=a04br3_wlan_acquire_backend(self->backendProvider,&backend);
-        if(e)return;
+        if(e)return e;
         a04_network_state state={};e=backend.state(backend.context,&state);
         a04br3_wlan_release_backend(self->backendProvider);
         if(e || state.association_generation!=epoch || !state.auth_profile_valid || state.auth_upper!=8 ||
-            !state.authorized || !a04_network_data_ready(&state))return;
-        self->authenticatedEpoch=epoch;
+            !state.authorized || !a04_network_data_ready(&state))return e?e:ENETDOWN;
+        if(epoch==self->authenticatedEpoch)return 0;
         // Actual interface->controller->SDIO provider tree, matching native
         // eapolclient's two-parent IOGeneralInterest endpoint. Never from SET.
-        self->backendProvider->messageClients(0xe0000130);
+        e=self->backendProvider->messageClients(0xe0000130);
+        if(!e)self->authenticatedEpoch=epoch;
+        return e;
     }
 public:
     int bind(IOService *provider){

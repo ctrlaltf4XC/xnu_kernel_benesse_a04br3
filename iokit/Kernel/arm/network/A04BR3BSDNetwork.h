@@ -39,6 +39,8 @@ private:
     IOService *registry;
     a04_network_backend backend;
     bool stopping,admin,ownedChild;
+    bool linkReported,linkPublishing;
+    uint64_t linkGeneration;
     void publishIdentity();
     uint8_t mac[6];
     char name[16];

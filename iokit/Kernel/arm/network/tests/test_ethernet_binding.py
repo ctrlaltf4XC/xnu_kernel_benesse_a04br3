@@ -25,11 +25,11 @@ struct ifnet_stat_increment_param {unsigned packets_in,bytes_in,errors_in,collis
 struct if_bandwidths_t {uint64_t max_bw,eff_bw;};
 struct IONetworkLinkEventData {uint64_t linkSpeed;};
 static const unsigned kIONetworkEventTypeLinkUp=1,kIONetworkEventTypeLinkDown=2,kIONetworkEventTypeLinkSpeedChange=3,kIONetworkEventTypeDLIL=4,kIONetworkEventWakeOnLANSupportChanged=5;
-static const unsigned KEV_VENDOR_APPLE=1,KEV_NETWORK_CLASS=1,KEV_DL_SUBCLASS=1,KEV_DL_LINK_ON=1,KEV_DL_LINK_OFF=2;
+
 using thread_call_param_t=void *;
 static int baseInputs;
 static int ifnet_input_extended(ifnet_t p,mbuf_t a,mbuf_t b,const ifnet_stat_increment_param *stats){assert(p && p==current && a==b && stats->packets_in==1);lastBaseIfnet=p;baseInputs++;mbuf_freem(a);return 0;}
-static unsigned ifnet_family(ifnet_t p){return p->init.family;}
+
 static int ifnet_set_bandwidths(ifnet_t p,if_bandwidths_t *,if_bandwidths_t *){assert(p);return 0;}
 static bool thread_call_enter1(void *,thread_call_param_t){return true;}
 class IONetworkInterface:public IOService {
@@ -230,6 +230,21 @@ static void nativeCases(){
  assert(!a04br3_network_bind(&provider,&owner) && owner && !current);
  auto client=nativeClient;client.ready(client.context,&provider);
  assert(current && current->refs==2 && provider.refs==2);
+ // Real authenticated callback: publication failure must be retriable.
+ realState.associated=realState.datapath_ready=realState.authorized=realState.auth_profile_valid=1;
+ realState.auth_upper=8;realState.association_generation=41;
+ current->flags|=IFF_UP;assert(!current->init.ioctl(current,SIOCSIFFLAGS,nullptr));
+ realState.associated=realState.datapath_ready=0;client.changed(client.context);
+ realState.associated=realState.datapath_ready=1;eventError=EIO;
+ assert(client.authenticated(client.context,41)==EIO&&!authMessages&&!(current->flags&IFF_RUNNING));
+ eventError=0;authMessageError=EIO;
+ assert(client.authenticated(client.context,41)==EIO&&authMessages==1);
+ authMessageError=0;assert(!client.authenticated(client.context,41)&&authMessages==2);
+ assert(!client.authenticated(client.context,41)&&authMessages==2); // duplicate suppressed
+ realState.association_generation=42;assert(client.authenticated(client.context,41)==ENETDOWN);
+ realState.authorized=realState.auth_profile_valid=realState.auth_upper=0;
+ realState.associated=realState.datapath_ready=0;client.changed(client.context);
+ current->flags&=~IFF_UP;assert(!current->init.ioctl(current,SIOCSIFFLAGS,nullptr));
  // Exact first binder request: GET12, value0, thirteen bytes, no prefix.
  a04_apple80211_req64 bindReq={};strcpy(bindReq.name,"en7");bindReq.type=12;
  bindReq.length=13;bindReq.user_data=(uintptr_t)userBuffer;memset(userBuffer,0xa5,sizeof(userBuffer));
@@ -414,11 +429,13 @@ static void nativeCases(){
 class EthernetBinding(unittest.TestCase):
  def test_adapter(self):
   stub=STUB.replace('static int childCount,failChildInit','static int failReference;\nstatic int childCount,failChildInit').replace('assert(p&&p->refs);p->refs++;return 0;','assert(p&&p->refs);if(failReference)return failReference;p->refs++;return 0;').replace('class IOService {','class IOService {\npublic: virtual ~IOService()=default;').replace('public: virtual ~IOService()=default;', 'public: virtual ~IOService()=default; virtual void free(){}').replace('childCount--;delete this;', 'childCount--;free();delete this;').replace('bool init(){heap=true;','bool init(void * =nullptr){heap=true;')
-  stub=stub.replace('virtual void free(){}','virtual void free(){} int messageClients(unsigned){return 0;}')
+  stub='static unsigned authMessages=0;static int authMessageError=0;static int authMessage(unsigned);\n'+stub
+  stub=stub.replace('virtual void free(){}','virtual void free(){} int messageClients(unsigned type){return authMessage(type);}')
+  stub+='\nstatic int authMessage(unsigned type){assert(type==0xe0000130 && current && (current->flags&IFF_RUNNING));authMessages++;return authMessageError;}\n'
   case=CASE.replace(' mediaCases();\n','').replace(' traceCases();\n a04_network_backend b=', ' a04_network_backend b=').replace('#include "driver.cpp"','#include "driver.cpp"\n#include "apple/IOEthernetController.h"\n#include "A04BR3Ethernet.cpp"\n#include "A04BR3NetworkRuntime.cpp"').replace('int main(){',EXTRA+'\n#include \"sdio/mock_provider.h\"\n#include \"A04BR3NativeRendezvous.cpp\"\n'+NATIVE_CASE+'\nint main(){mediaCases();traceCases();nativeCases();bindingCases();')
   with tempfile.TemporaryDirectory() as d:
    p=Path(d);(p/'stub.h').write_text(stub)
-   for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/clock.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
+   for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/clock.h','kern/thread.h','net/if.h','net/net_kev.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
     h=p/name;h.parent.mkdir(parents=True,exist_ok=True);h.write_text('#include "stub.h"\n')
    (p/'sdio').mkdir();(p/'sdio/mock_provider.h').write_text(NATIVE_API)
    sdio=SOURCE.parent/'sdio'

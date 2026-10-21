@@ -16,6 +16,7 @@
 #include <sys/sockio.h>
 #include <sys/kpi_mbuf.h>
 #include <net/if.h>
+#include <net/net_kev.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
 #include <net/if_ether.h>
@@ -55,7 +56,7 @@ static int a04_network_copyout(void *,const void *in,uint64_t address,unsigned b
 {return copyout(in,(user_addr_t)address,bytes);}
 
 A04BR3BSDNetwork::A04BR3BSDNetwork():interface(nullptr),gate(nullptr),registry(nullptr),
-    backend{},stopping(false),admin(false),ownedChild(false),mac{},name{} {}
+    backend{},stopping(false),admin(false),ownedChild(false),linkReported(false),linkPublishing(false),linkGeneration(0),mac{},name{} {}
 
 int A04BR3BSDNetwork::snapshot(a04_network_state *s)
 {
@@ -220,18 +221,57 @@ int A04BR3BSDNetwork::scanCompleted()
     error=ifnet_event(ifp,&event.header);ifnet_release(ifp);return error;
 }
 
+/* Standard Apple IONetworkInterface link-event payload: family, unit, name16.
+ * Explicit offset24 handles both the kernel flexible event_data and KPI [1].
+ * No guessed link speed, quality or private IO80211 success is published. */
 int A04BR3BSDNetwork::refresh()
 {
     if(!gate)return ENXIO;
     IOLockLock(gate);
-    if(!interface || stopping){IOLockUnlock(gate);return ENXIO;}
-    a04_network_state s={};int error=snapshot(&s);
-    bool control=!error && a04_network_control_ready(&s) && backend.native_get;
-    bool data=control && a04_network_data_ready(&s) && backend.transmit;
-    ifnet_set_flags(interface,(admin && data)?IFF_RUNNING:0,IFF_RUNNING);
-    registry->setProperty("WLANBackendReady",control);
-    registry->setProperty("WLANDataPathReady",data);
-    IOLockUnlock(gate);return error;
+    // DLIL can synchronously reenter us. The active publisher resamples after
+    // its event and reconciles the newest state; never wait under a callback.
+    if(linkPublishing){IOLockUnlock(gate);return EBUSY;}
+    for(unsigned attempt=0;attempt<8;attempt++){
+        if(!interface || stopping){IOLockUnlock(gate);return ENXIO;}
+        a04_network_state s={};int error=snapshot(&s);
+        bool control=!error && a04_network_control_ready(&s) && backend.native_get;
+        bool data=control && a04_network_data_ready(&s) && backend.transmit;
+        bool linked=admin && data;
+        // A coalesced ready->new ready join still changes the real network.
+        if(linked && linkReported && linkGeneration!=s.association_generation)linked=false;
+        int flagError=ifnet_set_flags(interface,linked?IFF_RUNNING:0,IFF_RUNNING);
+        registry->setProperty("WLANBackendReady",control);
+        registry->setProperty("WLANDataPathReady",data);
+        if(flagError){
+            (void)ifnet_set_flags(interface,0,IFF_RUNNING);
+            IOLockUnlock(gate);return flagError;
+        }
+        if(linked==linkReported){IOLockUnlock(gate);return error;}
+        ifnet_t ifp=interface;int retained=ifnet_reference(ifp);
+        if(retained){(void)ifnet_set_flags(ifp,0,IFF_RUNNING);IOLockUnlock(gate);return retained;}
+        struct { struct kern_event_msg header;
+            uint8_t tail[48-sizeof(struct kern_event_msg)]; } event={};
+        static_assert(offsetof(struct kern_event_msg,event_data)==24,"link header offset");
+        static_assert(sizeof(event)==48,"link event family4 unit4 name16");
+        event.header.total_size=sizeof(event);event.header.vendor_code=KEV_VENDOR_APPLE;
+        event.header.kev_class=KEV_NETWORK_CLASS;event.header.kev_subclass=KEV_DL_SUBCLASS;
+        event.header.event_code=linked?KEV_DL_LINK_ON:KEV_DL_LINK_OFF;
+        uint32_t family=ifnet_family(ifp),unit=ifnet_unit(ifp);
+        memcpy((uint8_t *)&event+24,&family,4);memcpy((uint8_t *)&event+28,&unit,4);
+        memcpy((uint8_t *)&event+32,ifnet_name(ifp),strlen(ifnet_name(ifp)));
+        linkPublishing=true;
+        IOLockUnlock(gate);
+        int posted=ifnet_event(ifp,&event.header); // filters/protocols may reenter
+        IOLockLock(gate);
+        linkPublishing=false;
+        if(!posted){linkReported=linked;linkGeneration=linked?s.association_generation:0;}
+        else (void)ifnet_set_flags(ifp,0,IFF_RUNNING); // fail closed; retry next refresh
+        ifnet_release(ifp);
+        if(posted){IOLockUnlock(gate);return posted;}
+        // Resample after unlocked DLIL: a cancel/down during link-on must
+        // receive its matching link-off, rather than retaining an old result.
+    }
+    IOLockUnlock(gate);return EAGAIN;
 }
 
 errno_t A04BR3BSDNetwork::output(ifnet_t ifp,mbuf_t packet)
@@ -320,6 +360,7 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
         }
     }
     IOLockUnlock(s->gate);
+    if(command==SIOCSIFFLAGS){int publication=s->refresh();if(!error)error=publication;}
     if(native)a04_native_trace(command,traceType,traceValue,traceLength,error);
     return error;
 }
@@ -343,7 +384,13 @@ int A04BR3BSDNetwork::detach()
 {
     if(!gate)return 0;
     IOLockLock(gate);if(!interface || stopping){IOLockUnlock(gate);return 0;}
-    stopping=true;admin=false;auto ifp=interface;
+    if(linkPublishing){IOLockUnlock(gate);return EBUSY;}
+    admin=false;IOLockUnlock(gate);
+    int publication=refresh(); // standard LINK_OFF precedes actual detach
+    IOLockLock(gate);
+    if(linkPublishing || linkReported){IOLockUnlock(gate);return publication?publication:EBUSY;}
+    if(!interface || stopping){IOLockUnlock(gate);return 0;}
+    stopping=true;auto ifp=interface;
     ifnet_set_flags(ifp,0,IFF_UP|IFF_RUNNING);
     registry->removeProperty("IOInterfaceName");registry->removeProperty("IOInterfaceNamePrefix");
     registry->removeProperty("IOInterfaceUnit");registry->removeProperty("IO80211InterfaceRole");
@@ -385,5 +432,5 @@ int A04BR3BSDNetwork::finish()
     }
     ownedChild=false;
     if(gate){IOLockFree(gate);gate=nullptr;}
-    backend={};stopping=admin=false;return 0;
+    backend={};stopping=admin=linkReported=linkPublishing=false;linkGeneration=0;return 0;
 }

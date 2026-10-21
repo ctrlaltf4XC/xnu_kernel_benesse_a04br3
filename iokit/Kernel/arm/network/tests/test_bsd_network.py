@@ -136,6 +136,7 @@ static int ifnet_allocate_extended(const ifnet_init_eparams *p,ifnet_t *out){
  if(failAlloc)return ENOMEM;assert(!current);current=new IF{*p,0,1,false};*out=current;return 0;
 }
 static void *ifnet_softc(ifnet_t p){return p->init.softc;}
+static unsigned ifnet_family(ifnet_t p){return p->init.family;}
 static int failMediaLength;
 static int ifnet_set_addrlen(ifnet_t p,unsigned n){assert(n==6);if(failMediaLength==1)return EINVAL;p->addrlen=n;return 0;}
 static int ifnet_set_hdrlen(ifnet_t p,unsigned n){assert(n==14);if(failMediaLength==2)return EINVAL;p->hdrlen=n;return 0;}
@@ -154,6 +155,8 @@ static int ifnet_release(ifnet_t p){assert(p->refs);p->refs--;if(p->refs)return 
 struct kern_event_msg {uint32_t total_size,vendor_code,kev_class,kev_subclass,id,event_code,event_data[A04_TEST_EVENT_ARRAY];};
 static_assert(offsetof(kern_event_msg,event_data)==24,"both XNU event layouts share header offset");
 static_assert(sizeof(kern_event_msg)==24+4*A04_TEST_EVENT_WORDS,"exercise actual24 and legacy28 headers");
+static const unsigned KEV_VENDOR_APPLE=1,KEV_NETWORK_CLASS=1,KEV_DL_SUBCLASS=2,KEV_DL_LINK_ON=13,KEV_DL_LINK_OFF=12;
+static int linkUps,linkDowns;static void (*eventHook)()=nullptr;
 static int baseEvents,scanEvents,eventError;static ifnet_t lastBaseIfnet;
 static int ifnet_event(ifnet_t p,kern_event_msg *e){
  assert(p && p==current && !heldLocks);lastBaseIfnet=p;baseEvents++;
@@ -161,6 +164,14 @@ static int ifnet_event(ifnet_t p,kern_event_msg *e){
   assert(e->total_size==40 && e->vendor_code==1 && e->kev_class==6 && e->kev_subclass==1);
   assert(!memcmp((uint8_t *)e+24,"en7\0\0\0\0\0\0\0\0\0\0\0\0\0",16));
   assert(p->refs>=2);scanEvents++;
+ }
+ if(e->kev_class==KEV_NETWORK_CLASS && e->kev_subclass==KEV_DL_SUBCLASS &&
+    (e->event_code==KEV_DL_LINK_ON || e->event_code==KEV_DL_LINK_OFF)){
+  assert(e->total_size==48 && e->vendor_code==KEV_VENDOR_APPLE && p->refs>=2);
+  uint32_t family,unit;memcpy(&family,(uint8_t *)e+24,4);memcpy(&unit,(uint8_t *)e+28,4);
+  assert(family==IFNET_FAMILY_ETHERNET&&unit==7&&!memcmp((uint8_t *)e+32,"en\0\0\0\0\0\0\0\0\0\0\0\0\0\0",16));
+  if(!eventError){if(e->event_code==KEV_DL_LINK_ON)linkUps++;else linkDowns++;}
+  if(eventHook)eventHook();
  }
  return eventError;
 }
@@ -199,7 +210,7 @@ static int set(void *,uint32_t type,uint32_t value,const void *p,uint32_t n){
 }
 static int admin(void *,unsigned enabled){adminCalls++;lastAdmin=enabled;return adminError;}
 static int tx(void *,void *p){txCalls++;if(transmitError)return transmitError;mbuf_freem((mbuf_t)p);return 0;}
-static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={};realState.present=realState.mac_valid=1;const uint8_t initialMac[6]={0,2,3,4,5,6};memcpy(realState.mac,initialMac,6);
+static void reset(){linkUps=linkDowns=0;eventHook=nullptr;baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={};realState.present=realState.mac_valid=1;const uint8_t initialMac[6]={0,2,3,4,5,6};memcpy(realState.mac,initialMac,6);
  stateError=nativeError=adminError=transmitError=failAlloc=failMtu=failFlags=failAttach=failDetach=failMemory=copyInError=copyOutError=0;
  credentialRoot=1;credentialChecks=setCalls=setError=0;adminCalls=0;lastAdmin=99;registrations=releaseCount=packetFrees=txCalls=nativeCalls=copyIns=copyOuts=0;backendOutput=4;inlineDetach=false;}
 static a04_apple80211_req64 req(){a04_apple80211_req64 r={};strcpy(r.name,"en7");r.type=12;r.value=7;r.length=8;r.user_data=(uintptr_t)userBuffer;return r;}
@@ -436,7 +447,7 @@ class BSDNetwork(unittest.TestCase):
     def test_actual_bridge(self):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);(root/'stub.h').write_text(STUB)
-            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
+            for name in ['IOKit/IOLib.h','IOKit/IOService.h','net/kpi_interface.h','sys/systm.h','sys/sockio.h','sys/kpi_mbuf.h','sys/kauth.h','sys/kern_event.h','libkern/OSAtomic.h','kern/thread.h','net/if.h','net/net_kev.h','net/if_dl.h','net/if_types.h','net/if_ether.h','net/ethernet.h','net/if_media.h']:
                 p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('#include "stub.h"\n')
             (root/'driver.cpp').write_text((SOURCE/'A04BR3BSDNetwork.cpp').read_text())
             (root/'case.cpp').write_text(CASE);exe=root/'case'
