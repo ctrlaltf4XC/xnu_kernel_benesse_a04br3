@@ -15,7 +15,7 @@ struct a04_wlan_teardown {
 };
 static inline int a04_wlan_teardown_secure(const struct a04_wlan_station *s,const struct a04_wlan_security *k){
  return s->secured || k->enabled || k->phase || k->pending_tx || k->ptk_pending ||
-  k->ptk_confirmed || k->gtk_queued || k->m4_confirmed || k->authorized || k->failed;
+  k->ptk_confirmed || k->gtk_accepted || k->m4_confirmed || k->authorized || k->failed;
 }
 /* Source command removal has fgNeedResp=FALSE. This completes command queueing,
  * not a claimed hardware completion. On partial send failure retain old host

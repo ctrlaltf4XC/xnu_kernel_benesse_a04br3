@@ -56,10 +56,21 @@
     "build": "existing osfmk/conf/files348,351-354,357-363 providers alreadyregistered; sourceSDKdepsunchanged",
     "limits": "Sourceaudit andARM64signature/codegen only; nohardware orwholekernellink byworker"
   },
-  "completion_policy_review": "Current conservative gate waits gtk_confirmed; no HWGTKACK was established. This is NOT a proof that a hardware ACK is required for correct MTK WPA. Parent/Laplace reviewing reference cfg80211/supplicant host/HIF submission completion and ordering; any relaxation must rename the truthful submitted/HIF contract, not claim fabricated hardwareACK.",
+  "completion_policy_review": "Superseded: matching gen3 noNeedResp CID7 completes set_key after actual synchronous successful HIF write; independent GTK firmware ACK is not required. gtk_accepted names that transfer contract, never hardware install acknowledgment. Initial-only driver owner requires validated M3, actual PTK EID24, same epoch/cookie, GTK full HIF success and actual M4 TX_DONE before authorization. Software enqueue, failed/short transfer and timeout cannot advance. Radio Protected/cipher M3 and rekey are unsupported; standard EAPOL encrypted-key-data/KEK unwrap remains supported.",
   "runtime_sources": [
     "A04BR3WLANPersonalRuntime.h",
     "A04BR3WLANNetworkProfile.h",
     "../network/A04BR3NativePersonalAssociation.h"
-  ]
+  ],
+  "gtk_host_contract": {
+    "revision": "eb47f42e1f84fe5716ef239620725f82718a620a",
+    "paths": {
+      "os/linux/gl_cfg80211.c:218-223": "kalIoctl set_key success returns0",
+      "os/linux/gl_kal.c:2299-2306": "wait OID completion",
+      "common/wlan_oid.c:2252-2270,2591-2599": "CID7 noNeedResp enqueued pending",
+      "common/wlan_lib.c:1695-1720,1774-1797": "actual HIF send then completion callback",
+      "nic/nic_cmd_event.c:2167-2172": "host OID success",
+      "nic/nic_rx.c:2377-2400": "PTK perSTA EID24"
+    }
+  }
 }

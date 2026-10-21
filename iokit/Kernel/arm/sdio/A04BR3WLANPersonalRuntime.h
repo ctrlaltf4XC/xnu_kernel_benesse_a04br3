@@ -39,6 +39,7 @@ static inline int a04_wlan_personal_observed(struct a04_wlan_runtime *r,const st
 static inline int a04_wlan_personal_drive(struct a04_wlan_runtime *r,struct a04_wlan_host *h,uint64_t now){
  if(!r || !h || !r->personal_admitted || !r->personal.phase || r->personal_busy)return 0;
  int e=a04_psk_live(&r->personal,now);if(e)return e;
+ if(!a04_wlan_personal_commit_allowed(r,r->personal.serial>>16,0,0,1))return A04_WLAN_STATE;
  struct a04_psk4way *s=&r->personal;
  if(s->phase==A04_PSK_KEYS){
   unsigned pair=s->ptk_state==0?1:0;
@@ -46,10 +47,16 @@ static inline int a04_wlan_personal_drive(struct a04_wlan_runtime *r,struct a04_
   const uint8_t *key=0,*rsc=0;unsigned id=0;uint64_t cookie=0;
   e=a04_psk_key_take(s,pair,now,&key,&id,&rsc,&cookie);
   if(!e)e=a04_wlan_security_install(&r->security,&r->station,h,pair,id,key,rsc,now);
-  if(e)return e;
+  if(e)return a04_psk_fail(s,e);
   r->personal_key_cookie=cookie;
-  /* Source has no verified group-key ACK: queue is not completion. */
-  if(!pair)r->personal_wait_group_ack=1;
+  /* Matching gen3 set_key completes at actual full synchronous HIF transfer.
+   * PTK still needs EID24; GTK has no separate firmware ACK. Caller holds
+   * transportLock, so association/consumer cannot change during transfer. */
+  if(!pair){
+   if(!r->security.gtk_accepted)return a04_psk_fail(s,A04_WLAN_STATE);
+   e=a04_psk_key_done(s,0,cookie,0,now);
+   if(e)return a04_psk_fail(s,e);
+  }
   return 0;
  }
  if((s->phase==A04_PSK_M2_READY || s->phase==A04_PSK_M4_READY) && !r->data.pending && !s->tx_pending){

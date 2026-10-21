@@ -77,14 +77,14 @@ int main(void){
  uint8_t done[8];memset(done,0,8);done[0]=(uint8_t)sta.local.bss;memcpy(done+2,sta.ap.mac,6);
  v.id=0x24;v.length=8;v.payload=done;assert(!a04_wlan_security_key_event(&sec,&sta,&v,5200) && sec.ptk_confirmed);
  assert(a04_wlan_security_install(&sec,&sta,&h,1,0,key,rsc,5100)==A04_WLAN_STATE); /* no reinstall */
- assert(!a04_wlan_security_install(&sec,&sta,&h,0,1,key,rsc,5500) && sec.gtk_queued);
+ assert(!a04_wlan_security_install(&sec,&sta,&h,0,1,key,rsc,5500) && sec.gtk_accepted);
  assert(!sec.authorized && !sec.m4_confirmed);
  memcpy(eth+14,m4,sizeof(m4));assert(!a04_wlan_ethernet_send(&h,&sta,&sec,&d,eth,14+sizeof(m4),verify,0,6000,900000));
  assert((h.tx[6]&0x80) && sec.pending_tx==4 && !sec.m4_confirmed);
  status[0]=(uint8_t)d.pid;v.id=0x0f;v.length=16;v.payload=status;
  assert(!a04_wlan_data_tx_event(&h,&sta,&sec,&d,&v,7000) && sec.m4_confirmed);
- /* ActualGTKcommandwasqueued, not acknowledged: neveropenIP. */
- assert(a04_wlan_security_authorize(&sec,0,7100)==A04_WLAN_STATE && !sec.authorized && !sec.gtk_confirmed && !a04_wlan_port_allowed(&sta,&sec,0));
+ /* Full synchronous GTK HIF acceptance plus real M4 completion permits IP. */
+ assert(!a04_wlan_security_authorize(&sec,0,7100) && sec.authorized && sec.gtk_accepted && a04_wlan_port_allowed(&sta,&sec,0));
  return 0;
 }
 ''')

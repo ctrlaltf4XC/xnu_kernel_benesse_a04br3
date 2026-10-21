@@ -139,7 +139,7 @@ int main(){
   if(mode==0)r.station.secured=1;
   if(mode==1)r.security.enabled=1;
   if(mode==2)r.security.ptk_pending=1;
-  if(mode==3)r.security.gtk_queued=1;
+  if(mode==3)r.security.gtk_accepted=1;
   if(mode==4)r.security.pending_tx=2;
   if(mode==5)r.security.ptk_confirmed=1;
   if(mode==6)r.security.authorized=1;

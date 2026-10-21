@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 """Actual runtime/HIF+real crypto. Host injected firmware events are NOT HW proof.
-Crucially asserts GTK QUEUED never becomes GTK CONFIRMED or opens IP.
+GTK host acceptance requires actual synchronous HIF success; M4 TX_DONE gates IP.
 """
 from pathlib import Path
 import unittest
@@ -9,7 +9,7 @@ ROOT=Path(__file__).resolve().parents[2]
 class PersonalRuntime(unittest.TestCase):
  production=True
  run_c=owner.PersonalState.run_c
- def test_real_crypto_actual_tx_ptk_ack_metadata_and_group_block(self):
+ def test_real_crypto_actual_tx_ptk_event_group_hif_acceptance(self):
   self.run_c('#include "'+str(ROOT/'iokit/Kernel/arm/sdio/A04BR3WLANPersonalRuntime.h')+'"\n'+
    '#include "'+str(ROOT/'iokit/Kernel/arm/sdio/A04BR3WLANCurrentNetwork.h')+'"\n'+
    '#include "'+str(ROOT/'iokit/Kernel/arm/sdio/A04BR3WLANNetworkProfile.h')+'"\n'+
@@ -35,12 +35,12 @@ int main(void){struct card c;struct a04_sdio_io io;struct a04_sdio_transport t;s
  assert(!a04_wlan_personal_drive(&r,&h,310)&&c.txs==txs+1); /* no reinstall while waiting real ACK */
  memset(eventbytes,0,16);eventbytes[0]=(uint8_t)r.station.local.bss;memcpy(eventbytes+2,r.station.ap.mac,6);
  ev.id=0x24;ev.length=8;assert(!a04_wlan_runtime_event(&r,&h,&ev,320));assert(r.security.ptk_confirmed&&r.personal.ptk_state==2);
- assert(!a04_wlan_personal_drive(&r,&h,330));assert(c.txs==txs+2&&r.security.gtk_queued&&!r.security.gtk_confirmed);
- assert(r.personal.gtk_state==1&&r.personal_wait_group_ack&&!r.data.pending&&!a04_psk_authenticated(&r.personal));
- assert(!a04_wlan_personal_drive(&r,&h,340)&&c.txs==txs+2);
+ assert(!a04_wlan_personal_drive(&r,&h,330));assert(c.txs==txs+2&&r.security.gtk_accepted);
+ assert(r.personal.gtk_state==2&&!r.data.pending&&!a04_psk_authenticated(&r.personal));
+ assert(!a04_wlan_personal_drive(&r,&h,340)&&c.txs==txs+3);
  assert(a04_wlan_security_authorize(&r.security,0,350)==A04_WLAN_STATE&&!r.security.authorized);
- /* Unknown/duplicate pairwise event cannot stand in for GTK acknowledgement. */
- assert(!a04_wlan_runtime_event(&r,&h,&ev,360));assert(!r.security.gtk_confirmed&&r.personal.gtk_state==1&&!r.security.authorized);
+ /* Duplicate PTK event cannot open port before genuine M4 TX_DONE. */
+ assert(!a04_wlan_runtime_event(&r,&h,&ev,360));assert(r.security.gtk_accepted&&r.personal.gtk_state==2&&!r.security.authorized);
  r.scan_generation=1;r.scan_count=1;r.scan[0]=r.station.ap;r.scan_extra[0].generation=1;r.scan_extra[0].observed_us=100;
  struct a04_wlan_scan_record record;assert(!a04_wlan_current_record(&r,&record));
  struct a04_native_peer_identity peer;memset(&peer,0,sizeof(peer));peer.ssid_length=record.ap.ssid_length;memcpy(peer.ssid,record.ap.ssid,peer.ssid_length);memcpy(peer.bssid,record.ap.mac,6);
@@ -58,8 +58,7 @@ int main(void){struct card c;struct a04_sdio_io io;struct a04_sdio_transport t;s
  return 0;}
 ''')
 
-# Pure host completion fixture: group ACK below is deliberately HOST INJECTED.
-# Production has no proven GTK ACK and never sets gtk_confirmed from a queue.
+# Actual synchronous HIF callback is simulated by the test card; no HW proof.
 COMPLETE_FIXTURE=r'''
 static void actual_runtime_to_keys(struct a04_wlan_runtime *r,struct a04_wlan_host *h){
  memset(r,0,sizeof(*r));local_profile(&r->station.local);ap_profile(&r->station.ap);
@@ -76,9 +75,7 @@ static void actual_runtime_to_keys(struct a04_wlan_runtime *r,struct a04_wlan_ho
 static void host_complete_after_real_crypto(struct a04_wlan_runtime *r,struct a04_wlan_host *h){
  actual_runtime_to_keys(r,h);assert(!a04_wlan_personal_drive(r,h,300));uint8_t done[16]={0};done[0]=(uint8_t)r->station.local.bss;memcpy(done+2,r->station.ap.mac,6);
  struct a04_wlan_event e={0x24,0,8,done};assert(!a04_wlan_runtime_event(r,h,&e,320));assert(!a04_wlan_personal_drive(r,h,330));
- // HOST SIMULATED GTK COMPLETION ONLY. There is NO equivalent production
- // path yet. This is necessary to test future genuinely completed sessions.
- assert(!a04_psk_key_done(&r->personal,0,r->personal_key_cookie,0,340));r->security.gtk_confirmed=1;
+ assert(r->security.gtk_accepted&&r->personal.gtk_state==2);
  assert(!a04_wlan_personal_drive(r,h,350));assert(r->data.eapol_kind==4&&r->data.pending);
  memset(done,0,16);done[0]=(uint8_t)r->data.pid;done[4]=(uint8_t)r->station.local.wlan;
  e.id=0x0f;e.length=16;assert(!a04_wlan_runtime_event(r,h,&e,360));

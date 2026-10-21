@@ -57,7 +57,7 @@ static inline int a04_wlan_eapol_parse(const uint8_t *p,unsigned n,struct a04_wl
 }
 typedef int (*a04_wlan_mic_verify)(void *,const uint8_t *,unsigned,unsigned,unsigned);
 struct a04_wlan_security {
- unsigned enabled,phase,pending_tx,ptk_pending,ptk_confirmed,gtk_queued,gtk_confirmed,m4_confirmed,authorized;
+ unsigned enabled,phase,pending_tx,ptk_pending,ptk_confirmed,gtk_accepted,m4_confirmed,authorized;
  uint64_t replay,deadline_us,rx_pn[16],gtk_pn[4];unsigned gtk_id;uint8_t anonce[32];int failed;
 };
 static inline int a04_wlan_security_fail(struct a04_wlan_security *s,int e){
@@ -123,7 +123,7 @@ static inline int a04_wlan_ccmp_key_encode(const struct a04_wlan_local *l,const 
 static inline int a04_wlan_security_install(struct a04_wlan_security *s,struct a04_wlan_station *sta,
  struct a04_wlan_host *h,unsigned pairwise,unsigned id,const uint8_t key[16],const uint8_t rsc[8],uint64_t now){
  if(!s || !sta || !h || !s->enabled || s->phase!=3 || s->failed || !sta->sta_active ||
-  (pairwise?(s->ptk_pending || s->ptk_confirmed):(!s->ptk_confirmed || s->gtk_queued)))return A04_WLAN_STATE;
+  (pairwise?(s->ptk_pending || s->ptk_confirmed):(!s->ptk_confirmed || s->gtk_accepted)))return A04_WLAN_STATE;
  if(now>=s->deadline_us)return a04_wlan_security_fail(s,A04_WLAN_TIMEOUT);
  uint8_t p[64];int e=a04_wlan_ccmp_key_encode(&sta->local,sta->ap.mac,pairwise,id,key,16,rsc,p);
  if(!e)e=a04_wlan_set(h,7,p,64,0);
@@ -133,7 +133,8 @@ static inline int a04_wlan_security_install(struct a04_wlan_security *s,struct a
  if(e)return a04_wlan_security_fail(s,e);
  uint64_t pn=0;for(unsigned i=0;i<6;i++)pn|=(uint64_t)rsc[i]<<(8*i);
  if(pairwise){s->ptk_pending=1;for(unsigned i=0;i<16;i++)s->rx_pn[i]=pn;}
- else{s->gtk_queued=1;s->gtk_id=id;s->gtk_pn[id]=pn;}
+ /* Set only after a04_wlan_set returned full synchronous HIF success. */
+ else{s->gtk_accepted=1;s->gtk_id=id;s->gtk_pn[id]=pn;}
  return 0;
 }
 static inline int a04_wlan_security_key_event(struct a04_wlan_security *s,const struct a04_wlan_station *sta,
@@ -147,11 +148,11 @@ static inline int a04_wlan_security_key_event(struct a04_wlan_security *s,const 
 }
 /* Called only by the native supplicant after its authenticated handshake,
  * RSN/GTK checks and successful M4 TX completion. Never from a set-key ioctl.
- * gtk_confirmed requires actual independently proved firmware completion;
- * currentgen3 onlyqueuesGTK, so this cannotopenitsportwithoutnewACKevidence.
+ * gtk_accepted means CID7 passed synchronous full HIF transfer, matching
+ * gen3 noNeedResp set_key completion. It is NOT a firmware key-install ACK.
  * This trusted callback is a security boundary, not a synthetic success flag. */
 static inline int a04_wlan_security_authorize(struct a04_wlan_security *s,int supplicant_result,uint64_t now){
- if(!s || s->failed || !s->enabled || s->phase!=3 || !s->ptk_confirmed || !s->gtk_queued || !s->gtk_confirmed || !s->m4_confirmed)return A04_WLAN_STATE;
+ if(!s || s->failed || !s->enabled || s->phase!=3 || !s->ptk_confirmed || !s->gtk_accepted || !s->m4_confirmed)return A04_WLAN_STATE;
  if(now>=s->deadline_us)return a04_wlan_security_fail(s,A04_WLAN_TIMEOUT);
  if(supplicant_result)return a04_wlan_security_fail(s,A04_WLAN_SECURITY);
  s->authorized=1;return 0;

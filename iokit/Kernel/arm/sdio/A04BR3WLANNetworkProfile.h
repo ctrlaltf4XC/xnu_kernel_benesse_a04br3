@@ -18,7 +18,7 @@ static inline void a04_wlan_network_profile(const struct a04_wlan_runtime *r,str
  unsigned open=!r->station.secured && !r->auth_upper && !(r->station.ap.capability&16) && !r->station.ap.rsn_length;
  out->auth_profile_valid=out->associated && r->association_generation && r->auth_lower==1 && (open || personal) && !r->auth_upper_ext;
  if(out->auth_profile_valid){out->auth_lower=r->auth_lower;out->auth_upper=r->auth_upper;out->auth_upper_ext=r->auth_upper_ext;}
- out->authorized=out->associated && (open || (personal && r->security.authorized && r->security.gtk_confirmed &&
+ out->authorized=out->associated && (open || (personal && r->security.authorized && r->security.gtk_accepted &&
   r->security.ptk_confirmed && r->security.m4_confirmed && a04_psk_authenticated(&r->personal)));
  out->preauth_ready=out->control_ready && out->associated && out->auth_profile_valid && personal && r->security.enabled && !r->security.failed && !r->personal.failed;
  if(r->personal_admitted && out->control_ready && !r->teardown.pending){

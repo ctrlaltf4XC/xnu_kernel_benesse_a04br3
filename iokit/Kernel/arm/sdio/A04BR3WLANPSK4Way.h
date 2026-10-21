@@ -234,7 +234,9 @@ static inline int a04_psk_tx_done(struct a04_psk4way *s,uint64_t cookie,unsigned
 }
 /* Only PTK first, then GTK, one submission each. Keys are borrowed until the
  * synchronous command has copied them. Cookies MUST bind real command/event
- * identity plus BSS/peer. Merely returning from a FIFO write is not completion.
+ * identity plus BSS/peer. PTK completion requires its real firmware event;
+ * GTK completion is successful full synchronous HIF transfer (noNeedResp),
+ * not software enqueue and not a claimed firmware key-install ACK.
  */
 static inline int a04_psk_key_take(struct a04_psk4way *s,unsigned pairwise,uint64_t now,
  const uint8_t **key,unsigned *id,const uint8_t **rsc,uint64_t *cookie){

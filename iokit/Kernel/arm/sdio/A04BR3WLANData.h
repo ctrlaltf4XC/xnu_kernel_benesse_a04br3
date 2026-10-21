@@ -27,14 +27,14 @@ static inline int a04_wlan_ethernet_rx(const struct a04_wlan_station *s,struct a
   (group && p[8]!=s->local.bmc))return A04_WLAN_SEQUENCE;
  if(!sec->enabled && cipher)return A04_WLAN_SECURITY;
  if(eapol){if(!sec->enabled || group || !a04_wlan_equal(eth+6,s->ap.mac,6))return A04_WLAN_SECURITY;}
- else if(sec->enabled && (cipher!=4 || (group && !sec->gtk_queued)))return A04_WLAN_SECURITY;
+ else if(sec->enabled && (cipher!=4 || (group && !sec->gtk_accepted)))return A04_WLAN_SECURITY;
  /* gen3 que_mgt.c qmHandleRxReplay: group1 PN is six LE octets.
   * No AMPDU/reorder support in this subset. Reject missing security metadata
   * rather than accepting a packet whose anti-replay check cannot be proved. */
  if(cipher==4){
   if(!(groups&1))return A04_WLAN_SECURITY;
   unsigned pn_off=16+((groups&8)?16:0),kid=p[4]>>6,tid=p[9]&15;
-  if((group && (!sec->gtk_queued || kid!=sec->gtk_id)) || (!group && (!sec->ptk_confirmed || kid)))return A04_WLAN_SECURITY;
+  if((group && (!sec->gtk_accepted || kid!=sec->gtk_id)) || (!group && (!sec->ptk_confirmed || kid)))return A04_WLAN_SECURITY;
   uint64_t pn=0;for(unsigned i=0;i<6;i++)pn|=(uint64_t)p[pn_off+i]<<(8*i);
   uint64_t *last=group?&sec->gtk_pn[kid]:&sec->rx_pn[tid];
   if(pn<=*last)return A04_WLAN_REPLAY;

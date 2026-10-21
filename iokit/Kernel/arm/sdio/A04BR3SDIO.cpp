@@ -54,7 +54,7 @@ class A04BR3SDIO : public IOService {
  struct a04_wmt_startup_options startupOptions={0,0,0,1,2,1};
  struct Live {
   struct a04_wlan_runtime runtime;
-  struct a04_psk4way personalWork;uint8_t personalRX[1514];unsigned groupWaitReported;
+  struct a04_psk4way personalWork;uint8_t personalRX[1514];
   struct {unsigned bytes;uint8_t data[1514];} queue[8];
   unsigned head,count,attempted,readyNotified,notifiedEvents,notifiedScan;
  } *live=nullptr;
@@ -183,9 +183,6 @@ class A04BR3SDIO : public IOService {
   }
   if(r->configured && !live->readyNotified && client.ready && !r->failed){live->readyNotified=1;ready=1;}
   if(live->notifiedEvents!=r->events || live->notifiedScan!=r->scan_count || r->failed){changed=1;live->notifiedEvents=r->events;live->notifiedScan=r->scan_count;}
-  if(r->personal_wait_group_ack && !live->groupWaitReported){live->groupWaitReported=1;
-   setProperty("WLANPersonalWaitingForGTKCompletion",kOSBooleanTrue);
-   IOLog("A04BR3 WLAN: Personal GTK queued, no proven firmware group-key ACK; controlled port remains closed\n");}
   if(r->configured && !getRuntimeAnnounced){getRuntimeAnnounced=true;
    IOLog("A04BR3 WLAN: runtime MAC valid=%u source=%u NIC=0x%x FW=0x%x boardQueued=%u passive scan seq=%u RFfail=%u BBfail=%u\n",r->mac_valid,r->mac_source,r->firmware_product,r->firmware_version,r->calibration_sent,r->scan_sequence,r->rf_cal_fail,r->bb_cal_fail);}
   if(r->station.scan.complete && !scanAnnounced){scanAnnounced=true;IOLog("A04BR3 WLAN: passive scan complete results=%u dropped=%u events=%u\n",r->scan_count,r->scan_dropped,r->events);}

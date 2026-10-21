@@ -12,7 +12,7 @@ struct a04_wlan_runtime {
  struct a04_wlan_station station;struct a04_wlan_security security;
  struct a04_wlan_teardown teardown;
  struct a04_psk4way personal;struct a04_psk_prepared credential;
- unsigned personal_admitted,personal_busy,personal_wait_group_ack;
+ unsigned personal_admitted,personal_busy;
  unsigned auth_lower,auth_upper,auth_upper_ext;
  uint64_t association_counter,association_generation,personal_tx_cookie,personal_key_cookie;
  struct a04_wlan_data_state data;struct a04_wlan_slots slots;
@@ -207,6 +207,10 @@ static inline int a04_wlan_runtime_step(struct a04_wlan_runtime *r,struct a04_wl
  }else if(r->teardown.pending){r->unknown++;e=0;
  }else if(r->station.sta_active && (a04_wmt_le16(h->rx+2)>>13)==2){
   struct a04_wlan_ethernet packet;e=a04_wlan_ethernet_rx(&r->station,&r->security,h->rx,h->rx_length,&packet);
+  /* Initial-only owner: 802.11 Protected/cipher metadata is distinct from
+   * the normal EAPOL-Key encrypted-key-data bit used for GTK KEK unwrap. */
+  if(!e && r->personal_admitted && packet.eapol && packet.cipher)
+   return a04_wlan_runtime_fail(r,h,A04_WLAN_UNSUPPORTED);
   if(!e){r->frames++;r->delivery=packet.data;r->delivery_length=packet.length;
    r->delivery_kind=packet.eapol?A04_WLAN_DELIVERY_EAPOL:A04_WLAN_DELIVERY_ETHERNET;
    if(packet.eapol && !r->personal_admitted)e=a04_wlan_security_rx(&r->security,packet.data+14,packet.length-14,verify,ctx,now);

@@ -170,8 +170,8 @@ static void completed_runtime(struct a04_wlan_runtime *r,struct a04_wlan_host *h
  r->personal=fixture.state;r->station=fixture.station;r->personal_admitted=1;
  r->admin=r->configured=r->begun=1;r->association_generation=1;
  /* Explicit simulated independent firmware/security completion state. */
- r->security.enabled=r->security.ptk_confirmed=r->security.gtk_queued=1;
- r->security.gtk_confirmed=r->security.m4_confirmed=r->security.authorized=1;
+ r->security.enabled=r->security.ptk_confirmed=r->security.gtk_accepted=1;
+ r->security.m4_confirmed=r->security.authorized=1;
  r->security.phase=3;r->security.deadline_us=1000100;
 }
 '''
