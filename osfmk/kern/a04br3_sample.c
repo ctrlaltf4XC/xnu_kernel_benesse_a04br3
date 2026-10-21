@@ -77,7 +77,7 @@ a04br3_sample_task(const char *name, int pid, task_t task)
          * fault user memory while holding the task lock. Saved FP/PC can race
          * running threads: these are approximate live samples, not crashes. */
         if (!strcmp(name, "SpringBoard") || !strcmp(name, "backboardd") ||
-            !strcmp(name, "Setup") || !strcmp(name, "wifid") ||
+            !strcmp(name, "Setup") || !strcmp(name, "wifid") || !strcmp(name, "kbd") ||
             !strcmp(name, "containermanager") || !strcmp(name, "containermanagerd") ||
             !strcmp(name, "lsd") || !strcmp(name,"installd") ||
             !strcmp(name,"installcoordinationd") || !strcmp(name,"appstored") ||
