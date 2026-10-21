@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
  * PowerVR Rogue kernel transport bring-up; not a rendering accelerator yet.
- * No user GPU mappings, command submission, firmware upload or DMA enabled.
+ * No user GPU mappings or command submission. Source-owned firmware runtime
+ * is started only from the explicitly supplied matching boot payload.
  */
 #include <IOKit/IOLib.h>
 #include <IOKit/IOService.h>
@@ -10,17 +11,117 @@
 #include "A04BR3RoguePower.h"
 #include "A04BR3RogueMemory.h"
 #include "A04BR3RogueBootFirmware.h"
+#include "A04BR3RogueRuntime.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 extern "C" vm_offset_t ml_static_ptovirt(vm_offset_t);
+/* Platform SLEH can call this hook before its unhandled-SPI panic, then EOI.
+ * Current platform has no SPI dispatcher: do NOT unmask INTID217 until wired. */
+static vm_offset_t a04_rogue_irq_core;
+extern "C" int a04br3_rogue_irq_dispatch(uint32_t intid) {
+    vm_offset_t core=__atomic_load_n(&a04_rogue_irq_core,__ATOMIC_ACQUIRE);
+    if (intid!=217 || !core) return 0;
+    uint32_t status=*(volatile uint32_t *)(core+0x8a8);
+    if (status==0xffffffffU) return 0;
+    if (status&1) *(volatile uint32_t *)(core+0x8b0)=1;
+    __asm__ volatile("dsb sy":::"memory");
+    return 1;
+}
 class A04BR3RogueGPU : public IOService {
     OSDeclareDefaultStructors(A04BR3RogueGPU);
 public:
     bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
     void stop(IOService *provider) APPLE_KEXT_OVERRIDE {
-        memory.reset(); IOService::stop(provider);
+        setProperty("FirmwareRunning",kOSBooleanFalse);
+        __atomic_store_n(&a04_rogue_irq_core,(vm_offset_t)0,__ATOMIC_RELEASE);
+        if (core && attempted) {
+            *(volatile uint64_t *)(core+0x100)=0x100000000ULL;
+            __asm__ volatile("dsb sy":::"memory");
+            (void)*(volatile uint64_t *)(core+0x100);
+        }
+        runtime.reset();memory.reset();IOService::stop(provider);
     }
 private:
     A04BR3RogueMemory memory;
+    A04BR3RogueRuntime runtime;
+    vm_offset_t core=0,gic=0;
+    bool attempted=false;
+    static uint32_t fwRead32(void *p,uint32_t offset) {
+        A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
+        uint32_t value=*(volatile uint32_t *)(s->core+offset);
+        __asm__ volatile("dmb oshld":::"memory");return value;
+    }
+    static uint64_t fwRead64(void *p,uint32_t offset) {
+        A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
+        uint64_t value=*(volatile uint64_t *)(s->core+offset);
+        __asm__ volatile("dmb oshld":::"memory");return value;
+    }
+    static void fwWrite32(void *p,uint32_t offset,uint32_t value) {
+        A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
+        *(volatile uint32_t *)(s->core+offset)=value;
+        __asm__ volatile("dsb oshst":::"memory");
+    }
+    static void fwWrite64(void *p,uint32_t offset,uint64_t value) {
+        A04BR3RogueGPU *s=(A04BR3RogueGPU *)p;
+        *(volatile uint64_t *)(s->core+offset)=value;
+        __asm__ volatile("dsb oshst":::"memory");
+    }
+    static void fwWait(void *,uint32_t us){IODelay(us);}
+    static uint32_t fwShared(void *p,uint32_t physical) {
+        return ((A04BR3RogueGPU *)p)->runtime.readShared(physical);
+    }
+    void startFirmware() {
+        unsigned enabled=1;
+        PE_parse_boot_argn("a04br3.gpu_start",&enabled,sizeof(enabled));
+        if (enabled!=1) return;
+        if (!core) return;
+        /* Original mt8167.dtsi: GIC_SPI185 => INTID217, level low. Keep it
+         * masked for the polling boot route; the current SLEH panics on SPIs.
+         * This write owns exactly one bit and never consumes GICC_IAR. */
+        gic=ml_io_map(0x10310000,0x1000);
+        if (!gic) {setProperty("BringupStage","firmware-irq-map-failed");return;}
+        *(volatile uint32_t *)(gic+0x180+(217/32)*4)=1U<<(217%32);
+        __asm__ volatile("dsb sy":::"memory");
+        if (*(volatile uint32_t *)(gic+0x100+(217/32)*4)&(1U<<(217%32))) {
+            setProperty("BringupStage","firmware-irq-mask-failed");return;
+        }
+        setProperty("FirmwareIRQRoute","polled-gic-masked");
+        /* clk-mt8167: csw_mux_mfg parent4=clk26m_ck, mfg_mm
+         * parent8=csw_mux_mfg_sel, factor clk26m_ck is 1:1. The power
+         * path selects these exact parents; verify readback before supplying
+         * the actual core frequency to the native firmware ABI. */
+        uint32_t mux0=readReg(this,A04_RGX_TOP,0x000);
+        uint32_t mux1=readReg(this,A04_RGX_TOP,0x004);
+        uint32_t slow=readReg(this,A04_RGX_TOP,0x040);
+        if (((mux0>>8)&7)!=4 || ((mux1>>8)&63)!=8 ||
+            (slow&((3U<<18)|(3U<<20)))) {
+            setProperty("BringupStage","firmware-clock-readback-failed");
+            IOLog("A04BR3 GPU: FW clock mux readback rejected 0x%x/0x%x/0x%x; MIPS not released\n",mux0,mux1,slow);
+            return;
+        }
+        IOLog("A04BR3 GPU: FW core clock 26000000 Hz from verified crystal mux path\n");
+        if (!runtime.prepare(memory,26000000)) {
+            setProperty("BringupStage","firmware-runtime-allocation-failed");
+            IOLog("A04BR3 GPU: FW runtime allocation/mapping rejected; MIPS not released\n");return;
+        }
+        setProperty("FirmwareMemoryBytes",(uint64_t)(A04BR3RogueMemory::TableBytes+
+            A04BR3RogueMemory::CodeBytes+A04BR3RogueMemory::DataBytes+
+            A04_RGX_MAIN_BYTES+A04_RGX_CONFIG_BYTES+0x4000),32);
+        a04_rgx_exec_io io={this,fwRead32,fwRead64,fwWrite32,fwWrite64,fwWait,fwShared};
+        attempted=true;
+        IOLog("A04BR3 GPU: FW start INIT=%u ready_offset=%u; bounded polled IRQ route, INTID217 masked\n",
+            (unsigned)sizeof(RGXFWIF_INIT),(unsigned)offsetof(RGXFWIF_INIT,bFirmwareStarted));
+        int error=runtime.start(memory,io);
+        setProperty("FirmwareStartResult",(uint64_t)error,32);
+        if (error) {
+            setProperty("BringupStage","firmware-start-failed");
+            IOLog("A04BR3 GPU: FW start failed code=%d ready=%u exception=0x%x; reset requested, allocations pinned\n",
+                error,runtime.ready(),fwRead32(this,0x8d0));return;
+        }
+        __atomic_store_n(&a04_rogue_irq_core,core,__ATOMIC_RELEASE);
+        setProperty("FirmwareRunning",kOSBooleanTrue);
+        setProperty("BringupStage","firmware-ready");
+        IOLog("A04BR3 GPU: FW ready=1 ABI/DDK/BVNC verified; IRQ=0x%x; no acceleration bridge\n",fwRead32(this,0x8a8));
+    }
     void stageBootFirmware() {
         DTEntry map=nullptr;
         const void *value=nullptr;unsigned size=0;
@@ -64,6 +165,7 @@ private:
             setProperty("FirmwarePayloadStatus","cpu-staged");
             setProperty("BringupStage","firmware-cpu-staged");
             IOLog("A04BR3 GPU: reserved payload CPU-staged/cache cleaned bytes=%llu; GPU MMU/wrapper/execution disabled\n",asset[1]);
+            startFirmware();
         }
     }
     vm_offset_t regs[4];
@@ -93,7 +195,7 @@ bool A04BR3RogueGPU::start(IOService *provider)
     setProperty("GPUAccelerationSupported",kOSBooleanFalse);
     setProperty("BringupStage",error?"power-failed":"register-access");
     if(error){IOLog("A04BR3 GPU: power stage=%d failed; no core access or DMA\n",error);return false;}
-    vm_offset_t core=ml_io_map(0x13000000,0x1000);if(!core)return false;
+    core=ml_io_map(0x13000000,0x10000);if(!core)return false;
     uint32_t lo=*(volatile uint32_t *)(core+0x20),hi=*(volatile uint32_t *)(core+0x24);
     uint64_t bvnc=((uint64_t)hi<<32)|lo;
     __asm__ volatile("dmb oshld":::"memory");

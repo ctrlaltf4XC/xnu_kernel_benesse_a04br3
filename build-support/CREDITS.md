@@ -260,3 +260,12 @@ use Imagination's m1.11ED5425693 DDK from the same pinned board Linux source.
 allocation-free helpers and XNU adapters are independent implementations;
 original license headers are retained on any copied declarations. CPU staging
 is distinct from GPU firmware execution and rendering.
+
+The generated Rogue FWIF declarations retain Imagination's original MIT option
+from its Dual MIT/GPLv2 headers. The source ABI generation/layout test lists the
+original include/config_kernel_user_mt8167.h, services/include/rgx_fwif_km.h,
+rgx_fwif_hwperf.h and dependencies, and checks host, ARM64 and MIPS32 layouts.
+MT6630 WLAN MTKW and command/HIF formats derive from the pinned board gen3
+source listed in sdio/UPSTREAM.json. The BSD adapter uses existing XNU DLIL/KPI
+and Apple IONetworkingFamily references identified in network/SOURCES.json;
+no private Apple driver implementation or firmware bytes are copied into it.

@@ -1,0 +1,1794 @@
+/* Generated declarations from Imagination/MediaTek m1.11ED5425693,
+ * config_kernel_user_mt8167.h, rgx_fwif_km.h, rgx_fwif_hwperf.h and dependencies.
+ * Original MIT license retained below. No Linux functions or runtime imported.
+ * Regenerate/compare with build-support/tests/test_rogue_runtime_abi.py.
+ */
+/*************************************************************************/ /*!
+@File
+@Title          RGX firmware interface structures used by pvrsrvkm
+@Copyright      Copyright (c) Imagination Technologies Ltd. All Rights Reserved
+@Description    RGX firmware interface structures used by pvrsrvkm
+@License        Dual MIT/GPLv2
+
+The contents of this file are subject to the MIT license as set out below.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+Alternatively, the contents of this file may be used under the terms of
+the GNU General Public License Version 2 ("GPL") in which case the provisions
+of GPL are applicable instead of those above.
+
+If you wish to allow use of your version of this file only under the terms of
+GPL, and not to allow others to use your version of this file under the terms
+of the MIT license, indicate your decision by deleting the provisions above
+and replace them with the notice and other provisions required by GPL as set
+out in the file called "GPL-COPYING" included in this distribution. If you do
+not delete the provisions above, a recipient may use your version of this file
+under the terms of either the MIT license or GPL.
+
+This License is also included in this distribution in the file called
+"MIT-COPYING".
+
+EXCEPT AS OTHERWISE STATED IN A NEGOTIATED AGREEMENT: (A) THE SOFTWARE IS
+PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING
+BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+PURPOSE AND NONINFRINGEMENT; AND (B) IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/ /**************************************************************************/
+
+
+#ifndef A04BR3_ROGUE_DDK_ABI_H
+#define A04BR3_ROGUE_DDK_ABI_H
+#include <stdint.h>
+#include <stddef.h>
+#ifdef __cplusplus
+#define A04_DDK_ASSERT static_assert
+#else
+#define A04_DDK_ASSERT _Static_assert
+#endif
+typedef unsigned int IMG_UINT;
+typedef int IMG_INT;
+typedef uint8_t IMG_UINT8, *IMG_PUINT8;
+typedef uint8_t IMG_BYTE, *IMG_PBYTE;
+typedef int8_t IMG_INT8;
+typedef char IMG_CHAR, *IMG_PCHAR;
+typedef uint16_t IMG_UINT16, *IMG_PUINT16;
+typedef int16_t IMG_INT16;
+typedef uint32_t IMG_UINT32, *IMG_PUINT32;
+typedef int32_t IMG_INT32, *IMG_PINT32;
+typedef uint64_t IMG_UINT64, *IMG_PUINT64;
+typedef int64_t IMG_INT64;
+typedef float IMG_FLOAT, *IMG_PFLOAT;
+typedef double IMG_DOUBLE;
+typedef union
+{
+ IMG_UINT32 ui32;
+ IMG_FLOAT f;
+} IMG_UINT32_FLOAT;
+typedef int IMG_SECURE_TYPE;
+typedef enum tag_img_bool
+{
+ IMG_FALSE = 0,
+ IMG_TRUE = 1,
+ IMG_FORCE_ALIGN = 0x7FFFFFFF
+} IMG_BOOL, *IMG_PBOOL;
+typedef void *IMG_HANDLE;
+typedef IMG_UINT64 IMG_SID;
+typedef IMG_UINT32 IMG_PID;
+typedef int IMG_OS_CONNECTION;
+typedef struct
+{
+ IMG_UINT64 uiAddr;
+} IMG_CPU_PHYADDR;
+typedef struct
+{
+ IMG_UINT64 uiAddr;
+} IMG_DEV_PHYADDR;
+typedef struct
+{
+ IMG_UINT64 uiAddr;
+} IMG_SYS_PHYADDR;
+typedef struct
+{
+ IMG_INT32 x0;
+ IMG_INT32 y0;
+ IMG_INT32 x1;
+ IMG_INT32 y1;
+} IMG_RECT;
+typedef struct
+{
+ IMG_INT16 x0;
+ IMG_INT16 y0;
+ IMG_INT16 x1;
+ IMG_INT16 y1;
+} IMG_RECT_16;
+typedef struct
+{
+ IMG_INT32 x0;
+ IMG_INT32 y0;
+ IMG_INT32 z0;
+ IMG_INT32 x1;
+ IMG_INT32 y1;
+ IMG_INT32 z1;
+} IMG_BOX;
+typedef IMG_UINT32 RGXFWIF_DM;
+typedef enum _RGX_KICK_TYPE_DM_
+{
+ RGX_KICK_TYPE_DM_GP = 0x001,
+ RGX_KICK_TYPE_DM_TDM_2D = 0x002,
+ RGX_KICK_TYPE_DM_TA = 0x004,
+ RGX_KICK_TYPE_DM_3D = 0x008,
+ RGX_KICK_TYPE_DM_CDM = 0x010,
+ RGX_KICK_TYPE_DM_RTU = 0x020,
+ RGX_KICK_TYPE_DM_SHG = 0x040,
+ RGX_KICK_TYPE_DM_TQ2D = 0x080,
+ RGX_KICK_TYPE_DM_TQ3D = 0x100,
+ RGX_KICK_TYPE_DM_LAST = 0x200
+} RGX_KICK_TYPE_DM;
+typedef void *IMG_CPU_VIRTADDR;
+typedef struct
+{
+ uint64_t uiAddr;
+} IMG_DEV_VIRTADDR;
+typedef uint64_t IMG_DEVMEM_SIZE_T;
+typedef uint64_t IMG_DEVMEM_ALIGN_T;
+typedef uint64_t IMG_DEVMEM_OFFSET_T;
+typedef uint32_t IMG_DEVMEM_LOG2ALIGN_T;
+typedef struct RGXFWIF_DEV_VIRTADDR_
+{
+ IMG_UINT32 ui32Addr;
+} RGXFWIF_DEV_VIRTADDR;
+typedef struct
+{
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) psDevVirtAddr;
+ RGXFWIF_DEV_VIRTADDR pbyFWAddr;
+} __attribute__ ((aligned (8))) RGXFWIF_DMA_ADDR;
+typedef IMG_UINT8 RGXFWIF_CCCB;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_RENDER_TARGET;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_UFO_ADDR;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_CLEANUP_CTL;
+typedef struct
+{
+ PRGXFWIF_UFO_ADDR puiAddrUFO;
+ IMG_UINT32 ui32Value;
+} RGXFWIF_UFO;
+typedef struct
+{
+ IMG_UINT32 ui32SubmittedCommands;
+ IMG_UINT32 ui32ExecutedCommands;
+} __attribute__ ((aligned (8))) RGXFWIF_CLEANUP_CTL;
+typedef struct
+{
+ IMG_UINT32 ui32WriteOffset;
+ IMG_UINT32 ui32ReadOffset;
+ IMG_UINT32 ui32DepOffset;
+ IMG_UINT32 ui32WrapMask;
+} __attribute__ ((aligned (8))) RGXFWIF_CCCB_CTL;
+typedef IMG_UINT32 RGXFW_FREELIST_TYPE;
+typedef struct
+{
+ IMG_UINT64 uTAReg_VDM_CONTEXT_STATE_BASE_ADDR;
+ IMG_UINT64 uTAReg_VDM_CONTEXT_STATE_RESUME_ADDR;
+ IMG_UINT64 uTAReg_TA_CONTEXT_STATE_BASE_ADDR;
+ struct
+ {
+  IMG_UINT64 uTAReg_VDM_CONTEXT_STORE_TASK0;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_STORE_TASK1;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_STORE_TASK2;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_RESUME_TASK0;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_RESUME_TASK1;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_RESUME_TASK2;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_STORE_TASK3;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_STORE_TASK4;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_RESUME_TASK3;
+  IMG_UINT64 uTAReg_VDM_CONTEXT_RESUME_TASK4;
+ } asTAState[2];
+} RGXFWIF_TAREGISTERS_CSWITCH;
+typedef struct
+{
+ IMG_UINT64 uCDMReg_CDM_CONTEXT_STATE_BASE_ADDR;
+ IMG_UINT64 uCDMReg_CDM_CONTEXT_PDS0;
+ IMG_UINT64 uCDMReg_CDM_CONTEXT_PDS1;
+ IMG_UINT64 uCDMReg_CDM_TERMINATE_PDS;
+ IMG_UINT64 uCDMReg_CDM_TERMINATE_PDS1;
+ IMG_UINT64 uCDMReg_CDM_RESUME_PDS0;
+ IMG_UINT64 uCDMReg_CDM_CONTEXT_PDS0_B;
+ IMG_UINT64 uCDMReg_CDM_RESUME_PDS0_B;
+ IMG_UINT64 uCDMReg_CDM_TERMINATE_PDS_PH2;
+ IMG_UINT64 uCDMReg_CDM_TERMINATE_PDS1_PH2;
+} RGXFWIF_CDM_REGISTERS_CSWITCH;
+typedef struct
+{
+ IMG_UINT64 ui64RobustnessAddress;
+ IMG_UINT32 ui32MaxTADeadlineMS;
+ IMG_UINT32 ui32Max3DDeadlineMS;
+} RGXFWIF_STATIC_RENDERCONTEXT_STATE;
+typedef struct
+{
+ IMG_UINT64 ui64RobustnessAddress;
+ RGXFWIF_CDM_REGISTERS_CSWITCH sCDMRegistersCSWITCH;
+} RGXFWIF_STATIC_COMPUTECONTEXT_STATE;
+typedef IMG_UINT32 RGXFWIF_PRBUFFER_TYPE;
+typedef enum
+{
+ RGXFWIF_PRBUFFER_UNBACKED = 0,
+ RGXFWIF_PRBUFFER_BACKED,
+ RGXFWIF_PRBUFFER_BACKING_PENDING,
+ RGXFWIF_PRBUFFER_UNBACKING_PENDING,
+}RGXFWIF_PRBUFFER_STATE;
+typedef struct
+{
+ IMG_UINT32 ui32BufferID;
+ IMG_BOOL bOnDemand;
+ RGXFWIF_PRBUFFER_STATE eState;
+ RGXFWIF_CLEANUP_CTL sCleanupState;
+ IMG_UINT32 ui32PRBufferFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_PRBUFFER;
+typedef struct DLLIST_NODE_ *PDLLIST_NODE;
+typedef struct DLLIST_NODE_
+{
+ struct DLLIST_NODE_ *psPrevNode;
+ struct DLLIST_NODE_ *psNextNode;
+} DLLIST_NODE;
+typedef IMG_HANDLE PVRSRVTL_SD;
+typedef struct
+{
+ IMG_UINT32 uiTypeSize;
+ IMG_UINT32 uiReserved;
+} PVRSRVTL_PACKETHDR, *PVRSRVTL_PPACKETHDR;
+A04_DDK_ASSERT((sizeof(PVRSRVTL_PACKETHDR) & (8U -1U)) == 0U,
+     "sizeof(PVRSRVTL_PACKETHDR) must be a multiple of 8");
+typedef enum
+{
+ PVRSRVTL_PACKETTYPE_UNDEF = 0,
+ PVRSRVTL_PACKETTYPE_DATA = 1,
+ PVRSRVTL_PACKETTYPE_MOST_RECENT_WRITE_FAILED = 2,
+ PVRSRVTL_PACKETTYPE_PADDING = 3,
+ PVRSRVTL_PACKETTYPE_MARKER_EOS = 4,
+ PVRSRVTL_PACKETTYPE_MARKER_EOS_REMOVEOLD = 5,
+ PVRSRVTL_PACKETTYPE_STREAM_OPEN_FOR_WRITE = 6,
+ PVRSRVTL_PACKETTYPE_STREAM_CLOSE_FOR_WRITE = 7,
+ PVRSRVTL_PACKETTYPE_LAST
+} PVRSRVTL_PACKETTYPE;
+typedef int32_t PVRSRV_FENCE;
+typedef int32_t PVRSRV_TIMELINE;
+A04_DDK_ASSERT((1U) <= 16U, "Cluster count too large for HWPerf protocol definition");
+typedef IMG_UINT32 RGX_HWPERF_EVENT_TYPE;
+A04_DDK_ASSERT(0x3AU < 0x40U, "Too many HWPerf event types");
+typedef enum {
+ RGX_HWPERF_HOST_INVALID = 0x00,
+ RGX_HWPERF_HOST_ENQ = 0x01,
+ RGX_HWPERF_HOST_UFO = 0x02,
+ RGX_HWPERF_HOST_ALLOC = 0x03,
+ RGX_HWPERF_HOST_CLK_SYNC = 0x04,
+ RGX_HWPERF_HOST_FREE = 0x05,
+ RGX_HWPERF_HOST_MODIFY = 0x06,
+ RGX_HWPERF_HOST_DEV_INFO = 0x07,
+ RGX_HWPERF_HOST_INFO = 0x08,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT = 0x09,
+ RGX_HWPERF_HOST_SYNC_SW_TL_ADVANCE = 0x0A,
+ RGX_HWPERF_HOST_LAST_TYPE,
+ RGX_HWPERF_HOST_MAX_TYPE = 0x20
+} RGX_HWPERF_HOST_EVENT_TYPE;
+A04_DDK_ASSERT(RGX_HWPERF_HOST_LAST_TYPE < RGX_HWPERF_HOST_MAX_TYPE, "Too many HWPerf host event types");
+typedef struct
+{
+ IMG_UINT32 ui32Sig;
+ IMG_UINT32 ui32Size;
+ IMG_UINT32 eTypeId;
+ IMG_UINT32 ui32Ordinal;
+ IMG_UINT64 ui64Timestamp;
+} RGX_HWPERF_V2_PACKET_HDR, *RGX_PHWPERF_V2_PACKET_HDR;
+A04_DDK_ASSERT((__builtin_offsetof (RGX_HWPERF_V2_PACKET_HDR, ui64Timestamp) & (7U)) == 0U, "Offset of " "RGX_HWPERF_V2_PACKET_HDR" "." "ui64Timestamp" " is not properly aligned");
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_V2_PACKET_HDR) & (7U)) == 0U, "Size of " "RGX_HWPERF_V2_PACKET_HDR" " is not properly aligned");
+typedef enum {
+ RGX_HWPERF_STREAM_ID0_FW,
+ RGX_HWPERF_STREAM_ID1_HOST,
+ RGX_HWPERF_STREAM_ID2_CLIENT,
+ RGX_HWPERF_STREAM_ID_LAST,
+} RGX_HWPERF_STREAM_ID;
+A04_DDK_ASSERT(((IMG_UINT32)RGX_HWPERF_STREAM_ID_LAST - 1U) < (0x70000U >> 16U),
+  "Too many HWPerf stream IDs.");
+typedef enum {
+ RGX_HWPERF_DM_GP,
+ RGX_HWPERF_DM_2D,
+ RGX_HWPERF_DM_TA,
+ RGX_HWPERF_DM_3D,
+ RGX_HWPERF_DM_CDM,
+ RGX_HWPERF_DM_RTU,
+ RGX_HWPERF_DM_SHG,
+ RGX_HWPERF_DM_TDM,
+ RGX_HWPERF_DM_LAST,
+ RGX_HWPERF_DM_INVALID = 0x1FFFFFFF
+} RGX_HWPERF_DM;
+typedef enum {
+ RGX_HWPERF_FEATURE_PERFBUS_FLAG = 0x001,
+ RGX_HWPERF_FEATURE_S7_TOP_INFRASTRUCTURE_FLAG = 0x002,
+ RGX_HWPERF_FEATURE_XT_TOP_INFRASTRUCTURE_FLAG = 0x004,
+ RGX_HWPERF_FEATURE_PERF_COUNTER_BATCH_FLAG = 0x008,
+ RGX_HWPERF_FEATURE_ROGUEXE_FLAG = 0x010,
+ RGX_HWPERF_FEATURE_DUST_POWER_ISLAND_S7_FLAG = 0x020,
+ RGX_HWPERF_FEATURE_PBE2_IN_XE_FLAG = 0x040,
+ RGX_HWPERF_FEATURE_WORKLOAD_ESTIMATION = 0x080
+} RGX_HWPERF_FEATURE_FLAGS;
+typedef struct
+{
+ RGX_HWPERF_DM eDM;
+ IMG_UINT32 ui32TxtActCyc;
+ IMG_UINT32 ui32FWPerfCount0;
+ IMG_UINT32 ui32FWPerfCount1;
+ IMG_UINT32 ui32TimeCorrIndex;
+ IMG_UINT32 ui32Padding;
+} RGX_HWPERF_FW_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_FW_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_FW_DATA" " is not properly aligned");
+typedef struct
+{
+ IMG_UINT32 ui32DMCyc;
+ IMG_UINT32 ui32FrameNum;
+ IMG_UINT32 ui32PID;
+ IMG_UINT32 ui32DMContext;
+ IMG_UINT32 ui32WorkTarget;
+ IMG_UINT32 ui32ExtJobRef;
+ IMG_UINT32 ui32IntJobRef;
+ IMG_UINT32 ui32TimeCorrIndex;
+ IMG_UINT32 ui32BlkInfo;
+ IMG_UINT32 ui32WorkCtx;
+ IMG_UINT32 ui32CtxPriority;
+ IMG_UINT32 ui32Padding1;
+ IMG_UINT32 aui32CountBlksStream[1U];
+ IMG_UINT32 ui32Padding2;
+} RGX_HWPERF_HW_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HW_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_HW_DATA" " is not properly aligned");
+typedef struct
+{
+ RGX_HWPERF_DM eDM;
+ IMG_UINT32 ui32DMContext;
+ IMG_UINT32 ui32FrameNum;
+ IMG_UINT32 ui32TxtActCyc;
+ IMG_UINT32 ui32PerfCycle;
+ IMG_UINT32 ui32PerfPhase;
+ IMG_UINT32 ui32Padding[2];
+} RGX_HWPERF_CSW_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_CSW_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_CSW_DATA" " is not properly aligned");
+typedef enum
+{
+ RGX_HWPERF_CLKS_CHG_INVALID = 0,
+ RGX_HWPERF_CLKS_CHG_NAME_CORE = 1,
+ RGX_HWPERF_CLKS_CHG_LAST,
+} RGX_HWPERF_CLKS_CHG_NAME;
+typedef struct
+{
+ IMG_UINT64 ui64NewClockSpeed;
+ RGX_HWPERF_CLKS_CHG_NAME eClockName;
+ IMG_UINT32 ui32CalibratedClockSpeed;
+ IMG_UINT64 ui64OSTimeStamp;
+ IMG_UINT64 ui64CRTimeStamp;
+} RGX_HWPERF_CLKS_CHG_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_CLKS_CHG_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_CLKS_CHG_DATA" " is not properly aligned");
+typedef IMG_UINT32 RGX_HWPERF_GPU_STATE;
+typedef struct
+{
+ RGX_HWPERF_GPU_STATE eState;
+ IMG_UINT32 uiUnused1;
+ IMG_UINT32 uiUnused2;
+ IMG_UINT32 uiUnused3;
+} RGX_HWPERF_GPU_STATE_CHG_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_GPU_STATE_CHG_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_GPU_STATE_CHG_DATA" " is not properly aligned");
+typedef struct
+{
+ IMG_UINT32 ui32StreamVersion;
+ IMG_UINT32 ui32StreamSize;
+ IMG_UINT32 aui32StreamData[1U];
+ IMG_UINT32 ui32Padding;
+} RGX_HWPERF_PWR_EST_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_PWR_EST_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_PWR_EST_DATA" " is not properly aligned");
+typedef enum
+{
+ RGX_HWPERF_PWR_UNDEFINED = 0,
+ RGX_HWPERF_PWR_ON = 1,
+ RGX_HWPERF_PWR_OFF = 2,
+ RGX_HWPERF_PWR_UP = 3,
+ RGX_HWPERF_PWR_DOWN = 4,
+ RGX_HWPERF_PWR_LAST,
+} RGX_HWPERF_PWR;
+typedef struct
+{
+ RGX_HWPERF_PWR eChange;
+ IMG_UINT32 ui32Domains;
+ IMG_UINT64 ui64OSTimeStamp;
+ IMG_UINT64 ui64CRTimeStamp;
+ IMG_UINT32 ui32CalibratedClockSpeed;
+ IMG_UINT32 ui32Unused1;
+} RGX_HWPERF_PWR_CHG_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_PWR_CHG_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_PWR_CHG_DATA" " is not properly aligned");
+typedef enum
+{
+ RGX_HWPERF_FWACT_EV_INVALID,
+ RGX_HWPERF_FWACT_EV_REGS_SET,
+ RGX_HWPERF_FWACT_EV_HWR_DETECTED,
+ RGX_HWPERF_FWACT_EV_HWR_RESET_REQUIRED,
+ RGX_HWPERF_FWACT_EV_HWR_RECOVERED,
+ RGX_HWPERF_FWACT_EV_HWR_FREELIST_READY,
+ RGX_HWPERF_FWACT_EV_FEATURES,
+ RGX_HWPERF_FWACT_EV_LAST
+} RGX_HWPERF_FWACT_EV;
+typedef enum
+{
+ RGX_HWPERF_HWR_REASON_INVALID,
+ RGX_HWPERF_HWR_REASON_LOCKUP,
+ RGX_HWPERF_HWR_REASON_PAGEFAULT,
+ RGX_HWPERF_HWR_REASON_POLLFAIL,
+ RGX_HWPERF_HWR_REASON_DEADLINE_OVERRUN,
+ RGX_HWPERF_HWR_REASON_CSW_DEADLINE_OVERRUN,
+ RGX_HWPERF_HWR_REASON_LAST
+} RGX_HWPERF_HWR_REASON;
+A04_DDK_ASSERT(((24) >= (2+1+4+1+4+1+4+1)),
+     "Space inside HWPerf packet data for BVNC string insufficient");
+typedef struct
+{
+ IMG_CHAR aszBvncString[(24)];
+ IMG_UINT32 ui32BvncKmFeatureFlags;
+ IMG_UINT8 ui8RgxUnitsIndirectByPhantom;
+ IMG_UINT8 ui8RgxUnitsPhantomIndirectByDust;
+ IMG_UINT8 ui8RgxUnitsPhantomIndirectByCluster;
+ IMG_UINT8 ui8Padding;
+} RGX_HWPERF_BVNC;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_BVNC) & (7U)) == 0U, "Size of " "RGX_HWPERF_BVNC" " is not properly aligned");
+typedef union
+{
+ struct
+ {
+  RGX_HWPERF_DM eDM;
+  RGX_HWPERF_HWR_REASON eReason;
+  IMG_UINT32 ui32DMContext;
+ } sHWR;
+ RGX_HWPERF_BVNC sBVNC;
+} RGX_HWPERF_FWACT_DETAIL;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_FWACT_DETAIL) & (7U)) == 0U, "Size of " "RGX_HWPERF_FWACT_DETAIL" " is not properly aligned");
+typedef struct
+{
+ RGX_HWPERF_FWACT_EV eEvType;
+ RGX_HWPERF_FWACT_DETAIL uFwActDetail;
+ IMG_UINT32 ui32Padding;
+} RGX_HWPERF_FWACT_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_FWACT_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_FWACT_DATA" " is not properly aligned");
+typedef enum {
+ RGX_HWPERF_UFO_EV_UPDATE,
+ RGX_HWPERF_UFO_EV_CHECK_SUCCESS,
+ RGX_HWPERF_UFO_EV_PRCHECK_SUCCESS,
+ RGX_HWPERF_UFO_EV_CHECK_FAIL,
+ RGX_HWPERF_UFO_EV_PRCHECK_FAIL,
+ RGX_HWPERF_UFO_EV_FORCE_UPDATE,
+ RGX_HWPERF_UFO_EV_LAST
+} RGX_HWPERF_UFO_EV;
+typedef union
+{
+ struct
+ {
+  IMG_UINT32 ui32FWAddr;
+  IMG_UINT32 ui32Value;
+ } sCheckSuccess;
+ struct
+ {
+  IMG_UINT32 ui32FWAddr;
+  IMG_UINT32 ui32Value;
+  IMG_UINT32 ui32Required;
+ } sCheckFail;
+ struct
+ {
+  IMG_UINT32 ui32FWAddr;
+  IMG_UINT32 ui32OldValue;
+  IMG_UINT32 ui32NewValue;
+ } sUpdate;
+} RGX_HWPERF_UFO_DATA_ELEMENT;
+typedef struct
+{
+ RGX_HWPERF_UFO_EV eEvType;
+ IMG_UINT32 ui32TimeCorrIndex;
+ IMG_UINT32 ui32PID;
+ IMG_UINT32 ui32ExtJobRef;
+ IMG_UINT32 ui32IntJobRef;
+ IMG_UINT32 ui32DMContext;
+ IMG_UINT32 ui32StreamInfo;
+ RGX_HWPERF_DM eDM;
+ IMG_UINT32 ui32Padding;
+ IMG_UINT32 aui32StreamData[1U];
+} RGX_HWPERF_UFO_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_UFO_DATA) & (7U)) == 0U, "Size of " "RGX_HWPERF_UFO_DATA" " is not properly aligned");
+typedef enum
+{
+ RGX_HWPERF_KICK_TYPE_TA3D,
+ RGX_HWPERF_KICK_TYPE_TQ2D,
+ RGX_HWPERF_KICK_TYPE_TQ3D,
+ RGX_HWPERF_KICK_TYPE_CDM,
+ RGX_HWPERF_KICK_TYPE_RS,
+ RGX_HWPERF_KICK_TYPE_VRDM,
+ RGX_HWPERF_KICK_TYPE_TQTDM,
+ RGX_HWPERF_KICK_TYPE_SYNC,
+ RGX_HWPERF_KICK_TYPE_TA,
+ RGX_HWPERF_KICK_TYPE_3D,
+ RGX_HWPERF_KICK_TYPE_LAST,
+ RGX_HWPERF_KICK_TYPE_FORCE_32BIT = 0x7fffffff
+} RGX_HWPERF_KICK_TYPE;
+typedef struct
+{
+ RGX_HWPERF_KICK_TYPE ui32EnqType;
+ IMG_UINT32 ui32PID;
+ IMG_UINT32 ui32ExtJobRef;
+ IMG_UINT32 ui32IntJobRef;
+ IMG_UINT32 ui32DMContext;
+ IMG_UINT32 ui32Padding;
+ IMG_UINT64 ui64CheckFence_UID;
+ IMG_UINT64 ui64UpdateFence_UID;
+ IMG_UINT64 ui64DeadlineInus;
+ IMG_UINT64 ui64CycleEstimate;
+ PVRSRV_FENCE hCheckFence;
+ PVRSRV_FENCE hUpdateFence;
+ PVRSRV_TIMELINE hUpdateTimeline;
+ IMG_UINT32 ui32Pad;
+} RGX_HWPERF_HOST_ENQ_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_ENQ_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_ENQ_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef struct
+{
+ RGX_HWPERF_UFO_EV eEvType;
+ IMG_UINT32 ui32StreamInfo;
+ IMG_UINT32 aui32StreamData[1U];
+ IMG_UINT32 ui32Padding;
+} RGX_HWPERF_HOST_UFO_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_UFO_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_UFO_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef enum
+{
+ RGX_HWPERF_HOST_RESOURCE_TYPE_INVALID,
+ RGX_HWPERF_HOST_RESOURCE_TYPE_SYNC,
+ RGX_HWPERF_HOST_RESOURCE_TYPE_TIMELINE_DEPRECATED,
+ RGX_HWPERF_HOST_RESOURCE_TYPE_FENCE_PVR,
+ RGX_HWPERF_HOST_RESOURCE_TYPE_SYNC_CP,
+ RGX_HWPERF_HOST_RESOURCE_TYPE_FENCE_SW,
+ RGX_HWPERF_HOST_RESOURCE_TYPE_LAST
+} RGX_HWPERF_HOST_RESOURCE_TYPE;
+typedef union
+{
+ struct
+ {
+  IMG_UINT32 uiPid;
+  IMG_UINT64 ui64Timeline_UID1;
+  IMG_CHAR acName[32];
+  IMG_UINT32 ui32Padding;
+ } sTimelineAlloc;
+ struct
+ {
+  IMG_PID uiPID;
+  PVRSRV_FENCE hFence;
+  IMG_UINT32 ui32CheckPt_FWAddr;
+  IMG_CHAR acName[32];
+ } sFenceAlloc;
+ struct
+ {
+  IMG_UINT32 ui32CheckPt_FWAddr;
+  PVRSRV_TIMELINE hTimeline;
+  IMG_PID uiPID;
+  PVRSRV_FENCE hFence;
+  IMG_CHAR acName[32];
+ } sSyncCheckPointAlloc;
+ struct
+ {
+  IMG_PID uiPID;
+  PVRSRV_FENCE hSWFence;
+  PVRSRV_TIMELINE hSWTimeline;
+  IMG_UINT64 ui64SyncPtIndex;
+  IMG_CHAR acName[32];
+ } sSWFenceAlloc;
+ struct
+ {
+  IMG_UINT32 ui32FWAddr;
+  IMG_CHAR acName[32];
+ } sSyncAlloc;
+} RGX_HWPERF_HOST_ALLOC_DETAIL;
+typedef struct
+{
+ RGX_HWPERF_HOST_RESOURCE_TYPE ui32AllocType;
+ RGX_HWPERF_HOST_ALLOC_DETAIL __attribute__ ((aligned (8))) uAllocDetail;
+} RGX_HWPERF_HOST_ALLOC_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_ALLOC_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_ALLOC_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef union
+{
+ struct
+ {
+  IMG_UINT32 uiPid;
+  IMG_UINT64 ui64Timeline_UID1;
+  IMG_UINT32 ui32Padding;
+ } sTimelineDestroy;
+ struct
+ {
+  IMG_UINT64 ui64Fence_UID;
+  IMG_UINT32 ui32Padding;
+ } sFenceDestroy;
+ struct
+ {
+  IMG_UINT32 ui32CheckPt_FWAddr;
+ } sSyncCheckPointFree;
+ struct
+ {
+  IMG_UINT32 ui32FWAddr;
+ } sSyncFree;
+} RGX_HWPERF_HOST_FREE_DETAIL;
+typedef struct
+{
+ RGX_HWPERF_HOST_RESOURCE_TYPE ui32FreeType;
+ RGX_HWPERF_HOST_FREE_DETAIL uFreeDetail;
+ IMG_UINT32 ui32Padding;
+} RGX_HWPERF_HOST_FREE_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_FREE_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_FREE_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef struct
+{
+ IMG_UINT64 ui64CRTimestamp;
+ IMG_UINT64 ui64OSTimestamp;
+ IMG_UINT32 ui32ClockSpeed;
+ IMG_UINT32 ui32Padding;
+} RGX_HWPERF_HOST_CLK_SYNC_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_CLK_SYNC_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_CLK_SYNC_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef union
+{
+ struct
+ {
+  IMG_UINT64 ui64NewFence_UID;
+  IMG_UINT64 ui64InFence1_UID;
+  IMG_UINT64 ui64InFence2_UID;
+  IMG_CHAR acName[32];
+  IMG_UINT32 ui32Padding;
+ } sFenceMerge;
+} RGX_HWPERF_HOST_MODIFY_DETAIL;
+typedef struct
+{
+ RGX_HWPERF_HOST_RESOURCE_TYPE ui32ModifyType;
+ RGX_HWPERF_HOST_MODIFY_DETAIL uModifyDetail;
+} RGX_HWPERF_HOST_MODIFY_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_MODIFY_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_MODIFY_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef enum
+{
+ RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS_UNDEFINED = 0,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS_OK,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS_RESPONDING,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS_DEAD,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS_FAULT,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS_LAST
+} RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS;
+typedef enum
+{
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_UNDEFINED = 0,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_NONE,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_ASSERTED,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_POLL_FAILING,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_TIMEOUTS,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_QUEUE_CORRUPT,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_QUEUE_STALLED,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_IDLING,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_RESTARTING,
+ RGX_HWPERF_HOST_DEVICE_HEALTH_REASON_LAST
+} RGX_HWPERF_HOST_DEVICE_HEALTH_REASON;
+typedef enum
+{
+ RGX_HWPERF_DEV_INFO_EV_HEALTH,
+ RGX_HWPERF_DEV_INFO_EV_LAST
+} RGX_HWPERF_DEV_INFO_EV;
+typedef union
+{
+ struct
+ {
+  RGX_HWPERF_HOST_DEVICE_HEALTH_STATUS eDeviceHealthStatus;
+  RGX_HWPERF_HOST_DEVICE_HEALTH_REASON eDeviceHealthReason;
+ } sDeviceStatus;
+} RGX_HWPERF_HOST_DEV_INFO_DETAIL;
+typedef struct
+{
+ IMG_UINT32 ui32Padding;
+ RGX_HWPERF_DEV_INFO_EV eEvType;
+ RGX_HWPERF_HOST_DEV_INFO_DETAIL uDevInfoDetail;
+} RGX_HWPERF_HOST_DEV_INFO_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_DEV_INFO_DATA) & (8U -1U)) == 0U,
+    "sizeof(RGX_HWPERF_HOST_DEV_INFO_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef enum
+{
+ RGX_HWPERF_INFO_EV_MEM_USAGE,
+ RGX_HWPERF_INFO_EV_LAST
+} RGX_HWPERF_INFO_EV;
+typedef union
+{
+ struct
+ {
+  IMG_UINT32 ui32TotalMemoryUsage;
+  struct
+  {
+   IMG_UINT32 ui32Pid;
+   IMG_UINT32 ui32KernelMemUsage;
+   IMG_UINT32 ui32GraphicsMemUsage;
+  } sPerProcessUsage[1U];
+ } sMemUsageStats;
+} RGX_HWPERF_HOST_INFO_DETAIL;
+typedef struct
+{
+ IMG_UINT32 ui32Padding;
+ RGX_HWPERF_INFO_EV eEvType;
+ RGX_HWPERF_HOST_INFO_DETAIL uInfoDetail;
+} RGX_HWPERF_HOST_INFO_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_INFO_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_INFO_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef enum
+{
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_TYPE_BEGIN = 0,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_TYPE_END,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_TYPE_LAST,
+} RGX_HWPERF_HOST_SYNC_FENCE_WAIT_TYPE;
+typedef enum
+{
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT_INVALID = 0,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT_TIMEOUT,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT_PASSED,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT_ERROR,
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT_LAST,
+} RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT;
+typedef union
+{
+ struct
+ {
+  IMG_UINT32 ui32TimeoutInMs;
+ } sBegin;
+ struct
+ {
+  RGX_HWPERF_HOST_SYNC_FENCE_WAIT_RESULT eResult;
+ } sEnd;
+} RGX_HWPERF_HOST_SYNC_FENCE_WAIT_DETAIL;
+typedef struct
+{
+ IMG_PID uiPID;
+ PVRSRV_FENCE hFence;
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_TYPE eType;
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_DETAIL uDetail;
+} RGX_HWPERF_HOST_SYNC_FENCE_WAIT_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_SYNC_FENCE_WAIT_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_SYNC_FENCE_WAIT_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef struct
+{
+ IMG_PID uiPID;
+ PVRSRV_TIMELINE hTimeline;
+ IMG_UINT64 ui64SyncPtIndex;
+} RGX_HWPERF_HOST_SYNC_SW_TL_ADV_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_HOST_SYNC_SW_TL_ADV_DATA) & (8U -1U)) == 0U,
+     "sizeof(RGX_HWPERF_HOST_SYNC_SW_TL_ADV_DATA) must be a multiple PVRSRVTL_PACKET_ALIGNMENT");
+typedef union
+{
+ RGX_HWPERF_FW_DATA sFW;
+ RGX_HWPERF_HW_DATA sHW;
+ RGX_HWPERF_CLKS_CHG_DATA sCLKSCHG;
+ RGX_HWPERF_GPU_STATE_CHG_DATA sGPUSTATECHG;
+ RGX_HWPERF_PWR_EST_DATA sPWREST;
+ RGX_HWPERF_PWR_CHG_DATA sPWR;
+ RGX_HWPERF_CSW_DATA sCSW;
+ RGX_HWPERF_UFO_DATA sUFO;
+ RGX_HWPERF_FWACT_DATA sFWACT;
+ RGX_HWPERF_HOST_ENQ_DATA sENQ;
+ RGX_HWPERF_HOST_UFO_DATA sHUFO;
+ RGX_HWPERF_HOST_ALLOC_DATA sHALLOC;
+ RGX_HWPERF_HOST_CLK_SYNC_DATA sHCLKSYNC;
+ RGX_HWPERF_HOST_FREE_DATA sHFREE;
+ RGX_HWPERF_HOST_MODIFY_DATA sHMOD;
+ RGX_HWPERF_HOST_DEV_INFO_DATA sHDEVINFO;
+ RGX_HWPERF_HOST_INFO_DATA sHINFO;
+ RGX_HWPERF_HOST_SYNC_FENCE_WAIT_DATA sWAIT;
+ RGX_HWPERF_HOST_SYNC_SW_TL_ADV_DATA sSWTLADV;
+} RGX_HWPERF_V2_PACKET_DATA_, *RGX_PHWPERF_V2_PACKET_DATA;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_V2_PACKET_DATA_) & (7U)) == 0U, "Size of " "RGX_HWPERF_V2_PACKET_DATA_" " is not properly aligned");
+typedef IMG_UINT32 RGX_HWPERF_CNTBLK_ID;
+typedef enum
+{
+ RGX_CUSTOM_FW_CNTR_TA_LOCAL_FL_SIZE = 0x0, RGX_CUSTOM_FW_CNTR_TA_GLOBAL_FL_SIZE = 0x1, RGX_CUSTOM_FW_CNTR_3D_LOCAL_FL_SIZE = 0x2, RGX_CUSTOM_FW_CNTR_3D_GLOBAL_FL_SIZE = 0x3,
+ RGX_CUSTOM_FW_CNTR_LAST
+} RGX_HWPERF_CUSTOM_FW_CNTR_ID;
+typedef IMG_UINT32 RGX_HWPERF_CNTBLK_COUNTER_ID;
+ typedef struct
+{
+ IMG_UINT16 ui16BlockID;
+ IMG_UINT8 ui8CounterSelect;
+ IMG_UINT8 ui8Mode;
+ IMG_UINT8 aui8GroupSelect[6U];
+ IMG_UINT16 aui16BitSelect[6U];
+ IMG_UINT32 aui32BatchMax[6U];
+ IMG_UINT32 aui32BatchMin[6U];
+} __attribute__ ((aligned (8))) RGX_HWPERF_CONFIG_CNTBLK;
+A04_DDK_ASSERT((sizeof(RGX_HWPERF_CONFIG_CNTBLK) & (7U)) == 0U, "Size of " "RGX_HWPERF_CONFIG_CNTBLK" " is not properly aligned");
+typedef struct {
+ const IMG_CHAR* pszLogGroupName;
+ IMG_UINT32 ui32LogGroupType;
+} RGXFWIF_LOG_GROUP_MAP_ENTRY;
+typedef struct
+{
+ IMG_CHAR szPath[200U];
+ IMG_CHAR szInfo[200U];
+ IMG_UINT32 ui32LineNum;
+} __attribute__ ((aligned (8))) RGXFWIF_FILE_INFO_BUF;
+typedef struct
+{
+ IMG_UINT32 ui32TracePointer;
+ RGXFWIF_DEV_VIRTADDR pui32RGXFWIfTraceBuffer;
+ IMG_PUINT32 pui32TraceBuffer;
+ RGXFWIF_FILE_INFO_BUF sAssertBuf;
+} __attribute__ ((aligned (8))) RGXFWIF_TRACEBUF_SPACE;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimer;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64OSTimer;
+ IMG_UINT32 __attribute__ ((aligned (8))) ui32Data;
+ IMG_UINT32 ui32Reserved;
+ RGXFWIF_FILE_INFO_BUF sFaultBuf;
+} __attribute__ ((aligned (8))) RGX_FWFAULTINFO;
+typedef enum
+{
+ RGXFWIF_POW_OFF, RGXFWIF_POW_ON, RGXFWIF_POW_FORCED_IDLE, RGXFWIF_POW_IDLE,
+} RGXFWIF_POW_STATE;
+typedef IMG_UINT32 RGXFWIF_HWR_STATEFLAGS;
+typedef enum
+{
+ RGXFW_OS_STATE_STOPPED,
+ RGXFW_OS_STATE_READY,
+ RGXFW_OS_STATE_ACTIVE,
+ RGXFW_OS_STATE_OFFLOADING
+} RGXFWIF_OS_STATE;
+typedef struct
+{
+ IMG_UINT bfOsState : 3;
+ IMG_UINT bfFLOk : 1;
+ IMG_UINT bfFLGrowPending : 1;
+ IMG_UINT bfIsolatedOS : 1;
+ IMG_UINT bfReserved : 26;
+} RGXFWIF_PER_OS_STATES;
+typedef IMG_UINT32 RGXFWIF_HWR_RECOVERYFLAGS;
+typedef struct
+{
+ IMG_UINT32 ui32LogType;
+ volatile RGXFWIF_POW_STATE ePowState;
+ RGXFWIF_TRACEBUF_SPACE sTraceBuf[1U];
+ IMG_UINT32 ui32TraceBufSizeInDWords;
+ IMG_UINT32 aui32HwrDmLockedUpCount[(((IMG_UINT32)4U) + 1U)];
+ IMG_UINT32 aui32HwrDmOverranCount[(((IMG_UINT32)4U) + 1U)];
+ IMG_UINT32 aui32HwrDmRecoveredCount[(((IMG_UINT32)4U) + 1U)];
+ IMG_UINT32 aui32HwrDmFalseDetectCount[(((IMG_UINT32)4U) + 1U)];
+ IMG_UINT32 ui32HwrCounter;
+ IMG_UINT32 aui32CrPollAddr[1U];
+ IMG_UINT32 aui32CrPollMask[1U];
+ RGXFWIF_HWR_STATEFLAGS ui32HWRStateFlags;
+ RGXFWIF_HWR_RECOVERYFLAGS aui32HWRRecoveryFlags[(((IMG_UINT32)4U) + 1U)];
+ volatile IMG_UINT32 ui32HWPerfRIdx;
+ volatile IMG_UINT32 ui32HWPerfWIdx;
+ volatile IMG_UINT32 ui32HWPerfWrapCount;
+ IMG_UINT32 ui32HWPerfSize;
+ IMG_UINT32 ui32HWPerfDropCount;
+ IMG_UINT32 ui32HWPerfUt;
+ IMG_UINT32 ui32FirstDropOrdinal;
+ IMG_UINT32 ui32LastDropOrdinal;
+ volatile IMG_UINT32 aui32InterruptCount[1U];
+ IMG_UINT32 ui32KCCBCmdsExecuted;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64StartIdleTime;
+ IMG_UINT32 ui32PowMonEstimate;
+ IMG_UINT32 ui32T1PCX[16U];
+ IMG_UINT32 ui32T1PCXWOff;
+ RGXFWIF_PER_OS_STATES sPerOsStateMirror[1U];
+ IMG_UINT32 ui32MMUFlushCounter;
+ RGX_FWFAULTINFO sFaultInfo[(8U)];
+ IMG_UINT32 ui32FWFaults;
+ IMG_UINT32 ui32FWSyncCheckMark;
+ IMG_UINT32 ui32HostSyncCheckMark;
+ IMG_UINT32 ui32TracebufFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_TRACEBUF;
+typedef enum
+{
+ RGX_HWRTYPE_UNKNOWNFAILURE = 0,
+ RGX_HWRTYPE_OVERRUN = 1,
+ RGX_HWRTYPE_POLLFAILURE = 2,
+ RGX_HWRTYPE_BIF0FAULT = 3,
+ RGX_HWRTYPE_BIF1FAULT = 4,
+ RGX_HWRTYPE_TEXASBIF0FAULT = 5,
+ RGX_HWRTYPE_MMUFAULT = 6,
+ RGX_HWRTYPE_MMUMETAFAULT = 7,
+} RGX_HWRTYPE;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64BIFReqStatus;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64BIFMMUStatus;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64PCAddress;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64Reserved;
+} RGX_BIFINFO;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64MMUStatus;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64PCAddress;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64Reserved;
+} RGX_MMUINFO;
+typedef struct
+{
+ IMG_UINT32 ui32ThreadNum;
+ IMG_UINT32 ui32CrPollAddr;
+ IMG_UINT32 ui32CrPollMask;
+ IMG_UINT32 ui32CrPollLastValue;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64Reserved;
+} __attribute__ ((aligned (8))) RGX_POLLINFO;
+typedef struct
+{
+ union
+ {
+  RGX_BIFINFO sBIFInfo;
+  RGX_MMUINFO sMMUInfo;
+  RGX_POLLINFO sPollInfo;
+ } uHWRData;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimer;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64OSTimer;
+ IMG_UINT32 ui32FrameNum;
+ IMG_UINT32 ui32PID;
+ IMG_UINT32 ui32ActiveHWRTData;
+ IMG_UINT32 ui32HWRNumber;
+ IMG_UINT32 ui32EventStatus;
+ IMG_UINT32 ui32HWRRecoveryFlags;
+ RGX_HWRTYPE eHWRType;
+ RGXFWIF_DM eDM;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimeOfKick;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimeHWResetStart;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimeHWResetFinish;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimeFreelistReady;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64Reserved[2];
+} __attribute__ ((aligned (8))) RGX_HWRINFO;
+typedef struct
+{
+ RGX_HWRINFO sHWRInfo[(8U + 8U)];
+ IMG_UINT32 ui32FirstCrPollAddr[1U];
+ IMG_UINT32 ui32FirstCrPollMask[1U];
+ IMG_UINT32 ui32FirstCrPollLastValue[1U];
+ IMG_UINT32 ui32WriteIndex;
+ IMG_UINT32 ui32DDReqCount;
+ IMG_UINT32 ui32HWRInfoBufFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_HWRINFOBUF;
+typedef enum
+{
+ RGX_ACTIVEPM_FORCE_OFF = 0,
+ RGX_ACTIVEPM_FORCE_ON = 1,
+ RGX_ACTIVEPM_DEFAULT = 2
+} RGX_ACTIVEPM_CONF;
+typedef enum
+{
+ RGX_RD_POWER_ISLAND_FORCE_OFF = 0,
+ RGX_RD_POWER_ISLAND_FORCE_ON = 1,
+ RGX_RD_POWER_ISLAND_DEFAULT = 2
+} RGX_RD_POWER_ISLAND_CONF;
+typedef enum
+{
+ RGX_META_T1_OFF = 0x0,
+ RGX_META_T1_MAIN = 0x1,
+ RGX_META_T1_DUMMY = 0x2
+} RGX_META_T1_CONF;
+typedef enum
+{
+ RGXFWIF_DM_STATE_NORMAL = 0,
+ RGXFWIF_DM_STATE_LOCKEDUP = 1
+} RGXFWIF_DM_STATE;
+typedef struct
+{
+ IMG_UINT16 ui16RegNum;
+ IMG_UINT16 ui16IndirectRegNum;
+ IMG_UINT16 ui16IndirectStartVal;
+ IMG_UINT16 ui16IndirectEndVal;
+} RGXFW_REGISTER_LIST;
+typedef struct {RGXFWIF_DEV_VIRTADDR p;
+                RGXFWIF_DEV_VIRTADDR n;} RGXFWIF_DLLIST_NODE;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_SIGBUFFER;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_TRACEBUF;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_TBIBUF;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_HWPERFBUF;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_HWRINFOBUF;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_RUNTIME_CFG;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_GPU_UTIL_FWCB;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_REG_CFG;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_HWPERF_CTL;
+typedef RGXFWIF_DEV_VIRTADDR PRGX_HWPERF_CONFIG_CNTBLK;
+typedef RGXFWIF_DEV_VIRTADDR PRGX_HWPERF_SELECT_CUSTOM_CNTRS;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_CCB_CTL;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_CCB;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_FWMEMCONTEXT;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_FWCOMMONCONTEXT;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_ZSBUFFER;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_COMMONCTX_STATE;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_RF_CMD;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_CORE_CLK_RATE;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_OS_CONFIG;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_COUNTERBUFFER;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_FIRMWAREGCOVBUFFER;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_CCCB;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_CCCB_CTL;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_FREELIST;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_HWRTDATA;
+typedef RGXFWIF_DEV_VIRTADDR PRGXFWIF_TIMESTAMP_ADDR;
+typedef struct
+{
+ IMG_DEV_PHYADDR __attribute__ ((aligned (8))) sPCDevPAddr;
+ IMG_UINT32 uiPageCatBaseRegID;
+ IMG_UINT32 uiBreakpointAddr;
+ IMG_UINT32 uiBPHandlerAddr;
+ IMG_UINT32 uiBreakpointCtl;
+ IMG_UINT32 ui32FwMemCtxFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_FWMEMCONTEXT;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VDM_CALL_STACK_POINTER;
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VDM_CALL_STACK_POINTER_Init;
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VDM_BATCH;
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VBS_SO_PRIM0;
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VBS_SO_PRIM1;
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VBS_SO_PRIM2;
+ IMG_UINT64 __attribute__ ((aligned (8))) uTAReg_VBS_SO_PRIM3;
+ IMG_UINT16 __attribute__ ((aligned (8))) ui16TACurrentIdx;
+ RGXFWIF_TAREGISTERS_CSWITCH __attribute__ ((aligned (8))) sCtxSwitch_Regs;
+ IMG_UINT32 ui32CtxStateFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_TACTX_STATE;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) u3DReg_PM_DEALLOCATED_MASK_STATUS;
+ IMG_UINT64 __attribute__ ((aligned (8))) u3DReg_PM_PDS_MTILEFREE_STATUS;
+ IMG_UINT32 ui32CtxStateFlags;
+ IMG_UINT32 au3DReg_ISP_STORE[];
+} __attribute__ ((aligned (8))) RGXFWIF_3DCTX_STATE;
+typedef struct
+{
+ IMG_BOOL __attribute__ ((aligned (8))) bBufferB;
+ IMG_UINT32 ui32CtxStateFlags;
+} RGXFWIF_COMPUTECTX_STATE;
+typedef struct RGXFWIF_FWCOMMONCONTEXT_
+{
+ PRGXFWIF_CCCB_CTL psCCBCtl;
+ PRGXFWIF_CCCB psCCB;
+ RGXFWIF_DMA_ADDR sCCBMetaDMAAddr;
+ RGXFWIF_DLLIST_NODE __attribute__ ((aligned (8))) sWaitingNode;
+ RGXFWIF_UFO sLastFailedUFO;
+ RGXFWIF_DLLIST_NODE sRunNode;
+ PRGXFWIF_FWMEMCONTEXT psFWMemContext;
+ PRGXFWIF_COMMONCTX_STATE __attribute__ ((aligned (8))) psContextState;
+ PRGXFWIF_RF_CMD __attribute__ ((aligned (8))) psRFCmd;
+ IMG_UINT32 ui32FWComCtxFlags;
+ IMG_UINT32 ui32Priority;
+ IMG_UINT32 ui32PrioritySeqNum;
+ IMG_UINT32 ui32ServerCommonContextID;
+ IMG_UINT32 ui32PID;
+ IMG_BOOL bStatsPending;
+ IMG_INT32 i32StatsNumStores;
+ IMG_INT32 i32StatsNumOutOfMemory;
+ IMG_INT32 i32StatsNumPartialRenders;
+ RGXFWIF_DM eDM;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64WaitSignalAddress;
+ RGXFWIF_DLLIST_NODE sWaitSignalNode;
+ RGXFWIF_DLLIST_NODE __attribute__ ((aligned (8))) sBufStalledNode;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CBufQueueCtrlAddr;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64ResumeSignalAddr;
+ IMG_BOOL bReadOffsetNeedsReset;
+} __attribute__ ((aligned (8))) RGXFWIF_FWCOMMONCONTEXT;
+typedef struct
+{
+ RGXFWIF_FWCOMMONCONTEXT sTAContext;
+ RGXFWIF_FWCOMMONCONTEXT s3DContext;
+ RGXFWIF_STATIC_RENDERCONTEXT_STATE sStaticRendercontextState;
+ IMG_UINT32 ui32WorkEstCCBSubmitted;
+ IMG_UINT32 ui32FwRenderCtxFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_FWRENDERCONTEXT;
+typedef struct
+{
+ RGXFWIF_FWCOMMONCONTEXT sCDMContext;
+ RGXFWIF_STATIC_COMPUTECONTEXT_STATE sStaticComputecontextState;
+ IMG_UINT32 ui32ComputeCtxFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_FWCOMPUTECONTEXT;
+typedef IMG_UINT32 RGXFWIF_BIFTILINGMODE;
+typedef struct
+{
+ volatile IMG_UINT32 ui32WriteOffset;
+ volatile IMG_UINT32 ui32ReadOffset;
+ IMG_UINT32 ui32WrapMask;
+ IMG_UINT32 ui32CmdSize;
+} __attribute__ ((aligned (8))) RGXFWIF_CCB_CTL;
+typedef struct
+{
+ PRGXFWIF_FWMEMCONTEXT sMemoryContext;
+ IMG_UINT32 ui32Flags;
+ RGXFWIF_DEV_VIRTADDR sMMUCacheSync;
+ IMG_UINT16 ui16MMUCacheSyncUpdateValue;
+} __attribute__ ((packed)) RGXFWIF_MMUCACHEDATA;
+typedef struct
+{
+ IMG_BOOL bSetBypassed;
+ IMG_UINT32 uiFlags;
+} RGXFWIF_SLCBPCTLDATA;
+typedef struct
+{
+ PRGXFWIF_FWMEMCONTEXT psFWMemContext;
+ IMG_UINT32 ui32BPAddr;
+ IMG_UINT32 ui32HandlerAddr;
+ IMG_UINT32 ui32BPDM;
+ IMG_UINT32 ui32BPDataFlags;
+ IMG_UINT32 ui32TempRegs;
+ IMG_UINT32 ui32SharedRegs;
+} RGXFWIF_BPDATA;
+typedef struct
+{
+ PRGXFWIF_FWCOMMONCONTEXT psContext;
+ IMG_UINT32 ui32CWoffUpdate;
+ IMG_UINT32 ui32NumCleanupCtl;
+ PRGXFWIF_CLEANUP_CTL apsCleanupCtl[4];
+ IMG_UINT32 ui32WorkEstCmdHeaderOffset;
+} RGXFWIF_KCCB_CMD_KICK_DATA;
+typedef struct
+{
+ RGXFWIF_DEV_VIRTADDR sSyncObjDevVAddr;
+ IMG_UINT32 uiUpdateVal;
+} RGXFWIF_KCCB_CMD_SYNC_DATA;
+typedef struct
+{
+ PRGXFWIF_FWCOMMONCONTEXT psContext;
+ IMG_UINT32 ui32CCBFenceOffset;
+} RGXFWIF_KCCB_CMD_FORCE_UPDATE_DATA;
+typedef enum
+{
+ RGXFWIF_CLEANUP_FWCOMMONCONTEXT,
+ RGXFWIF_CLEANUP_HWRTDATA,
+ RGXFWIF_CLEANUP_FREELIST,
+ RGXFWIF_CLEANUP_ZSBUFFER,
+} RGXFWIF_CLEANUP_TYPE;
+typedef struct
+{
+ RGXFWIF_CLEANUP_TYPE eCleanupType;
+ union {
+  PRGXFWIF_FWCOMMONCONTEXT psContext;
+  PRGXFWIF_HWRTDATA psHWRTData;
+  PRGXFWIF_FREELIST psFreelist;
+  PRGXFWIF_ZSBUFFER psZSBuffer;
+ } uCleanupData;
+ RGXFWIF_DEV_VIRTADDR sSyncObjDevVAddr;
+} RGXFWIF_CLEANUP_REQUEST;
+typedef enum
+{
+ RGXFWIF_POW_OFF_REQ = 1,
+ RGXFWIF_POW_FORCED_IDLE_REQ,
+ RGXFWIF_POW_NUMDUST_CHANGE,
+ RGXFWIF_POW_APM_LATENCY_CHANGE
+} RGXFWIF_POWER_TYPE;
+typedef enum
+{
+ RGXFWIF_POWER_FORCE_IDLE = 1,
+ RGXFWIF_POWER_CANCEL_FORCED_IDLE,
+ RGXFWIF_POWER_HOST_TIMEOUT,
+} RGXFWIF_POWER_FORCE_IDLE_TYPE;
+typedef struct
+{
+ RGXFWIF_POWER_TYPE ePowType;
+ union
+ {
+  IMG_UINT32 ui32NumOfDusts;
+  IMG_BOOL bForced;
+  RGXFWIF_POWER_FORCE_IDLE_TYPE ePowRequestType;
+  IMG_UINT32 ui32ActivePMLatencyms;
+ } uPoweReqData;
+} RGXFWIF_POWER_REQUEST;
+typedef struct
+{
+ PRGXFWIF_FWCOMMONCONTEXT psContext;
+ IMG_BOOL bInval;
+ IMG_BOOL bDMContext;
+ RGXFWIF_DM eDM;
+} RGXFWIF_SLCFLUSHINVALDATA;
+typedef struct
+{
+ IMG_UINT32 ui32HCSDeadlineMS;
+} RGXFWIF_HCS_CTL;
+typedef enum{
+ RGXFWIF_HWPERF_CTRL_TOGGLE = 0,
+ RGXFWIF_HWPERF_CTRL_SET = 1,
+ RGXFWIF_HWPERF_CTRL_EMIT_FEATURES_EV = 2
+} RGXFWIF_HWPERF_UPDATE_CONFIG;
+typedef struct
+{
+ RGXFWIF_HWPERF_UPDATE_CONFIG eOpCode;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64Mask;
+} RGXFWIF_HWPERF_CTRL;
+typedef struct
+{
+ IMG_UINT32 ui32NumBlocks;
+ PRGX_HWPERF_CONFIG_CNTBLK sBlockConfigs;
+} RGXFWIF_HWPERF_CONFIG_ENABLE_BLKS;
+typedef struct
+{
+ IMG_UINT32 ui32NewClockSpeed;
+} RGXFWIF_CORECLKSPEEDCHANGE_DATA;
+typedef struct
+{
+ IMG_BOOL bEnable;
+ IMG_UINT32 ui32NumBlocks;
+ IMG_UINT16 aeBlockIDs[16];
+} RGXFWIF_HWPERF_CTRL_BLKS;
+typedef struct
+{
+ IMG_UINT16 ui16CustomBlock;
+ IMG_UINT16 ui16NumCounters;
+ PRGX_HWPERF_SELECT_CUSTOM_CNTRS sCustomCounterIDs;
+} RGXFWIF_HWPERF_SELECT_CUSTOM_CNTRS;
+typedef struct
+{
+ RGXFWIF_DEV_VIRTADDR sZSBufferFWDevVAddr;
+ IMG_UINT32 bDone;
+} RGXFWIF_ZSBUFFER_BACKING_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32IsolationPriorityThreshold;
+} RGXFWIF_OSID_ISOLATION_GROUP_DATA;
+typedef struct
+{
+ RGXFWIF_DEV_VIRTADDR sFreeListFWDevVAddr;
+ IMG_UINT32 ui32DeltaPages;
+ IMG_UINT32 ui32NewPages;
+ IMG_UINT32 ui32ReadyPages;
+} RGXFWIF_FREELIST_GS_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32FreelistsCount;
+ IMG_UINT32 aui32FreelistIDs[2U * (((IMG_UINT32)1U) + 1U)];
+} RGXFWIF_FREELISTS_RECONSTRUCTION_DATA;
+typedef struct
+{
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sDevSignalAddress;
+ PRGXFWIF_FWMEMCONTEXT psFWMemContext;
+} __attribute__ ((aligned (8))) RGXFWIF_SIGNAL_UPDATE_DATA;
+typedef struct
+{
+ PRGXFWIF_FWCOMMONCONTEXT psContext;
+} __attribute__ ((aligned (8))) RGXFWIF_WRITE_OFFSET_UPDATE_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32Volt;
+ IMG_UINT32 ui32Freq;
+} __attribute__ ((aligned (8))) PDVFS_OPP;
+typedef struct
+{
+ PDVFS_OPP asOPPValues[16];
+ IMG_UINT32 ui32MaxOPPPoint;
+} __attribute__ ((aligned (8))) RGXFWIF_PDVFS_OPP;
+typedef struct
+{
+ IMG_UINT32 ui32MaxOPPPoint;
+} __attribute__ ((aligned (8))) RGXFWIF_PDVFS_MAX_FREQ_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32MinOPPPoint;
+} __attribute__ ((aligned (8))) RGXFWIF_PDVFS_MIN_FREQ_DATA;
+typedef enum
+{
+ RGXFWIF_REGCFG_CMD_ADD = 101,
+ RGXFWIF_REGCFG_CMD_CLEAR = 102,
+ RGXFWIF_REGCFG_CMD_ENABLE = 103,
+ RGXFWIF_REGCFG_CMD_DISABLE = 104
+} RGXFWIF_REGDATA_CMD_TYPE;
+typedef enum
+{
+ RGXFWIF_REG_CFG_TYPE_PWR_ON=0,
+ RGXFWIF_REG_CFG_TYPE_DUST_CHANGE,
+ RGXFWIF_REG_CFG_TYPE_TA,
+ RGXFWIF_REG_CFG_TYPE_3D,
+ RGXFWIF_REG_CFG_TYPE_CDM,
+ RGXFWIF_REG_CFG_TYPE_TLA,
+ RGXFWIF_REG_CFG_TYPE_TDM,
+ RGXFWIF_REG_CFG_TYPE_ALL
+} RGXFWIF_REG_CFG_TYPE;
+typedef struct
+{
+ IMG_UINT64 ui64Addr;
+ IMG_UINT64 ui64Mask;
+ IMG_UINT64 ui64Value;
+} RGXFWIF_REG_CFG_REC;
+typedef struct
+{
+ RGXFWIF_REGDATA_CMD_TYPE eCmdType;
+ RGXFWIF_REG_CFG_TYPE eRegConfigType;
+ RGXFWIF_REG_CFG_REC __attribute__ ((aligned (8))) sRegConfig;
+} RGXFWIF_REGCONFIG_DATA;
+typedef struct
+{
+ IMG_UINT8 __attribute__ ((aligned (8))) aui8NumRegsType[((((IMG_UINT32)RGXFWIF_REG_CFG_TYPE_ALL)+((sizeof(IMG_UINT32))-1U)) & ~((sizeof(IMG_UINT32))-1U))];
+ RGXFWIF_REG_CFG_REC __attribute__ ((aligned (8))) asRegConfigs[512];
+} __attribute__ ((aligned (8))) RGXFWIF_REG_CFG;
+typedef struct
+{
+ IMG_UINT32 ui32OSidNum;
+ IMG_UINT32 ui32Priority;
+} RGXFWIF_OSID_PRIORITY_DATA;
+typedef enum
+{
+ RGXFWIF_OS_ONLINE = 1,
+ RGXFWIF_OS_OFFLINE
+} RGXFWIF_OS_STATE_CHANGE;
+typedef struct
+{
+ IMG_UINT32 ui32OSid;
+ RGXFWIF_OS_STATE_CHANGE eNewOSState;
+} __attribute__ ((aligned (8))) RGXFWIF_OS_STATE_CHANGE_DATA;
+typedef enum
+{
+ RGXFWIF_PWR_COUNTER_DUMP_START = 1,
+ RGXFWIF_PWR_COUNTER_DUMP_STOP,
+ RGXFWIF_PWR_COUNTER_DUMP_SAMPLE,
+} RGXFWIF_COUNTER_DUMP_REQUEST;
+typedef struct
+{
+ RGXFWIF_COUNTER_DUMP_REQUEST eCounterDumpRequest;
+} __attribute__ ((aligned (8))) RGXFWIF_COUNTER_DUMP_DATA;
+typedef enum
+{
+ RGXFWIF_KCCB_CMD_KICK = 101U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_MMUCACHE = 102U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_BP = 103U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_SYNC = 104U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_SLCFLUSHINVAL = 105U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_CLEANUP = 106U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_POW = 107U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_ZSBUFFER_BACKING_UPDATE = 108U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_ZSBUFFER_UNBACKING_UPDATE = 109U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_FREELIST_GROW_UPDATE = 110U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_FREELISTS_RECONSTRUCTION_UPDATE = 112U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_NOTIFY_SIGNAL_UPDATE = 113U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_NOTIFY_WRITE_OFFSET_UPDATE = 114U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HEALTH_CHECK = 115U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_FORCE_UPDATE = 116U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_REGCONFIG = 200U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HWPERF_SELECT_CUSTOM_CNTRS = 201U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HWPERF_CONFIG_ENABLE_BLKS_DIRECT = 202U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_LOGTYPE_UPDATE = 203U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_PDVFS_LIMIT_MAX_FREQ = 205U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_PDVFS_REQUEST_REACTIVE_UPDATE = 206U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_OSID_PRIORITY_CHANGE = 207U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_STATEFLAGS_CTRL = 208U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HCS_SET_DEADLINE = 209U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_OS_ISOLATION_GROUP_CHANGE = 210U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_OS_ONLINE_STATE_CONFIGURE = 211U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_COUNTER_DUMP = 212U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_SLCBPCTL = 213U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HWPERF_UPDATE_CONFIG = 214U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HWPERF_CONFIG_ENABLE_BLKS = 215U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_HWPERF_CTRL_BLKS = 216U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_CORECLKSPEEDCHANGE = 217U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_KCCB_CMD_PDVFS_LIMIT_MIN_FREQ = 218U | (((IMG_UINT32)0x2ABCU) << (16U)),
+} RGXFWIF_KCCB_CMD_TYPE;
+typedef struct
+{
+ RGXFWIF_KCCB_CMD_TYPE eCmdType;
+ RGXFWIF_DM eDM;
+ IMG_UINT32 ui32KCCBFlags;
+ IMG_UINT32 ui32Unused;
+ union
+ {
+  RGXFWIF_KCCB_CMD_KICK_DATA sCmdKickData;
+  RGXFWIF_MMUCACHEDATA sMMUCacheData;
+  RGXFWIF_BPDATA sBPData;
+  RGXFWIF_SLCBPCTLDATA sSLCBPCtlData;
+  RGXFWIF_KCCB_CMD_SYNC_DATA sSyncData;
+  RGXFWIF_SLCFLUSHINVALDATA sSLCFlushInvalData;
+  RGXFWIF_CLEANUP_REQUEST sCleanupData;
+  RGXFWIF_POWER_REQUEST sPowData;
+  RGXFWIF_HWPERF_CTRL sHWPerfCtrl;
+  RGXFWIF_HWPERF_CONFIG_ENABLE_BLKS sHWPerfCfgEnableBlks;
+  RGXFWIF_HWPERF_CTRL_BLKS sHWPerfCtrlBlks;
+  RGXFWIF_HWPERF_SELECT_CUSTOM_CNTRS sHWPerfSelectCstmCntrs;
+  RGXFWIF_CORECLKSPEEDCHANGE_DATA sCoreClkSpeedChangeData;
+  RGXFWIF_ZSBUFFER_BACKING_DATA sZSBufferBackingData;
+  RGXFWIF_FREELIST_GS_DATA sFreeListGSData;
+  RGXFWIF_FREELISTS_RECONSTRUCTION_DATA sFreeListsReconstructionData;
+  RGXFWIF_REGCONFIG_DATA sRegConfigData;
+  RGXFWIF_SIGNAL_UPDATE_DATA sSignalUpdateData;
+  RGXFWIF_WRITE_OFFSET_UPDATE_DATA sWriteOffsetUpdateData;
+  RGXFWIF_PDVFS_MAX_FREQ_DATA sPDVFSMaxFreqData;
+  RGXFWIF_PDVFS_MIN_FREQ_DATA sPDVFSMinFreqData;
+  RGXFWIF_OSID_PRIORITY_DATA sCmdOSidPriorityData;
+  RGXFWIF_HCS_CTL sHCSCtrl;
+  RGXFWIF_OSID_ISOLATION_GROUP_DATA sCmdOSidIsolationData;
+  RGXFWIF_OS_STATE_CHANGE_DATA sCmdOSOnlineStateData;
+  RGXFWIF_DEV_VIRTADDR sTBIBuffer;
+  RGXFWIF_COUNTER_DUMP_DATA sCounterDumpConfigData;
+  RGXFWIF_KCCB_CMD_FORCE_UPDATE_DATA sForceUpdateData;
+ } __attribute__ ((aligned (8))) uCmdData;
+} __attribute__ ((aligned (8))) RGXFWIF_KCCB_CMD;
+A04_DDK_ASSERT((sizeof(RGXFWIF_KCCB_CMD) & (7U)) == 0U, "Size of " "RGXFWIF_KCCB_CMD" " is not properly aligned");
+typedef struct
+{
+ IMG_UINT32 ui32ZSBufferID;
+ IMG_BOOL bPopulate;
+} RGXFWIF_FWCCB_CMD_ZSBUFFER_BACKING_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32FreelistID;
+} RGXFWIF_FWCCB_CMD_FREELIST_GS_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32FreelistsCount;
+ IMG_UINT32 ui32HwrCounter;
+ IMG_UINT32 aui32FreelistIDs[2U * (((IMG_UINT32)1U) + 1U)];
+} RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION_DATA;
+typedef enum
+{
+ RGXFWIF_CONTEXT_RESET_REASON_NONE = 0,
+ RGXFWIF_CONTEXT_RESET_REASON_GUILTY_LOCKUP = 1,
+ RGXFWIF_CONTEXT_RESET_REASON_INNOCENT_LOCKUP = 2,
+ RGXFWIF_CONTEXT_RESET_REASON_GUILTY_OVERRUNING = 3,
+ RGXFWIF_CONTEXT_RESET_REASON_INNOCENT_OVERRUNING = 4,
+ RGXFWIF_CONTEXT_RESET_REASON_HARD_CONTEXT_SWITCH = 5,
+} RGXFWIF_CONTEXT_RESET_REASON;
+typedef struct
+{
+ IMG_UINT32 ui32ServerCommonContextID;
+ RGXFWIF_CONTEXT_RESET_REASON eResetReason;
+ IMG_UINT32 ui32ResetJobRef;
+ IMG_BOOL bPageFault;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64PCAddress;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sFaultAddress;
+} RGXFWIF_FWCCB_CMD_CONTEXT_RESET_DATA;
+typedef enum
+{
+ RGXFWIF_FWCCB_CMD_ZSBUFFER_BACKING = 101U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_ZSBUFFER_UNBACKING = 102U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_FREELIST_GROW = 103U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION = 104U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_CONTEXT_RESET_NOTIFICATION = 105U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_DEBUG_DUMP = 106U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_UPDATE_STATS = 107U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_WORKLOAD_FINISHED = 108U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_CORE_CLK_RATE_CHANGE = 109U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_PDVFS_FREEMEM = 110U | (((IMG_UINT32)0x2ABCU) << (16U)),
+ RGXFWIF_FWCCB_CMD_REQUEST_GPU_RESTART = 111U | (((IMG_UINT32)0x2ABCU) << (16U)),
+} RGXFWIF_FWCCB_CMD_TYPE;
+typedef enum
+{
+    RGXFWIF_FWCCB_CMD_UPDATE_NUM_PARTIAL_RENDERS=1,
+    RGXFWIF_FWCCB_CMD_UPDATE_NUM_OUT_OF_MEMORY,
+    RGXFWIF_FWCCB_CMD_UPDATE_NUM_TA_STORES,
+    RGXFWIF_FWCCB_CMD_UPDATE_NUM_3D_STORES,
+    RGXFWIF_FWCCB_CMD_UPDATE_NUM_SH_STORES,
+    RGXFWIF_FWCCB_CMD_UPDATE_NUM_CDM_STORES
+} RGXFWIF_FWCCB_CMD_UPDATE_STATS_TYPE;
+typedef struct
+{
+    RGXFWIF_FWCCB_CMD_UPDATE_STATS_TYPE eElementToUpdate;
+    IMG_PID pidOwner;
+    IMG_INT32 i32AdjustmentValue;
+} RGXFWIF_FWCCB_CMD_UPDATE_STATS_DATA;
+typedef struct
+{
+ IMG_UINT32 ui32CoreClkRate;
+} __attribute__ ((aligned (8))) RGXFWIF_FWCCB_CMD_CORE_CLK_RATE_CHANGE_DATA;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64MemDesc;
+} __attribute__ ((aligned (8))) RGXFWIF_FWCCB_CMD_PDVFS_FREEMEM_DATA;
+typedef struct
+{
+ RGXFWIF_FWCCB_CMD_TYPE eCmdType;
+ IMG_UINT32 ui32FWCCBFlags;
+ union
+ {
+  RGXFWIF_FWCCB_CMD_ZSBUFFER_BACKING_DATA sCmdZSBufferBacking;
+  RGXFWIF_FWCCB_CMD_FREELIST_GS_DATA sCmdFreeListGS;
+  RGXFWIF_FWCCB_CMD_FREELISTS_RECONSTRUCTION_DATA sCmdFreeListsReconstruction;
+  RGXFWIF_FWCCB_CMD_CONTEXT_RESET_DATA sCmdContextResetNotification;
+  RGXFWIF_FWCCB_CMD_UPDATE_STATS_DATA sCmdUpdateStatsData;
+  RGXFWIF_FWCCB_CMD_CORE_CLK_RATE_CHANGE_DATA sCmdCoreClkRateChange;
+  RGXFWIF_FWCCB_CMD_PDVFS_FREEMEM_DATA sCmdPDVFSFreeMem;
+ } __attribute__ ((aligned (8))) uCmdData;
+} __attribute__ ((aligned (8))) RGXFWIF_FWCCB_CMD;
+A04_DDK_ASSERT((sizeof(RGXFWIF_FWCCB_CMD) & (7U)) == 0U, "Size of " "RGXFWIF_FWCCB_CMD" " is not properly aligned");
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64ReturnDataIndex;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CyclesTaken;
+} RGXFWIF_WORKEST_FWCCB_CMD;
+typedef IMG_UINT32 RGXFWIF_CCB_CMD_TYPE;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64ReturnDataIndex;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64Deadline;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CyclesPrediction;
+} RGXFWIF_WORKEST_KICK_DATA;
+typedef struct
+{
+ RGXFWIF_CCB_CMD_TYPE eCmdType;
+ IMG_UINT32 ui32CmdSize;
+ IMG_UINT32 ui32ExtJobRef;
+ IMG_UINT32 ui32IntJobRef;
+ RGXFWIF_WORKEST_KICK_DATA sWorkEstKickData;
+} RGXFWIF_CCB_CMD_HEADER;
+typedef struct
+{
+ IMG_UINT32 ui32Priority;
+} RGXFWIF_CMD_PRIORITY;
+typedef struct
+{
+ PRGXFWIF_SIGBUFFER sBuffer;
+ IMG_UINT32 ui32LeftSizeInRegs;
+} __attribute__ ((aligned (8))) RGXFWIF_SIGBUF_CTL;
+typedef struct
+{
+ PRGXFWIF_COUNTERBUFFER sBuffer;
+ IMG_UINT32 ui32SizeInDwords;
+} __attribute__ ((aligned (8))) RGXFWIF_COUNTER_DUMP_CTL;
+typedef struct
+{
+ PRGXFWIF_FIRMWAREGCOVBUFFER sBuffer;
+ IMG_UINT32 ui32Size;
+} __attribute__ ((aligned (8))) RGXFWIF_FIRMWARE_GCOV_CTL;
+typedef struct
+{
+ IMG_UINT32 ui32LayoutVersion;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64BVNC;
+} __attribute__ ((aligned (8))) RGXFWIF_COMPCHECKS_BVNC;
+typedef struct
+{
+ IMG_UINT8 ui8OsCountSupport;
+} __attribute__ ((aligned (8))) RGXFWIF_INIT_OPTIONS;
+typedef struct
+{
+ RGXFWIF_COMPCHECKS_BVNC sHWBVNC;
+ RGXFWIF_COMPCHECKS_BVNC sFWBVNC;
+ IMG_UINT32 ui32FWProcessorVersion;
+ IMG_UINT32 ui32DDKVersion;
+ IMG_UINT32 ui32DDKBuild;
+ IMG_UINT32 ui32BuildOptions;
+ RGXFWIF_INIT_OPTIONS sInitOptions;
+ IMG_BOOL bUpdated;
+} __attribute__ ((aligned (8))) RGXFWIF_COMPCHECKS;
+typedef struct
+{
+ IMG_UINT32 ui32ActivePMLatencyms;
+ IMG_UINT32 ui32RuntimeCfgFlags;
+ IMG_BOOL bActivePMLatencyPersistant;
+ IMG_UINT32 ui32CoreClockSpeed;
+ IMG_UINT32 ui32DefaultDustsNumInit;
+ PRGXFWIF_HWPERFBUF sHWPerfBuf;
+} RGXFWIF_RUNTIME_CFG;
+typedef enum
+{
+ RGXFWIF_TPU_DM_PDM = 0,
+ RGXFWIF_TPU_DM_VDM = 1,
+ RGXFWIF_TPU_DM_CDM = 2,
+ RGXFWIF_TPU_DM_TDM = 3,
+ RGXFWIF_TPU_DM_LAST
+} RGXFWIF_TPU_DM;
+typedef struct
+{
+ IMG_UINT32 ui32ConfigFlags;
+ IMG_UINT32 ui32ConfigFlagsExt;
+ RGXFWIF_DEV_VIRTADDR sPowerSync;
+ PRGXFWIF_TRACEBUF sTraceBufCtl;
+ PRGXFWIF_HWRINFOBUF sRGXFWIfHWRInfoBufCtl;
+} RGXFWIF_OS_CONFIG;
+typedef enum
+{
+ RGXFWIF_GPIO_VAL_OFF = 0,
+ RGXFWIF_GPIO_VAL_GENERAL = 1,
+ RGXFWIF_GPIO_VAL_AP = 2,
+ RGXFWIF_GPIO_VAL_LAST
+} RGXFWIF_GPIO_VAL_MODE;
+typedef enum
+{
+ FW_PERF_CONF_NONE = 0,
+ FW_PERF_CONF_ICACHE = 1,
+ FW_PERF_CONF_DCACHE = 2,
+ FW_PERF_CONF_POLLS = 3,
+ FW_PERF_CONF_CUSTOM_TIMER = 4,
+ FW_PERF_CONF_JTLB_INSTR = 5,
+ FW_PERF_CONF_INSTRUCTIONS = 6
+} FW_PERF_CONF;
+typedef enum
+{
+ FW_BOOT_STAGE_NOT_AVAILABLE = -1,
+ FW_BOOT_NOT_STARTED = 0,
+ FW_BOOT_BLDR_STARTED = 1,
+ FW_BOOT_CACHE_DONE,
+ FW_BOOT_TLB_DONE,
+ FW_BOOT_MAIN_STARTED,
+ FW_BOOT_ALIGNCHECKS_DONE,
+ FW_BOOT_INIT_DONE,
+} FW_BOOT_STAGE;
+typedef struct
+{
+ PRGXFWIF_OS_CONFIG sOSConfig;
+ IMG_DEV_PHYADDR __attribute__ ((aligned (8))) sFaultPhysAddr;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sPDSExecBase;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sUSCExecBase;
+ IMG_UINT32 ui32FilterFlags;
+ PRGXFWIF_CCB_CTL psKernelCCBCtl;
+ PRGXFWIF_CCB psKernelCCB;
+ PRGXFWIF_CCB_CTL psFirmwareCCBCtl;
+ PRGXFWIF_CCB psFirmwareCCB;
+ RGXFWIF_SIGBUF_CTL asSigBufCtl[(((IMG_UINT32)4U) + 1U)];
+ IMG_UINT32 ui32HWRDebugDumpLimit;
+ RGXFWIF_BIFTILINGMODE eBifTilingMode;
+ struct
+ {
+  IMG_UINT64 uiBase;
+  IMG_UINT64 uiLen;
+  IMG_UINT64 uiXStride;
+ } __attribute__ ((aligned (8))) sBifTilingCfg[4U];
+ PRGXFWIF_RUNTIME_CFG sRuntimeCfg;
+ PRGXFWIF_TRACEBUF sTraceBufCtl;
+ PRGXFWIF_TBIBUF sTBIBuf;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64HWPerfFilter;
+ PRGXFWIF_HWRINFOBUF sRGXFWIfHWRInfoBufCtl;
+ PRGXFWIF_GPU_UTIL_FWCB sGpuUtilFWCbCtl;
+ PRGXFWIF_REG_CFG sRegCfg;
+ PRGXFWIF_HWPERF_CTL sHWPerfCtl;
+ RGXFWIF_COUNTER_DUMP_CTL sCounterDumpCtl;
+ RGXFWIF_DEV_VIRTADDR sAlignChecks;
+ IMG_UINT32 ui32InitialCoreClockSpeed;
+ IMG_UINT32 ui32ActivePMLatencyms;
+ IMG_BOOL bFirmwareStarted;
+ IMG_UINT32 ui32MarkerVal;
+ IMG_UINT32 ui32FirmwareStartedTimeStamp;
+ IMG_UINT32 ui32JonesDisableMask;
+ RGXFWIF_COMPCHECKS sRGXCompChecks;
+ RGXFWIF_DMA_ADDR sCorememDataStore;
+ FW_PERF_CONF eFirmwarePerf;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sSLC3FenceDevVAddr;
+ RGXFWIF_DEV_VIRTADDR sT1Stack;
+ RGXFWIF_PDVFS_OPP sPDVFSOPPInfo;
+ PRGXFWIF_CORE_CLK_RATE sCoreClockRate;
+ PRGXFWIF_CCB_CTL psWorkEstFirmwareCCBCtl;
+ PRGXFWIF_CCB psWorkEstFirmwareCCB;
+ RGXFWIF_GPIO_VAL_MODE eGPIOValidationMode;
+ IMG_UINT32 __attribute__ ((aligned (8))) aui32TPUTrilinearFracMask[RGXFWIF_TPU_DM_LAST];
+ PRGXFWIF_CCB_CTL psCheckpointCCBCtl;
+ PRGXFWIF_CCB psCheckpointCCB;
+ RGX_HWPERF_BVNC sBvncKmFeatureFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_INIT;
+typedef struct
+{
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64OSTimeStamp;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64OSMonoTimeStamp;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRTimeStamp;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CRDeltaToOSDeltaKNs;
+ IMG_UINT32 ui32CoreClockSpeed;
+ IMG_UINT32 ui32Reserved;
+} __attribute__ ((aligned (8))) RGXFWIF_TIME_CORR;
+A04_DDK_ASSERT((256U & (256U - 1U)) == 0U,
+     "RGXFWIF_TIME_CORR_ARRAY_SIZE must be a power of two");
+typedef struct
+{
+ RGXFWIF_TIME_CORR sTimeCorr[256U];
+ IMG_UINT32 ui32TimeCorrSeqCount;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64LastWord;
+ IMG_UINT64 __attribute__ ((aligned (8))) aui64StatsCounters[(4U)];
+ IMG_UINT32 ui32GpuUtilFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_GPU_UTIL_FWCB;
+typedef struct
+{
+ IMG_UINT32 ui32RenderTargetIndex;
+ IMG_UINT32 ui32CurrentRenderTarget;
+ IMG_UINT32 ui32ActiveRenderTargets;
+ IMG_UINT32 ui32CumulActiveRenderTargets;
+ RGXFWIF_DEV_VIRTADDR sValidRenderTargets;
+ RGXFWIF_DEV_VIRTADDR sRTANumPartialRenders;
+ IMG_UINT32 ui32MaxRTs;
+ IMG_UINT32 ui32RTACtlFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_RTA_CTL;
+typedef struct
+{
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) psFreeListDevVAddr;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64CurrentDevVAddr;
+ IMG_UINT32 ui32CurrentStackTop;
+ IMG_UINT32 ui32MaxPages;
+ IMG_UINT32 ui32GrowPages;
+ IMG_UINT32 ui32CurrentPages;
+ IMG_UINT32 ui32AllocatedPageCount;
+ IMG_UINT32 ui32AllocatedMMUPageCount;
+ IMG_UINT32 ui32HWRCounter;
+ IMG_UINT32 ui32FreeListID;
+ IMG_BOOL bGrowPending;
+ IMG_UINT32 ui32ReadyPages;
+ IMG_UINT32 ui32FreelistFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_FREELIST;
+typedef struct
+{
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) psVHeapTableDevVAddr;
+ IMG_BOOL bTACachesNeedZeroing;
+ IMG_UINT32 ui32RenderTargetFlags;
+} __attribute__ ((aligned (8))) RGXFWIF_RENDER_TARGET;
+typedef enum
+{
+ RGXFWIF_RTDATA_STATE_NONE = 0,
+ RGXFWIF_RTDATA_STATE_KICKTA,
+ RGXFWIF_RTDATA_STATE_KICKTAFIRST,
+ RGXFWIF_RTDATA_STATE_TAFINISHED,
+ RGXFWIF_RTDATA_STATE_KICK3D,
+ RGXFWIF_RTDATA_STATE_3DFINISHED,
+ RGXFWIF_RTDATA_STATE_TAOUTOFMEM,
+ RGXFWIF_RTDATA_STATE_PARTIALRENDERFINISHED,
+ RGXFWIF_RTDATA_STATE_HWR,
+ RGXFWIF_RTDATA_STATE_UNKNOWN = 0x7FFFFFFFU
+} RGXFWIF_RTDATA_STATE;
+typedef struct
+{
+ IMG_UINT32 ui32HWRTDataFlags;
+ RGXFWIF_RTDATA_STATE eState;
+ IMG_UINT32 ui32NumPartialRenders;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) psPMMListDevVAddr;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64VCECatBase[4];
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64VCELastCatBase[4];
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64TECatBase[4];
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64TELastCatBase[4];
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64AlistCatBase;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64AlistLastCatBase;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64PMAListStackPointer;
+ IMG_UINT32 ui32PMMListStackPointer;
+ PRGXFWIF_FREELIST __attribute__ ((aligned (8))) apsFreeLists[(((IMG_UINT32)1U) + 1U)];
+ IMG_UINT32 aui32FreeListHWRSnapshot[(((IMG_UINT32)1U) + 1U)];
+ PRGXFWIF_RENDER_TARGET psParentRenderTarget;
+ RGXFWIF_CLEANUP_CTL sTACleanupState;
+ RGXFWIF_CLEANUP_CTL s3DCleanupState;
+ RGXFWIF_RTA_CTL sRTACtl;
+ IMG_UINT32 ui32PPPScreen;
+ IMG_UINT64 __attribute__ ((aligned (8))) ui64MultiSampleCtl;
+ IMG_UINT64 ui64FlippedMultiSampleCtl;
+ IMG_UINT32 ui32TPCStride;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sTailPtrsDevVAddr;
+ IMG_UINT32 ui32TPCSize;
+ IMG_UINT32 ui32TEScreen;
+ IMG_UINT32 ui32MTileStride;
+ IMG_UINT32 ui32TEAA;
+ IMG_UINT32 ui32TEMTILE1;
+ IMG_UINT32 ui32TEMTILE2;
+ IMG_UINT32 ui32ISPMergeLowerX;
+ IMG_UINT32 ui32ISPMergeLowerY;
+ IMG_UINT32 ui32ISPMergeUpperX;
+ IMG_UINT32 ui32ISPMergeUpperY;
+ IMG_UINT32 ui32ISPMergeScaleX;
+ IMG_UINT32 ui32ISPMergeScaleY;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sMacrotileArrayDevVAddr;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sRgnHeaderDevVAddr;
+ IMG_DEV_VIRTADDR __attribute__ ((aligned (8))) sRTCDevVAddr;
+ IMG_UINT64 __attribute__ ((aligned (8))) uiRgnHeaderSize;
+ IMG_UINT32 ui32ISPMtileSize;
+ RGXFWIF_DEV_VIRTADDR __attribute__ ((aligned (8))) pui32OwnerTANotUsedByHost;
+} __attribute__ ((aligned (8))) RGXFWIF_HWRTDATA;
+typedef struct
+{
+ IMG_BOOL bValid;
+ IMG_BOOL bEnabled;
+ IMG_UINT32 eBlockID;
+ IMG_UINT32 uiCounterMask;
+ IMG_UINT64 __attribute__ ((aligned (8))) aui64CounterCfg[6U];
+} RGXFWIF_HWPERF_CTL_BLK;
+typedef struct
+{
+ IMG_UINT32 ui32NumSelectedCounters;
+ IMG_UINT32 aui32SelectedCountersIDs[8U];
+} RGXFW_HWPERF_SELECT;
+typedef struct
+{
+ IMG_UINT32 ui32HWPerfCtlFlags;
+ IMG_UINT32 ui32SelectedCountersBlockMask;
+ RGXFW_HWPERF_SELECT __attribute__ ((aligned (8))) SelCntr[5U];
+ IMG_UINT32 ui32EnabledBlksCount;
+ RGXFWIF_HWPERF_CTL_BLK __attribute__ ((aligned (8))) sBlkCfg[( (IMG_UINT32)0x0009U + ((IMG_UINT32)(0x0017U) - (IMG_UINT32)(0x0010U) + 1u)+ ((IMG_UINT32)(0x002FU) - (IMG_UINT32)(0x0020U) + 1u)+ ((IMG_UINT32)(0x0037U) - (IMG_UINT32)(0x0030U) + 1u)+ ((IMG_UINT32)(0x0043U) - (IMG_UINT32)(0x0040U) + 1u)+ ((IMG_UINT32)(0x0053U) - (IMG_UINT32)(0x0050U) + 1u)+ ((IMG_UINT32)(0x006FU) - (IMG_UINT32)(0x0060U) + 1u)+ ((IMG_UINT32)(0x0073U) - (IMG_UINT32)(0x0070U) + 1u) )];
+} __attribute__ ((aligned (8))) RGXFWIF_HWPERF_CTL;
+#undef A04_DDK_ASSERT
+#endif

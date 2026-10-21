@@ -25,6 +25,8 @@ static int kernel_task=0;
 enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,
 kIOMemoryMapperNone=32,kIOReturnSuccess=0};
 static int live, completes, flushes, allocations, fault, failed;
+class IOBufferMemoryDescriptor;
+static IOBufferMemoryDescriptor *retained[3];
 class IOBufferMemoryDescriptor {
 public:
  void *data; uint64_t size,pa; int id;
@@ -36,11 +38,11 @@ public:
   if(fault==1 && id==2)return nullptr;
   auto b=new IOBufferMemoryDescriptor;
   b->id=id;b->size=size;b->pa=0x80000000ULL+id*0x100000;
-  b->data=malloc(size);memset(b->data,0xcc,size);++live;return b;
+  b->data=malloc(size);memset(b->data,0xcc,size);retained[id-1]=b;++live;return b;
  }
  int prepare(){if(fault==2 && id==2){++failed;return 1;}return 0;}
  void complete(){++completes;}
- void release(){free(data);delete this;--live;}
+ void release(){retained[id-1]=nullptr;free(data);delete this;--live;}
  uint64_t getPhysicalSegment(int,IOByteCount *len) {
   *len=(fault==3 && id==2)?4096:size;
   if(fault==4 && id==2)return 0x100000000ULL;
@@ -80,6 +82,17 @@ int main() {
  }
  allocations=0;fault=0;
  { A04BR3RogueMemory memory;assert(memory.reserve()); }
+ assert(!live);
+ allocations=0;
+ { A04BR3RogueMemory memory;assert(memory.reserve());
+   void *cpu[3];uint64_t pa[3];assert(!memory.stagedMemory(cpu,pa));
+   memory.markHardwareOwned();assert(!memory.reserve());
+   assert(memory.stage(nullptr,0)==A04BR3RogueMemory::StageHardwareOwned);
+   int completed=completes;memory.reset();assert(live==3 && completes==completed);
+ }
+ assert(live==3);
+ /* Explicit mock power-cycle cleanup after verifying production quarantine. */
+ for(unsigned i=0;i<3;i++)if(retained[i]){retained[i]->complete();retained[i]->release();}
  assert(!live);
 }
 ''')

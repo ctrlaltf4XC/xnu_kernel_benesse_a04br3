@@ -32,8 +32,9 @@ static void IOLog(const char *,...) {}
 #define OSDefineMetaClassAndStructors(c,b)
 #define APPLE_KEXT_OVERRIDE override
 static const void *kOSBooleanFalse=(void *)1;
+static const void *kOSBooleanTrue=(void *)2;
 static char payloadStatus[64],bringupStage[64];
-static uint64_t stageResult;static unsigned runningFalse;
+static uint64_t stageResult;static unsigned runningFalse,runningTrue;
 class IOService {
 public:
  virtual bool start(IOService *) { return true; }
@@ -44,7 +45,9 @@ public:
   if(!strcmp(name,"BringupStage"))strcpy(bringupStage,value);
  }
  void setProperty(const char *name,const void *value) {
-  if(!strcmp(name,"FirmwareRunning")){assert(value==kOSBooleanFalse);++runningFalse;}
+  if(!strcmp(name,"FirmwareRunning")){
+   if(value==kOSBooleanFalse)++runningFalse;else {assert(value==kOSBooleanTrue);++runningTrue;}
+  }
  }
  void setProperty(const char *name,uint64_t value,int) {
   if(!strcmp(name,"FirmwareStageResult"))stageResult=value;
@@ -52,7 +55,10 @@ public:
 };
 ''')
             (root/'pexpert/pexpert.h').write_text(r'''
-static bool PE_parse_boot_argn(const char *,void *,unsigned) { return false; }
+static unsigned autoStart;
+static bool PE_parse_boot_argn(const char *name,void *out,unsigned) {
+ if(!strcmp(name,"a04br3.gpu_start")){*(unsigned *)out=autoStart;return true;}return false;
+}
 struct { void *bootArgs; } PE_state;
 ''')
             (root/'pexpert/device_tree.h').write_text(r'''
@@ -76,7 +82,21 @@ public:
   if(stageError){reset();}return stageError;}
 };
 ''')
+            (root/'A04BR3RogueRuntime.h').write_text(r'''
+#include "A04BR3RogueRuntimeLayout.h"
+#include "A04BR3RogueStartupExecutor.h"
+static unsigned runtimePrepares,runtimeStarts;static bool prepareOK=true;static int startError;
+class A04BR3RogueRuntime {
+public:
+ void reset(){}
+ bool prepare(A04BR3RogueMemory &,uint32_t){++runtimePrepares;return prepareOK;}
+ int start(A04BR3RogueMemory &,const a04_rgx_exec_io &){++runtimeStarts;return startError;}
+ uint32_t readShared(uint32_t){return 0;}
+ uint32_t ready(){return 0;}
+};
+''')
             (root/'A04BR3RoguePower.h').write_text(r'''
+enum {A04_RGX_TOP=1};
 struct a04_rgx_io { void *p;uint32_t (*read)(void *,unsigned,unsigned);
  void (*write)(void *,unsigned,unsigned,uint32_t);void (*delay)(void *,unsigned); };
 static int a04_rgx_power_on(a04_rgx_io *) {return 0;}
@@ -93,7 +113,8 @@ static bool absentMap,absentAsset,absentKernel,badTranslation,zeroTranslation,ha
 static unsigned translations;
 static boot_args ba;
 static unsigned char image[8192];
-extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t){return 0;}
+static uint32_t gicMemory[1024],coreMemory[0x10000/4],topMemory[1024];
+extern "C" vm_offset_t ml_io_map(vm_offset_t pa,vm_size_t){return pa==0x10310000?(vm_offset_t)gicMemory:0;}
 extern "C" vm_offset_t ml_static_ptovirt(vm_offset_t pa) {
  ++translations;
  assert(pa==asset[0] || pa==asset[0]+asset[1]-1);
@@ -118,11 +139,14 @@ static void initialize() {
  assetSize=reservationSize=16;
  ba={0x60000000,0x18000000,0x61014000};PE_state.bootArgs=&ba;
  absentMap=absentAsset=absentKernel=badTranslation=zeroTranslation=hasRAMDisk=false;
- stages=resets=stageError=translations=runningFalse=0;stageResult=99;
+ stages=resets=stageError=translations=runningFalse=runningTrue=0;stageResult=99;
+ autoStart=runtimePrepares=runtimeStarts=0;prepareOK=true;startError=0;
+ memset(gicMemory,0,sizeof(gicMemory));memset(coreMemory,0,sizeof(coreMemory));
+ memset(topMemory,0,sizeof(topMemory));topMemory[0]=4U<<8;topMemory[1]=8U<<8;
  memset(payloadStatus,0,sizeof(payloadStatus));memset(bringupStage,0,sizeof(bringupStage));
 }
 int main() {
- A04BR3RogueGPU gpu;
+ A04BR3RogueGPU gpu;gpu.regs[A04_RGX_TOP]=(vm_offset_t)topMemory;
  initialize();gpu.stageBootFirmware();
  assert(stages==1 && translations==2 && !resets && !stageResult && runningFalse==1);
  assert(stageInput==image && stageLength==sizeof(image));
@@ -155,6 +179,27 @@ int main() {
  initialize();stageError=3;gpu.stageBootFirmware();
  assert(stages==1 && resets==1 && stageResult==3 && runningFalse==1);
  assert(!strcmp(payloadStatus,"rejected-image") && !strcmp(bringupStage,"firmware-stage-failed"));
+ initialize();autoStart=1;gpu.core=(vm_offset_t)coreMemory;gpu.stageBootFirmware();
+ assert(runtimePrepares==1 && runtimeStarts==1 && runningTrue==1);
+ assert(!strcmp(bringupStage,"firmware-ready"));
+ assert(gicMemory[(0x180+6*4)/4]==(1U<<25));
+ assert(!gicMemory[(0x100+6*4)/4]); /* no CPU SPI enable */
+ coreMemory[0x8a8/4]=1;
+ assert(!a04br3_rogue_irq_dispatch(216));assert(a04br3_rogue_irq_dispatch(217));
+ assert(coreMemory[0x8b0/4]==1);
+ gpu.stop(nullptr);assert(!a04br3_rogue_irq_dispatch(217));
+ initialize();autoStart=1;prepareOK=false;gpu.stageBootFirmware();
+ assert(runtimePrepares==1 && !runtimeStarts && !runningTrue);
+ initialize();autoStart=1;gicMemory[(0x100+6*4)/4]=1U<<25;gpu.stageBootFirmware();
+ assert(!runtimePrepares && !runtimeStarts && !runningTrue);
+ assert(!strcmp(bringupStage,"firmware-irq-mask-failed"));
+ for(unsigned fault=0;fault<3;fault++){
+  initialize();autoStart=1;
+  if(fault==0)topMemory[0]=0;else if(fault==1)topMemory[1]=0;else topMemory[0x40/4]=1U<<18;
+  gpu.stageBootFirmware();assert(!runtimePrepares && !runtimeStarts && !runningTrue);
+  assert(!strcmp(bringupStage,"firmware-clock-readback-failed"));
+ }
+
 }
 ''')
             exe=root/'test'

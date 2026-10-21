@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
  * Inert host memory reservation. No GPU address is installed in hardware.
  * CPU-only reservation/staging for the validated 22.40.54.30 layout.
- * The GPU never receives these addresses and firmware is never executed here.
+ * This class does not program GPU registers. RogueRuntime owns activation
+ * and marks these allocations hardware-owned before any reset release.
  */
 #ifndef A04BR3_ROGUE_MEMORY_H
 #define A04BR3_ROGUE_MEMORY_H
@@ -13,6 +14,7 @@ class A04BR3RogueMemory {
     IOBufferMemoryDescriptor *buffers[3] = {};
     bool prepared[3] = {};
     bool staged = false;
+    bool hardwareOwned = false;
     static unsigned bytes(unsigned i) {
         return i==0 ? TableBytes : (i==1 ? CodeBytes : DataBytes);
     }
@@ -85,11 +87,20 @@ public:
            BootDataOffset=0x3000, StackOffset=0x4000 };
     enum StageResult { StageOK=0, StageNoMemory=1, StageImage=2,
                        StageProfile=3, StageAddress=4, StageAlias=5,
-                       StageUnpack=6, StageTable=7 };
+                       StageUnpack=6, StageTable=7, StageHardwareOwned=8 };
     A04BR3RogueMemory() = default;
     ~A04BR3RogueMemory() { reset(); }
+    /* After reset release these allocations are pinned until reboot. A later
+     * complete power-off/drain protocol may reclaim them; resetting only MIPS
+     * cannot prove that all fabric transactions have drained. */
+    void markHardwareOwned() { hardwareOwned=true; }
+    bool stagedMemory(void *cpu[3],uint64_t pa[3]) { return staged && snapshot(cpu,pa); }
     void reset() {
         staged=false;
+        if (hardwareOwned) {
+            for (unsigned i=0;i<3;i++) { buffers[i]=nullptr;prepared[i]=false; }
+            return; /* descriptor references deliberately retained until reboot */
+        }
         for (unsigned i=0;i<3;i++) {
             if (buffers[i]) {
                 if (prepared[i]) buffers[i]->complete();
@@ -99,6 +110,7 @@ public:
         }
     }
     bool reserve() {
+        if (hardwareOwned) return false;
         reset();
         const unsigned sizes[3]={TableBytes,CodeBytes,DataBytes};
         for (unsigned i=0;i<3;i++) {
@@ -135,6 +147,7 @@ public:
      * reserve() is required before retry. No stale candidate remains usable. */
     bool firmwareStaged() const { return staged; }
     int stage(const void *image,size_t imageBytes) {
+        if (hardwareOwned) return StageHardwareOwned;
         staged=false;
         for (unsigned i=0;i<3;i++)
             if (!buffers[i] || !prepared[i]) return failStage(StageNoMemory);

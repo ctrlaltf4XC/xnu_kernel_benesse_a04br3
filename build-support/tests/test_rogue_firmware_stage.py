@@ -175,6 +175,12 @@ int main(int argc,char **argv) {
   reserve(memory);success(memory,blob);
   assert(memory.stage(nullptr,blob.size())!=0);
   assert(!live && !memory.firmwareStaged());
+ } else if(!strcmp(argv[1],"ownership")) {
+  memory.markHardwareOwned();assert(!memory.reserve());
+  assert(memory.stage(blob.data(),blob.size())==A04BR3RogueMemory::StageHardwareOwned);
+  int before=completed;memory.reset();assert(live==3 && before==completed);
+  /* Only the host test can now simulate a full mock GPU power cycle. */
+  for(unsigned i=0;i<3;i++)if(slots[i]){slots[i]->complete();slots[i]->release();}
  } else if(!strcmp(argv[1],"reject")) {
   auto bad=readFile(argv[7]);int before=flushes;
   assert(memory.stage(bad.data(),bad.size())!=0);
@@ -268,6 +274,9 @@ bool reserve(A04BR3RogueMemory *memory) { return memory->reserve(); }
         self.run_stage('success', synthetic())
         # Changing the owned allocations must change PTEs and boot words.
         self.run_stage('success', synthetic(), physical_base=0x90000000)
+
+    def test_staged_base_memory_is_not_reused_after_hardware_handoff(self):
+        self.run_stage('ownership', synthetic())
 
     def test_invalid_and_wrong_profile_after_success_discards_old_candidate(self):
         blob = synthetic()
