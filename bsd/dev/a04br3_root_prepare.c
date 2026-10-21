@@ -15,6 +15,7 @@
 #include <pexpert/pexpert.h>
 #include <kern/kalloc.h>
 #include "a04br3_fairplay_merge.h"
+#include "a04br3_mg_cache.h"
 
 void a04br3_root_prepare(void);
 static int
@@ -192,6 +193,9 @@ a04br3_root_prepare(void)
         printf("A04BR3 ROOT: %s %s error=%d\n", paths[i], created ? "created" : "existing", error);
         if (error) panic("A04BR3 root prepare failed: %s error=%d", paths[i], error);
     }
+    /* Known product transition only; preserve the stale cache before MG starts. */
+    int mg_error = prepare_mobilegestalt();
+    printf("A04BR3 ROOT: MobileGestalt identity cache preparation error=%d\n", mg_error);
     unsigned fairplay = 0;
     PE_parse_boot_argn("a04br3.fp", &fairplay, sizeof(fairplay));
     if (fairplay == 1 || fairplay == 2) {

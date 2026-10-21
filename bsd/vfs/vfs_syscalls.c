@@ -9689,6 +9689,17 @@ int a04br3_audio_bundle_move(unsigned restore)
         CAST_USER_ADDR_T(restore ? active : disabled), UIO_SYSSPACE,
         RENAME_EXCL | RENAME_NOFOLLOW_ANY);
 }
+/* Canonical MG cache only. Both directions refuse replacement and symlinks. */
+int a04br3_mg_cache_move(unsigned restore);
+int a04br3_mg_cache_move(unsigned restore)
+{
+    const char *active = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist";
+    const char *backup = "/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.a04br3-pre-ipad-v1.plist";
+    return renameat_internal(vfs_context_kernel(), AT_FDCWD,
+        CAST_USER_ADDR_T(restore ? backup : active), AT_FDCWD,
+        CAST_USER_ADDR_T(restore ? active : backup), UIO_SYSSPACE,
+        RENAME_EXCL | RENAME_NOFOLLOW_ANY);
+}
 int a04br3_fairplay_override_commit(void);
 int a04br3_fairplay_override_commit(void)
 {
