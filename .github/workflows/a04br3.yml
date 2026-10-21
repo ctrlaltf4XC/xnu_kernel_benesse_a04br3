@@ -3,9 +3,13 @@ on:
   workflow_dispatch:
     inputs:
       keep_ssh:
-        description: Keep SSH available for repairs after the build (bounded to 60 minutes)
+        description: Keep SSH available for bounded incremental repairs
         type: boolean
         default: false
+      repair_minutes:
+        description: Maximum SSH repair window in minutes (1 to 300)
+        type: number
+        default: 180
 permissions:
   contents: read
   statuses: write
@@ -64,13 +68,17 @@ jobs:
           retention-days: 7
       - name: Keep the same environment for SSH repairs
         if: ${{ !cancelled() && inputs.keep_ssh }}
+        env:
+          REPAIR_MINUTES: ${{ inputs.repair_minutes }}
         run: |
+          case "$REPAIR_MINUTES" in ''|*[!0-9]*) echo 'Invalid repair duration'; exit 2;; esac
+          if [ "$REPAIR_MINUTES" -lt 1 ] || [ "$REPAIR_MINUTES" -gt 300 ]; then exit 2; fi
           echo "SSH repair environment retained. End with: touch /tmp/a04br3-debug-done"
           # A disconnected guest must not terminate the hosting command.
           # Conversely, do not bill for a dead SSH host until the deadline.
           (upterm session wait a04br3 || true; touch /tmp/a04br3-debug-done) &
           host_watch_pid=$!
-          deadline=$((SECONDS + 3600))
+          deadline=$((SECONDS + REPAIR_MINUTES * 60))
           while [ ! -f /tmp/a04br3-debug-done ] && [ "$SECONDS" -lt "$deadline" ]; do sleep 60; done
           kill "$host_watch_pid" 2>/dev/null || true
           upterm session stop a04br3 || true
@@ -88,7 +96,15 @@ jobs:
           retention-days: 7
       - name: Report the automated build result
         if: always()
-        env:
-          BUILD_OUTCOME: ${{ steps.kernel.outcome }}
         run: |
-          test "$BUILD_OUTCOME" = success
+          python3 - <<'PYTHON'
+          import hashlib, json
+          from pathlib import Path
+          root=Path('out/kernel')
+          metadata=json.loads((root/'build.json').read_text())
+          kernel=root/'kernel.development.a04br3'
+          assert metadata.get('full_kernel_built') is True, 'No completed kernel build'
+          assert metadata.get('source_commit'), 'Missing source revision'
+          assert hashlib.sha256(kernel.read_bytes()).hexdigest()==metadata['kernel_sha256'], 'Kernel metadata mismatch'
+          print('Verified completed kernel from source '+metadata['source_commit'])
+          PYTHON
