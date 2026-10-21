@@ -1,0 +1,67 @@
+{
+  "component": "Canonical native32x32 ISP-fill control128 + onequad88 CPU producer",
+  "license": "BSD-2-Clause-Patent original reconstruction; existing helper licenses unchanged; no binary shader asset embedded",
+  "sources": {
+    "original_board": [
+      {
+        "file": "ipad-worker/rea-solid-entry-12dc50.json",
+        "sha256": "9cde676a3dcd13a5023e7fa6ade52c236d3d5b518d864ad85d20e915c697006c",
+        "evidence_id": "ev_0f384b21f349e70797746d2fb2a14637ffb06301aa62b876af06eaa1d52b6d3e",
+        "target_sha256": "d32a4a224d06302d9bec0a66cbb7d17dec663d3985f1c8592f5bb77353ca1d4b"
+      },
+      {
+        "file": "gpu-worker/rea-native-transfer-fill-backend.json",
+        "sha256": "b3729c5c1dad9f734b04aa8bb1c42092a8c3d81a1341747a96e7c610c022305b",
+        "evidence_id": "ev_28c3ff9f772961342b78a035ce020d1ba3979de80ebf2dad28f10df9bd09865e",
+        "target_sha256": "d32a4a224d06302d9bec0a66cbb7d17dec663d3985f1c8592f5bb77353ca1d4b"
+      }
+    ],
+    "matching_DDK": {
+      "repo": "https://github.com/mouseos/android_kernel_benesse_TAB-A04-BR3.git",
+      "revision": "eb47f42e1f84fe5716ef239620725f82718a620a",
+      "files_sha256": {
+        "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693/include/config_kernel_user_mt8167.h": "354ac3d06aba1be17846d87e27d74282b5c89db9d3e6b3f37fff0ca3dd1a60d1",
+        "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693/hwdefs/km/cores/rgxcore_km_22.40.54.30.h": "51cb1a28ace783ac990ee26f8bbbce734e164ae5cdbc51fa651a359a8c5437b4",
+        "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693/hwdefs/km/rgx_bvnc_defs_km.h": "b39a5fb00d06b460ec0e50542b4b2242830475393a38115f3b032cdc804da2e9",
+        "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693/hwdefs/km/rgx_bvnc_table_km.h": "864a13c23d5245b88bf7f1850577da645c2c997fccff941993dda9c6e44af074",
+        "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693/services/server/devices/rgx/rgxheapconfig.h": "dbb55d164329624b1100d5ee95feca005fafc66f78f2306d9a2e4c2e3ba3d89f",
+        "drivers/misc/mediatek/gpu/gpu_rgx/m1.11ED5425693/services/server/devices/rgx/rgxinit.c": "f0d775dd83eca868e6d9bd17deae1a94b998882c5c95737c36f7e60601aae3d2"
+      }
+    }
+  },
+  "compiled_profile": {
+    "config": "config_kernel_user_mt8167.h19 selects cores/rgxcore_km_22.40.54.30.h; core67 defines FIX_HW_BRN_65273",
+    "runtime_table": "rgx_bvnc_table_km.h307 has22.40.54.30 errata0xd6070; defs65273bit0x80000 is present",
+    "heap_choice": "rgxinit.c3921 selects TQ3DPARAMETERS_BRN_65273 when BRN65273 supported; rgxheapconfig.h137-138 base0,size40000000",
+    "verification": "Host C++ translation includes unmodified matching MT8167 config, rgxheapconfig/rgxdefs/core plus thisheader and static_asserts core/profile/base/size. Not actual XNU SDK or a hardware heap measurement. Standard IMG_UINT64_C mapped to stdint UINT64_C in compile fixture."
+  },
+  "inputs": {
+    "heaps": "4 actualcold BIF views in general/PDS/USC/ISP order; commoncatalogue, disjoint backing CPU/PA, expectedRO policy, exactboardVAprofile. Everymappedpage walks to actualowneddataPA. No allocation/map/retain performed.",
+    "ranges": "Target exactly4096bytes/native22/32x32/pitch32 at128alignedVA. PrimaryPDS >=36 DWORDalignedextent/16alignedVA; USC >=8 DWORDalignedextent/4alignedVA. Control128/quad88 at8alignedVA inside compiledISP1GiB range and mappedwindow; disjoint.",
+    "rectangle": "Canonical0,0..32,32 only; originalsource_count0. Allothergeometry/formats/counts rejected.",
+    "primary_state": "Nativeemptysecondary/varyings pointers/counts, primarysharedcount0. Explicit pds_temps0..60 retains sourceP+1a4 frombackground (maynotbe resetbyempty12c568). It is not USCscratch count.",
+    "content_limit": "InputPDS/USC addresses andranges validated only; producer doesnotcertify instruction contents, PDS-to-USC linkage, key/code-table semantics or retainedlifetime. Caller must supply the validated Franklinprogram images and ownership."
+  },
+  "native_output": {
+    "control": "128 CPUbytes; firstqword ((quad_relative<<30)&fffffffe00000000)|10000032a. Lastbit2 included; remainingstorage canonicalzero, no additionalcommands.",
+    "quad": "88 CPUbytes: header16,index8,4vertices32,shaderstate32. Unwritten/reservedsourcebytes +0c/+54 canonicalzero. Header60/2e0000, onequadindex14c718a404430820, coordinatefixed4 withnativebias2048.",
+    "primary_state": "quad+38 primaryPDSoffset; +40 ceil(pds_temps/4); +50=4000; allotheremptysecondary/varyingwordszero.",
+    "partial_fields": "raw60=2, raw68=controlrelative, raw70=ISPbase&fc00000000=0, raw78=0. raw00/background/remaining208 bytes unspecified and notemitted.",
+    "typed_plan": "Outputretains control/quad destinations and target/PDS/USCreference spans for futureownedpublication. CPUstructisnot a firmware ABI oruserdata carrier."
+  },
+  "scope_limits": [
+    "Actualzero-source12934c includes a realdestination-as-source backgroundprepass. Thisheaderdoesnotreplace or omitit.",
+    "Existingraw00zero liveTransferFill remainsunchanged and isnot declaredinvalid.",
+    "No Complete208task, fourthheapownerallocation, runtime, shaderforwardproof, MMIO/CCB/UFO/completion/capability ordisplay changes.",
+    "Control/quad buffers generated asCPUoutputonly. Lifetime/clean/publication/FWacceptance/pixels remainparent integrationgates.",
+    "SLCcandidate hardwareeffect stillunverified; no negative conclusion from thishelper."
+  ],
+  "validation": [
+    "854 validlayout/temp configurations across low/endof1GiB ISPmappedwindows; goldenall88quadbytes/controlprefix/padding andfullreference spans",
+    "40 malformedinput cases +badPTE/null/alias; output/input/pagetables/data unchanged onrejection; GPUbacking unchangedonsuccess",
+    "ASan/UBSan realheader execution, strictARM64 freestandingcallercompile",
+    "MatchingDDK actualconfig/core/heap headercompile withstaticasserts"
+  ],
+  "reproduce": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s build-support/tests -p test_rogue_isp_fill.py -v (kernel root). DDKprofiletest explicitSKIPwhenmatchingexternalDDKrepoabsent; CPU/ARM64 testsindependent.",
+  "coordination": "Franklin owns shared/texture/code-table/primaryUSC proof. Thiscomponent owns only ISPcontrol/quadnewfiles and tests."
+}
