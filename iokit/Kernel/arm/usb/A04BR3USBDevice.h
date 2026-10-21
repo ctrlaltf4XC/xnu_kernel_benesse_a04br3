@@ -102,12 +102,14 @@ static inline void a04_usb_device_ep0(struct a04_usb_device *s,unsigned txevent)
  a04_usb_device_bar(s);
 }
 static inline int a04_usb_device_bulk(struct a04_usb_device *s,unsigned txevent){
- if(!s->configured || s->suspended)return A04_MUSB_AGAIN;
+ if(!s->configured)return A04_MUSB_AGAIN;
  struct a04_musb_io *i=&s->io;void *c=i->context;a04_usb_device_index(s,1);
  unsigned tx=i->read16(c,0x12),rx=i->read16(c,0x16);
  if((tx&0xdcb4) || !(tx&0x2000) || (rx&0xe96c))return A04_MUSB_FAULT;
  if(s->tx_pending && txevent && !(tx&3)){s->tx_pending=0;if(s->console.ops.tx_complete)s->console.ops.tx_complete(s->console.ops.context);}
- if((tx&3) || !(rx&1))return A04_MUSB_AGAIN;
+ /* ACK and SUSPEND can coalesce between finite worker polls. Retire the
+  * already ACKed IN before gating new OUT work, or drain loses its event. */
+ if(s->suspended || (tx&3) || !(rx&1))return A04_MUSB_AGAIN;
  unsigned n=i->read16(c,0x18),written=0;uint8_t in[512],out[512];
  if(n>s->mps)return A04_MUSB_FAULT;
  for(unsigned b=0;b<n;b++)in[b]=i->read8(c,0x24);

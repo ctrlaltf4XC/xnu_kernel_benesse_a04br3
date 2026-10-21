@@ -78,6 +78,11 @@ int main(){
  assert(a04_usb_device_bulk(&s,2)==A04_MUSB_AGAIN&&!complete);ep[1][1]=0x2000;
  assert(a04_usb_device_bulk(&s,0)==A04_MUSB_AGAIN&&!complete);
  assert(a04_usb_device_bulk(&s,2)==A04_MUSB_AGAIN&&complete==1&&!s.tx_pending);
+ // Suspend may coalesce with the already completed IN event: drain must
+ // observe that ACK without consuming any suspended OUT data.
+ s.suspended=1;s.tx_pending=1;ep[1][1]=0x2000;ep[1][3]=0;
+ assert(a04_usb_device_bulk(&s,2)==A04_MUSB_AGAIN&&complete==2&&!s.tx_pending);
+ s.suspended=0;
  // Backpressure leaves unread OUT intact, oversize faults before FIFO access.
  ep[1][1]=0x2001;ep[1][3]=1;count[1]=513;pos[1]=0;assert(a04_usb_device_bulk(&s,0)==3&&!pos[1]);
  ep[1][1]=0x2000;assert(a04_usb_device_bulk(&s,0)==4&&!pos[1]);
