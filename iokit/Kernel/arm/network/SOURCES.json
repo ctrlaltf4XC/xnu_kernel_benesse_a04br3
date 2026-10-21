@@ -1,5 +1,5 @@
 {
-  "implementation": "Original A04BR3 bridge; no Apple implementation files vendored. Native envelope is evidence-derived; operation payloads remain opaque.",
+  "implementation": "Original A04BR3 adapter/bridge plus pinned genuine Apple IONetworkingFamily in apple/. Apple license headers retained; only local include spellings adapted.",
   "api_source": {
     "remote": "https://github.com/apple-oss-distributions/xnu",
     "tag": "xnu-8796.141.3",
@@ -72,5 +72,30 @@
       }
     ]
   },
-  "credit": "Apple Inc. authors of XNU and IONetworkingFamily. Reference code retains its original Apple Public Source License; new bridge uses SPDX BSD-2-Clause-Patent."
+  "credit": "Apple Inc. authors of XNU and IONetworkingFamily. Reference code retains its original Apple Public Source License; new bridge uses SPDX BSD-2-Clause-Patent.",
+  "native_set_evidence": {
+    "source": "wifi-worker/rea-io80211-setwrapper.json",
+    "evidence_id": "ev_c248f36492c550125e8a6a34347abb41c4f826d026abad427664f16b77e806e5",
+    "procedure": "_Apple80211IOCTLSetWrapper",
+    "address": "0x1d3ec34f8",
+    "observed_call": "FUN_1d3ef5188(*puVar15,0x802869c8)",
+    "scope": "req64 offsets and SET command only; no operation payload or credential behavior inferred"
+  },
+  "configd_reference": {
+    "revision": "585b7f2fca293f4642d21d15c5daf187f63c4796",
+    "files": [
+      {
+        "path": "Plugins/InterfaceNamer/ifnamer.c",
+        "url": "https://raw.githubusercontent.com/apple-oss-distributions/configd/585b7f2fca293f4642d21d15c5daf187f63c4796/Plugins/InterfaceNamer/ifnamer.c",
+        "sha256": "24c7642c17d2f4410195699498d61aaa18d9ef5799b583d74785de8fa908c76d"
+      },
+      {
+        "path": "SystemConfiguration.fproj/SCNetworkInterface.c",
+        "url": "https://raw.githubusercontent.com/apple-oss-distributions/configd/585b7f2fca293f4642d21d15c5daf187f63c4796/SystemConfiguration.fproj/SCNetworkInterface.c",
+        "sha256": "71f773081e1df3b5d8f61dc99674fe513d9fdec52d444010c3c0783b608ba8ef"
+      }
+    ],
+    "scope": "reference source prerequisite, not proof of shipped iOS16 execution; not copied into runtime sources"
+  },
+  "apple_runtime_source": "apple/SOURCE.json"
 }

@@ -12,6 +12,7 @@ struct a04_network_state {
      * transport, not WMT patch delivery. Neither requires association. */
     unsigned present,mac_valid,firmware_running,control_ready,datapath_ready,associated;
     uint8_t mac[6];
+    unsigned radio_enabled; /* observed runtime radio/admin state, not association */
 };
 struct a04_network_backend {
     void *context;
@@ -27,6 +28,12 @@ struct a04_network_backend {
     /* A successful transmit consumes mbuf. On error leave it to the bridge.
      * Backend must queue promptly; no long firmware exchange in output(). */
     int (*transmit)(void *,void *mbuf);
+    /* Opaque native SET, dispatched only after kernel credential check and
+     * bounded copyin. No user pointer is passed. Input lasts for this call only;
+     * asynchronous backend work must copy it. Return real command errno;
+     * unsupported type/value MUST return EOPNOTSUPP, never synthetic success.
+     * bytes may be zero (no payload); this does not imply any opcode meaning. */
+    int (*native_set)(void *,uint32_t type,uint32_t value,const void *,uint32_t bytes);
 };
 static inline int a04_network_mac_valid(const struct a04_network_state *s)
 {

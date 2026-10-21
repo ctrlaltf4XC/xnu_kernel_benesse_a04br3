@@ -36,8 +36,25 @@ the actual backend; this component alone does not make WiFi usable.
 `native_get` receives the observed ARM64 native GET envelope (40-byte ioctl
 0xc02869c9, pointer at offset 32), with bounded copyin/copyout scratch. It must
 return only real operation results and EOPNOTSUPP for unsupported requests.
-No setter or guessed scan opcode is implemented. Maximum payload is 16384;
-32-bit and SET envelopes are rejected. No backend result is copied on failure.
+Native SET uses the same envelope and ioctl 0x802869c8 from retained REA
+SetWrapper evidence. No guessed scan opcode is implemented. Maximum payload is 16384;
+32-bit envelopes are rejected. SET is bounded input only (zero to 16384 bytes),
+never copies data back or changes request length. A zero-length payload is passed
+as NULL/0 without inferring its operation meaning. Missing native_set returns
+EOPNOTSUPP. The appended callback receives opaque type/value and a kernel-owned
+input copy valid for the call only. Any asynchronous command must retain its own
+copy. Unknown operations return EOPNOTSUPP; a successful SET alone does not set
+association or RUNNING. State transitions still require a real refresh().
+
+SET authorization is deliberately root-only via the active calling thread's
+kauth_cred_get()/kauth_cred_issuser(), before user copyin or backend dispatch.
+The generic BSD ioctl fallback does not authorize this private native command.
+No request-provided UID, cached service credential, entitlement bypass, or root
+impersonation is used. This is a conservative bridge policy, not a reconstruction
+of Apple's entitlement policy; non-root entitled clients are not supported yet.
+GET keeps its existing read-only policy. Admin flags retain BSD's existing
+SIOCSIFFLAGS authorization. Include sys/kauth.h and existing BSD kauth providers
+in real SDK compile/link validation. No backend result is copied on failure.
 
 On shutdown call `detach()`, wait until `isDetached()`, then `finish()` before
 releasing owner/context. Successful detach may complete inline or asynchronously.
@@ -54,7 +71,8 @@ fallback reachability remain unverified on device.
 
 Run `python3 tests/test_bsd_network.py`. It compiles the actual C++ bridge against
 typed DLIL/IOKit mocks with ASan/UBSan, checks ownership and bounded ioctl copies,
-including UP while unassociated, GET before association, no premature RUNNING,
+including SET privilege denial/no-copy, exact opaque dispatch, zero/max input,
+copy faults and backend errors; UP while unassociated, GET before association, no premature RUNNING,
 admin failures, state loss, missing TX, inline/async detach and detach failure
 recovery. It does not compile against the complete kernel or run native wifid.
 
@@ -63,3 +81,72 @@ No Apple reference implementation was copied into this directory. Retained REA
 observations and reference downloads are under the worker log directory rather
 than this source repository. The native operation backend must implement its
 own proven payload codecs; an opaque passthrough is not proof of native binding.
+
+## Provider wiring and native publication prerequisites
+
+`attachProvider(provider, &backend, unit)` creates/initializes/attaches a real
+IOService child, then registers its real BSD ifnet. It unwinds failed init,
+provider attach and BSD attach without leaking the child. `registryEntry()` is
+a borrowed pointer for integrator observation, not an ownership transfer.
+`finish()` detaches/releases an internally created child only after DLIL detach
+completion. Existing `attach(actualInterfaceService,...)` remains available for
+integration with a genuine IONetworkingFamily service; that owner manages its
+own provider attachment.
+
+Published after BSD attach: IOInterfaceName, IOBSDName, prefix, unit,
+IOInterfaceType=IFT_ETHER, IOMACAddress (actual backend MAC), Infrastructure role.
+Detach removes these properties; failed detach restores them with admin DOWN.
+No synthetic IOBuiltin, private IOClass, country, regulatory map or calibration
+is invented. Supply MAC from real runtime a04br3_wlan_read_calibration(bytes,512); firmware
+ready is real WLAN state, never merely WMT delivery success.
+
+`input(mbuf)` consumes a real RX packet on every return. The backend must first
+construct an Ethernet mbuf in native DLIL input format (packet-header frame
+pointer and payload position for ether_demux), not pass firmware descriptors.
+The bridge gates RX on admin plus actual data/association state, retains ifnet
+while crossing DLIL, and releases its lock before ifnet_input to permit protocol
+reentry. It never frees an mbuf twice after DLIL failure. Owner calls must remain
+serialized with final finish; no interrupt invocation of this sleepable gate.
+
+IMPORTANT: A real BSD ifnet plus a plain IOService child is insufficient evidence
+of native WiFi discovery. Official configd reference commit
+585b7f2fca293f4642d21d15c5daf187f63c4796 checks real IONetworkInterface ancestry
+in SCNetworkInterface.c:7646 and registers InterfaceNamer notifications for that
+class (ifnamer.c:4421). It also classifies Ethernet as WiFi via actual parent
+IO80211Controller/AirPort ancestry (SCNetworkInterface.c:1792). This is a public
+reference prerequisite; exact shipped iOS16 SystemConfiguration behavior still
+needs retained REA verification. This bridge does NOT spoof class properties,
+metaclass ancestry, SC dynamic-store Interfaces, or a WiFi-connected flag.
+A genuine IONetworkingFamily interface/controller integration (or proven native
+alternate registration path) is still needed before claiming UI visibility.
+
+## Genuine ancestry integration candidate
+
+A04BR3EthernetInterface inherits the vendored genuine IOEthernetInterface and
+IONetworkInterface; A04BR3EthernetController inherits IOEthernetController.
+These are original subclasses, not private IO80211Controller identities.
+The documented virtual DDL attach/detach hooks use the existing bridge as the
+single ifnet owner. Apple's default ifnet allocator is not called for this
+subclass. getIfnet/getFlags report the actual bridge ifnet. IONetworkStack owns
+normal unit/name assignment and registered-state changes. Detach sleeps until
+the real asynchronous callback completes; no polling or fake completion.
+
+`a04br3_network_start(provider,&backend,&errno)` in A04BR3NetworkRuntime.h creates
+the real Apple IONetworkStack service (one boot-lifetime instance) and the real
+controller/interface hierarchy. Call from serialized board startup after BSD
+and runtime NVRAM validation. The provider/context live for the boot. Controller
+stop synchronously detaches its interface. Backend receives the actual MAC from
+`a04br3_wlan_read_calibration(bytes,512)`: GPTnvram dynamic bitmap/map/checksum
+reads under the existing MSDC mutex, no extraction or configuration by users.
+No calibration file or per-user build input. Distribution uses prebuilt images.
+
+Compile network's three original cpp files and twelve Apple cpp files via the
+network-only additions in iokit/conf/files.arm64. Headers use source-local quoted
+includes; no runner-only include path or KDK network headers. apple/SOURCE.json
+records original and adapted hashes and APPLE_LICENSE is included. Tests:
+`python3 tests/test_bsd_network.py`; `python3 tests/test_ethernet_binding.py`.
+The adapter test uses typed Apple/DLIL mocks to execute actual adapter/bridge
+lifecycle plus verifies vendored-source hashes. It is not a full Apple family
+compile or native UI success claim. SDK compile/link and hardware tests are the
+parent's next gate. Native iOS WiFi classification and operation payloads remain
+independent evidence requirements; no AirPort bool/property or class spoof is used.

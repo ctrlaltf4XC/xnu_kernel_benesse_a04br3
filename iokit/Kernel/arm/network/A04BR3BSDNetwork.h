@@ -15,6 +15,17 @@ public:
     A04BR3BSDNetwork(const A04BR3BSDNetwork &)=delete;
     A04BR3BSDNetwork &operator=(const A04BR3BSDNetwork &)=delete;
     int attach(IOService *registry,const a04_network_backend *backend,unsigned unit);
+    /* Creates a real IOService child attached to provider; registers it only
+     * after successful BSD attach. Does not claim IONetworkInterface ancestry. */
+    int attachProvider(IOService *provider,const a04_network_backend *backend,unsigned unit);
+    IOService *registryEntry() const { return registry; } /* borrowed; owner serialized */
+    /* Consumes packet on every return. Caller supplies a real Ethernet RX mbuf
+     * in DLIL format, with pkt-header frame pointer and payload adjusted for
+     * ether_demux. No raw firmware descriptor may be passed here. */
+    int input(mbuf_t packet);
+    int detachAndWait(); /* sleepable owner context, never under backend lock */
+    ifnet_t ifnet() const { return interface; } /* borrowed; owner serialized */
+    int dispatch(unsigned long command,void *data);
     int refresh();
     int detach();
     bool isDetached();
@@ -24,7 +35,8 @@ private:
     IOLock *gate;
     IOService *registry;
     a04_network_backend backend;
-    bool stopping,admin;
+    bool stopping,admin,ownedChild;
+    void publishIdentity();
     uint8_t mac[6];
     char name[16];
     int snapshot(a04_network_state *);

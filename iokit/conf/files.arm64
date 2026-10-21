@@ -31,3 +31,21 @@ iokit/Kernel/arm/rogue/A04BR3RogueGPU.cpp optional iokitcpp
 iokit/Kernel/arm/sdio/A04BR3SDIO.cpp optional iokitcpp
 
 iokit/Kernel/arm/network/A04BR3BSDNetwork.cpp optional iokitcpp
+
+iokit/Kernel/arm/network/A04BR3Ethernet.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IOEthernetController.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IOEthernetInterface.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IOKernelDebugger.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IOMbufMemoryCursor.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IONetworkController.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IONetworkData.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IONetworkInterface.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IONetworkMedium.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IONetworkStack.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IONetworkUserClient.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IOOutputQueue.cpp optional iokitcpp
+iokit/Kernel/arm/network/apple/IOPacketQueue.cpp optional iokitcpp
+
+iokit/Kernel/arm/network/A04BR3NetworkRuntime.cpp optional iokitcpp
+
+iokit/Kernel/arm/network/A04BR3NativeRendezvous.cpp optional iokitcpp

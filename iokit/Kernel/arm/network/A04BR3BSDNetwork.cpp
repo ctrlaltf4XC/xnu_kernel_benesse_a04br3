@@ -5,6 +5,9 @@
  */
 #include "A04BR3BSDNetwork.h"
 #include "A04BR3Apple80211IOCTL.h"
+#include "A04BR3Apple80211SET.h"
+#include <sys/kauth.h>
+#include <kern/thread.h>
 #include <sys/systm.h>
 #include <sys/sockio.h>
 #include <sys/kpi_mbuf.h>
@@ -20,7 +23,7 @@ static int a04_network_copyout(void *,const void *in,uint64_t address,unsigned b
 {return copyout(in,(user_addr_t)address,bytes);}
 
 A04BR3BSDNetwork::A04BR3BSDNetwork():interface(nullptr),gate(nullptr),registry(nullptr),
-    backend{},stopping(false),admin(false),mac{},name{} {}
+    backend{},stopping(false),admin(false),ownedChild(false),mac{},name{} {}
 
 int A04BR3BSDNetwork::snapshot(a04_network_state *s)
 {
@@ -59,16 +62,55 @@ int A04BR3BSDNetwork::attach(IOService *service,const a04_network_backend *b,uns
     if(!error)error=ifnet_attach(interface,&address);
     if(error){ifnet_release(interface);interface=nullptr;finish();return error;}
     /* Publish only after the real BSD interface exists, never claim connected. */
-    registry->setProperty("IOInterfaceName",name);
-    registry->setProperty("IOInterfaceNamePrefix",ifnet_name(interface));
-    registry->setProperty("IOInterfaceUnit",(uint64_t)ifnet_unit(interface),32);
-    registry->setProperty("IO80211InterfaceRole","Infrastructure");
+    publishIdentity();
     registry->setProperty("WLANBackendReady",false);
     registry->setProperty("WLANDataPathReady",false);
     registry->registerService();
     int status=refresh();
     if(status)IOLog("A04BR3 network: interface attached, backend error=%d; not ready\n",status);
     return 0;
+}
+
+void A04BR3BSDNetwork::publishIdentity()
+{
+    registry->setProperty("IOInterfaceName",name);
+    registry->setProperty("IOBSDName",name);
+    registry->setProperty("IOInterfaceNamePrefix",ifnet_name(interface));
+    registry->setProperty("IOInterfaceUnit",(uint64_t)ifnet_unit(interface),32);
+    registry->setProperty("IOInterfaceType",(uint64_t)IFT_ETHER,8);
+    registry->setProperty("IOMACAddress",(void *)mac,6);
+    registry->setProperty("IO80211InterfaceRole","Infrastructure");
+}
+
+int A04BR3BSDNetwork::attachProvider(IOService *provider,const a04_network_backend *b,unsigned unit)
+{
+    if(gate || !provider)return EINVAL;
+    IOService *child=new IOService;
+    if(!child)return ENOMEM;
+    if(!child->init()){child->release();return ENOMEM;}
+    if(!child->attach(provider)){child->release();return ENXIO;}
+    int error=attach(child,b,unit);
+    if(error)child->detach(provider);
+    else ownedChild=true; /* bridge retained child; finish detaches and releases */
+    child->release();
+    return error;
+}
+
+int A04BR3BSDNetwork::input(mbuf_t packet)
+{
+    if(!packet)return EINVAL;
+    if(!gate){mbuf_freem(packet);return ENXIO;}
+    IOLockLock(gate);a04_network_state s={};int error=snapshot(&s);
+    if(!error && (!interface || !admin || !a04_network_data_ready(&s)))error=ENETDOWN;
+    ifnet_t ifp=interface;
+    if(!error)error=ifnet_reference(ifp);
+    IOLockUnlock(gate);
+    if(error){mbuf_freem(packet);return error;}
+    /* Protocol input may reenter output/driver callbacks. Never hold our gate
+     * over DLIL; retain ifnet across concurrent asynchronous detach instead. */
+    error=ifnet_input(ifp,packet,nullptr); /* consumes mbuf on success and failure */
+    ifnet_release(ifp);
+    return error;
 }
 
 int A04BR3BSDNetwork::refresh()
@@ -100,7 +142,11 @@ errno_t A04BR3BSDNetwork::output(ifnet_t ifp,mbuf_t packet)
 errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);if(!s || !s->gate)return ENXIO;
-    if(command!=A04_APPLE80211_GET64 && command!=SIOCSIFFLAGS)return EOPNOTSUPP;
+    if(command!=A04_APPLE80211_GET64 && command!=A04_APPLE80211_SET64 && command!=SIOCSIFFLAGS)return EOPNOTSUPP;
+    /* Default BSD ioctl fallback does not supply a write authorization check
+     * for this native command. Check the active calling thread, not cached
+     * provider credentials or an untrusted field in the native request. */
+    if(command==A04_APPLE80211_SET64 && !kauth_cred_issuser(kauth_cred_get()))return EPERM;
     IOLockLock(s->gate);a04_network_state state={};int error=s->snapshot(&state);
     if(command==SIOCSIFFLAGS){
         bool enabled=(ifnet_flags(ifp)&IFF_UP)!=0;
@@ -125,19 +171,36 @@ errno_t A04BR3BSDNetwork::ioctl(ifnet_t ifp,unsigned long command,void *data)
         if(!data)error=EINVAL;
         else{
             auto *req=(a04_apple80211_req64 *)data;
-            if(!req->length || req->length>A04_APPLE80211_MAX_BYTES)error=EINVAL;
+            if((command==A04_APPLE80211_GET64 && !req->length) || req->length>A04_APPLE80211_MAX_BYTES)error=EINVAL;
             else{
-                unsigned bytes=req->length;void *scratch=IOMallocZero(bytes);
+                unsigned bytes=req->length?req->length:1;void *scratch=IOMallocZero(bytes);
                 if(!scratch)error=ENOMEM;
                 else{
                     const a04_network_copy copy={nullptr,a04_network_copyin,a04_network_copyout};
-                    error=a04_network_get(&s->backend,&state,req,s->name,scratch,bytes,&copy);
+                    if(command==A04_APPLE80211_SET64)
+                        error=a04_network_set(&s->backend,&state,req,s->name,scratch,bytes,&copy,1);
+                    else error=a04_network_get(&s->backend,&state,req,s->name,scratch,bytes,&copy);
                     IOFree(scratch,bytes);
                 }
             }
         }
     }
     IOLockUnlock(s->gate);return error;
+}
+
+int A04BR3BSDNetwork::dispatch(unsigned long command,void *data)
+{
+    if(!gate || !interface)return ENXIO;
+    return ioctl(interface,command,data);
+}
+
+int A04BR3BSDNetwork::detachAndWait()
+{
+    int error=detach();if(error || !gate)return error;
+    IOLockLock(gate);
+    while(interface)IOLockSleep(gate,this,THREAD_UNINT);
+    IOLockUnlock(gate);
+    return finish();
 }
 
 int A04BR3BSDNetwork::detach()
@@ -148,6 +211,8 @@ int A04BR3BSDNetwork::detach()
     ifnet_set_flags(ifp,0,IFF_UP|IFF_RUNNING);
     registry->removeProperty("IOInterfaceName");registry->removeProperty("IOInterfaceNamePrefix");
     registry->removeProperty("IOInterfaceUnit");registry->removeProperty("IO80211InterfaceRole");
+    registry->removeProperty("IOBSDName");registry->removeProperty("IOInterfaceType");
+    registry->removeProperty("IOMACAddress");
     registry->setProperty("WLANBackendReady",false);registry->setProperty("WLANDataPathReady",false);
     IOLockUnlock(gate);
     int error=ifnet_detach(ifp); /* may invoke detached() inline */
@@ -155,10 +220,7 @@ int A04BR3BSDNetwork::detach()
         /* DLIL still owns a live interface. Restore discovery identity, but
          * retain admin-down state; a new explicit UP is required to enable it. */
         IOLockLock(gate);stopping=false;
-        registry->setProperty("IOInterfaceName",name);
-        registry->setProperty("IOInterfaceNamePrefix",ifnet_name(interface));
-        registry->setProperty("IOInterfaceUnit",(uint64_t)ifnet_unit(interface),32);
-        registry->setProperty("IO80211InterfaceRole","Infrastructure");
+        publishIdentity();
         IOLockUnlock(gate);
         (void)refresh();
     }
@@ -169,7 +231,7 @@ void A04BR3BSDNetwork::detached(ifnet_t ifp)
 {
     auto *s=(A04BR3BSDNetwork *)ifnet_softc(ifp);
     ifnet_release(ifp); /* release the original allocation reference, once */
-    IOLockLock(s->gate);s->interface=nullptr;IOLockUnlock(s->gate);
+    IOLockLock(s->gate);s->interface=nullptr;IOLockWakeup(s->gate,s,false);IOLockUnlock(s->gate);
 }
 
 bool A04BR3BSDNetwork::isDetached()
@@ -181,7 +243,11 @@ bool A04BR3BSDNetwork::isDetached()
 int A04BR3BSDNetwork::finish()
 {
     if(!isDetached())return EBUSY;
-    if(registry){registry->release();registry=nullptr;}
+    if(registry){
+        if(ownedChild)registry->detach(registry->getProvider());
+        registry->release();registry=nullptr;
+    }
+    ownedChild=false;
     if(gate){IOLockFree(gate);gate=nullptr;}
     backend={};stopping=admin=false;return 0;
 }
