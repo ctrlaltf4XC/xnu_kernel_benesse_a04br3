@@ -17,7 +17,7 @@ class RuntimeCompile(unittest.TestCase):
         if not clang:self.fail('clang++ needed for target compile')
         with tempfile.TemporaryDirectory() as directory:
             p=Path(directory)
-            for d in ('IOKit','arm','pexpert/arm64'): (p/d).mkdir(parents=True,exist_ok=True)
+            for d in ('IOKit','arm','kern','pexpert/arm64'): (p/d).mkdir(parents=True,exist_ok=True)
             (p/'IOKit/IOLib.h').write_text('''#pragma once
 #include <stdint.h>
 #include <stddef.h>
@@ -56,10 +56,11 @@ extern void *kernel_task;
 enum {kIODirectionInOut=3,kIOMemoryPhysicallyContiguous=16,kIOMemoryMapperNone=32,kIOMapWriteCombineCache=0x400};
 class IOBufferMemoryDescriptor {public:
  static IOBufferMemoryDescriptor *inTaskWithPhysicalMask(void *,unsigned,uint64_t,uint64_t);
- int prepare();void complete();void release();
+ int prepare();void complete();void retain();void release();
  uint64_t getPhysicalSegment(int,IOByteCount *);void *getBytesNoCopy();
 };
 ''')
+            (p/'kern/task.h').write_text('#pragma once\nextern void *kernel_task;\n')
             (p/'arm/caches_internal.h').write_text('extern "C" void flush_dcache(vm_offset_t,unsigned,int);\n')
             (p/'pexpert/pexpert.h').write_text('''extern "C" int PE_parse_boot_argn(const char *,void *,int);
 struct PE_state_t {void *bootArgs;};extern PE_state_t PE_state;

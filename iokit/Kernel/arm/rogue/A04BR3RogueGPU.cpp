@@ -15,6 +15,7 @@
 #include "A04BR3RogueBootFirmware.h"
 #include "A04BR3RogueRuntime.h"
 #include "A04BR3RogueRenderMemory.h"
+#include "A04BR3RogueNativeBuffers.h"
 extern "C" vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
 extern "C" vm_offset_t ml_static_ptovirt(vm_offset_t);
 /* Platform SLEH can call this hook before its unhandled-SPI panic, then EOI.
@@ -73,6 +74,7 @@ public:
         IOService::stop(provider);
     }
 private:
+    A04BR3RogueNativeBuffers nativeTrial; /* private CPU-only opt-in; never FW mapped */
     A04BR3RogueMemory memory;
     A04BR3RogueRuntime runtime;
     A04BR3RogueRenderMemory render; /* destroyed before runtime/base mappings */
@@ -374,6 +376,13 @@ bool A04BR3RogueGPU::start(IOService *provider)
     __asm__ volatile("dmb oshld":::"memory");
     IOLog("A04BR3 GPU: BVNC=%u.%u.%u.%u raw=0x%llx; firmware/MMU/submission not enabled\n",hi>>16,hi&65535,lo>>16,lo&65535,bvnc);
     if(!bvnc || bvnc==~0ULL)return false;
+    unsigned nativeTrialEnabled=0;
+    if (PE_parse_boot_argn("a04br3.gpu_trial",&nativeTrialEnabled,sizeof(nativeTrialEnabled)) && nativeTrialEnabled==1) {
+        unsigned result=nativeTrial.coldTrial(nativeTrialEnabled,bvnc);
+        setProperty("NativeResourceCPUTrialResult",(uint64_t)result,32);
+        IOLog("A04BR3 GPU: native CPU resource trial result=%u logicalBytes=%u; private buffers released, no FW mapping/task/pixel proof\n",
+            result,result==1?364544U:0U);
+    }
     /* This source-built display bring-up already requires display_probe=1.
      * Reserve inert buffers by default; the optional override can disable it.
      * Avoid requiring another boot argument in the bounded shim command line. */

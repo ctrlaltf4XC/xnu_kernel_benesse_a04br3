@@ -1,0 +1,46 @@
+{
+  "scope": "Real kernel IOBuffer/cache/retain adapter; explicit a04br3.gpu_trial=1 CPU-only driver trial, no FW exposure",
+  "license": "BSD-2-Clause-Patent",
+  "source_api_sha256": {
+    "iokit/IOKit/IOBufferMemoryDescriptor.h": "92e19dc6505041fe0ff4b067224473b03f5731f9152915b7399d41524f61e29b",
+    "iokit/IOKit/IOMemoryDescriptor.h": "56988da525cc7fff243a910f98752d2b76949c5f2d07a3bde2f8f407f6c79cf2",
+    "iokit/Kernel/arm/rogue/A04BR3RogueMemory.h": "dd613f26711825e572e5348464d69fb7c91871414fbf7ac084986f54cf9559b2",
+    "iokit/Kernel/arm/rogue/A04BR3RogueRenderMemory.h": "5685abd2e25fdd9c360d9b5664749451759ba539c170dad4a15fe34c0b5f6ad0"
+  },
+  "allocation": {
+    "count": 14,
+    "logical_descriptor_bytes": 364544,
+    "sizes": "bank/data65536 (indices0/4/7/10/13); PC/PD/PT4096",
+    "options": "existing RenderMemory pattern: InOut|PhysicallyContiguous|MapperNone; WriteCombine requested forbank/data",
+    "mask": "fffff000; verifygetPhysicalSegment0 length>=logicalsize, actualCPU/PA low32range andallpairsdisjoint afterprepare",
+    "cache": "flush_dcache(cpu,bytes,0)+ARM64dsbsy; currentcacheattributes/actualphysicalallocation not measured ondevice",
+    "isp": "Caller explicit64KiBwindow withincompiledISPheap0..1GiB; base0 is not a sentinel",
+    "ids": "ExplicitfirstContextID1..fffffffb; caller responsible foruniqueness acrossrunningcontexts"
+  },
+  "lifetime": "Root14preparedrefs plusNativeResources14extraRetains. Coldrollback dropsleases thencomplete/releasesroots. Afterpinbothsets intentionallyquarantined; no safe live-MMU/context teardown exists. Calls requirethreadcontext andexternal producer/power/lifecycle mutex.",
+  "integration_limits": [
+    "No automaticMIPS FWbankmapping atA04_RGX_RENDER_FW_OFFSET; parent must addvalidatedcoldmapping before anyFWvisibility",
+    "No FWregistration/start/KCCB/full208/pixeltest entry",
+    "No background152-byte USC asset or sourceequivalent supplied; immutableasset policy/wholepacketproof stillrequired",
+    "Do notinjectprograms afterpin; currentverifier treats absentregions asA5/knownpadding",
+    "Existing default clear/EOT/Memory/FW unchanged. GPU.cpp opt-in only; full SDK and device trial unverified.",
+    "FW addresses use the existing fixed bank offset80000. Never replace an existing LIVE mapping atthat address; coldboot replacement or a separately source-validated FWVA plan isrequired."
+  ],
+  "tests": [
+    "Fourteenallocationfailureandfourteenpreparefailurepositions withbalancedcomplete/release",
+    "Shortsegment,>4GiBPA,alias/invalidwindow/contextIDs rejected",
+    "Actualadapterretain/flush dispatch14; segmentedidentity revalidatedbeforepin; pinneddestructionquarantinesobjects",
+    "ASanUBSan modeledIOBuffer framework; test-onlyreclaim afterassertingquarantine avoids modelleaks, not productionteardown",
+    "ARM64freestandingC++14 againstminimalAPI declarations, includingactualDSBsourcebranch; fullSDKnotexecuted",
+    "After-all-holds segment revalidation failure and latepin snapshot failure balance saved-object retains before cold root complete/release",
+    "Extracted actual GPU.cpp trial dispatch executed with real allocator adapter + modeled framework: absent/0/2/wrongBVNC, success, prepare failure, property/log gate; ARM64 actual coldTrial/verify callers"
+  ],
+  "cpu_trial": {
+    "bootarg": "a04br3.gpu_trial=1",
+    "default": "absent/0/other values: no trial allocations or trial properties/logs",
+    "gate": "exact BVNC22.40.54.30 and empty owner; caller thread in start after register probe",
+    "operation": "prepare14, source re-derive/verify all4data images+guards+coldCCB/UFO and physical snapshots, release14 leases+14root prepares/refs before return",
+    "private_test_values": "contextIDs1..4; ISP window0x10000, not a HW policy or active context",
+    "result": "0 skipped,1 CPU verified and released,2 failure/released,3 rejected wrong BVNC/busy; no FW/GPU/pixel proof"
+  }
+}

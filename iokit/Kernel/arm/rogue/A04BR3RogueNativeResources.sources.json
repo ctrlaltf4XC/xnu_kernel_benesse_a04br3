@@ -1,0 +1,38 @@
+{
+  "scope": "Cold actual-image CPU stage and fourteen-allocation lease owner, no rendering permission or complete208",
+  "license": "BSD-2-Clause-Patent; independent composition/lifetime code; component licenses/credits retained in included source headers",
+  "components": [
+    "A04BR3RogueNative22State.h/.sources.json: actual source9-word sampler/image/literal plusPDSDMA",
+    "A04BR3RogueISPFill.h/.sources.json: canonicalISPcontrol128/quad88 partialfields",
+    "A04BR3RogueTransferFill.h: existing native32x32 PBE-dependentEOT/pixel-event producer unchanged",
+    "A04BR3RoguePrimaryNop.h: source8-byte primary, original target forward equality",
+    "A04BR3RogueFragmentKick.h: original primaryDOUTU data8/code1"
+  ],
+  "contract": {
+    "input": "Exactr resource size +explicit4heap byte length; actual4heap pagewalk/low32PA/readonly attributes, r.bif==GENERAL, allCPU/PA disjoint including bank-vsISP",
+    "allocations": [
+      "bank",
+      "sharedPC",
+      "GENERAL PD/PT/data",
+      "PDS PD/PT/data",
+      "USC PD/PT/data",
+      "ISP PD/PT/data"
+    ],
+    "count": 14,
+    "general": "target0..4095=A5; shared36 at8192..8227, everyotherbyte=A5 guard",
+    "pds": "0..63 EOT pixel-event;64..191zero padding (not a backgroundprogram);192..255 primaryDOUTU->USC96;256..271 DMAdata;272..287 DMAcode;remainderA5",
+    "usc": "EOT0..11;unused12..95zero;NOP96..103;remainderA5. No152-byte backgroundcode supplied",
+    "isp": "control0..127;quad128..215;remainderA5; explicitwindow only",
+    "cache": "All14 holds must succeed before writes; clean14+storebarrier must succeed beforeprepared; acquire before re-derivation/readback of CPU-owned images, not SLC proof",
+    "pin": "Rebuild allsourceimages andverifyactual bytes, all14identities, guardpartition, coldCCB/UFO; returnpartialCPUimage andquarantine14retains. No live teardownAPI",
+    "failure": "Eachhold/clean failure invalidatesprepared phase andbalancesrefs reverse; no bank/PC/PD/PT write orqueue/MMIO/submission",
+    "verifyCold": "Same source regeneration/14identities/byte andguard/coldCCB/UFO checks without pin transition; allows CPU-only trial then balanced cold release, never authorizes FW visibility"
+  },
+  "tests": [
+    "Actualstage/pin dispatch +14holdfailurepositions+14cleanfailurepositions+allmissingcallbacks",
+    "Malformedsize/PA/PTE/read-onlypermission andbank/ISP alias reject atomically",
+    "Target/shared/program/ISP/guard/PA andcoldCCB/UFO mutations reject; failedacquire cannotpin",
+    "ASanUBSan host execution, ARM64freestandingC++14 actualcaller frame<4096"
+  ],
+  "hardware": "Unverified; CPU-only explicit driver trial available through NativeBuffers; no FW mapping or complete208/backgroundUSC. Parent owns SDK/build/physical."
+}

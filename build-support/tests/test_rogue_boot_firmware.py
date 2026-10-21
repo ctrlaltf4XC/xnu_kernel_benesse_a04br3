@@ -152,6 +152,9 @@ struct a04_rgx_io { void *p;uint32_t (*read)(void *,unsigned,unsigned);
  void (*write)(void *,unsigned,unsigned,uint32_t);void (*delay)(void *,unsigned); };
 static int a04_rgx_power_on(a04_rgx_io *) {return 0;}
 ''')
+            # This test isolates boot-payload dispatch. Real NativeBuffers and
+            # extracted opt-in driver dispatch run in test_rogue_native_buffers.
+            (root/'A04BR3RogueNativeBuffers.h').write_text('class A04BR3RogueNativeBuffers {public:unsigned coldTrial(unsigned,uint64_t){return 2;}};\n')
             source=(inc/'A04BR3RogueGPU.cpp').read_text()
             source=source.replace('private:', 'public:')
             source=re.sub(r'__asm__ volatile\([^;]*\);','',source)
