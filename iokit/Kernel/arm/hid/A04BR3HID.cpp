@@ -22,6 +22,7 @@ extern "C" void a04br3_touch_init(void);
 #include <IOKit/IOService.h>
 #include <IOKit/IOTimerEventSource.h>
 #include <libkern/c++/OSArray.h>
+#include <libkern/c++/OSDictionary.h>
 #include <pexpert/pexpert.h>
 
 #include "IOHIDEventService.h"
@@ -30,6 +31,7 @@ extern "C" void a04br3_touch_init(void);
 #include "IOHIDKeys.h"
 #include "IOHIDPrivateKeys.h"
 #include "IOHIDUsageTables.h"
+#include "A04BR3HIDSettings.h"
 
 extern "C" uint64_t mach_absolute_time(void);
 
@@ -245,8 +247,20 @@ IOHIDEventService::setElementValue(UInt32 usagePage __unused, UInt32 usage __unu
 IOReturn
 IOHIDEventService::setProperties(OSObject *properties)
 {
-	/* The event system pushes its settings here; nothing to configure. */
-	return OSDynamicCast(OSDictionary, properties) ? kIOReturnSuccess : kIOReturnBadArgument;
+	OSDictionary *updates = OSDynamicCast(OSDictionary, properties);
+	if (!updates) return kIOReturnBadArgument;
+	if (!_clientLock) return kIOReturnNotReady;
+	/* Preserve actual event-system parameters, as the native base service does.
+	 * This nested cache is separate from primary usage/transport identity. */
+	IOLockLock(_clientLock);
+	OSObject *stored = copyProperty(a04_hid_settings_key);
+	OSDictionary *next = a04_hid_settings_copy(OSDynamicCast(OSDictionary, stored), updates);
+	IOReturn result = kIOReturnNoMemory;
+	if (next && setProperty(a04_hid_settings_key, next)) result = kIOReturnSuccess;
+	OSSafeReleaseNULL(next);
+	OSSafeReleaseNULL(stored);
+	IOLockUnlock(_clientLock);
+	return result;
 }
 
 UInt32

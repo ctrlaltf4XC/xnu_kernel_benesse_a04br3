@@ -1,0 +1,24 @@
+{
+  "scope": "Source-derived event-service parameter-cache subset only. Does not assert a software keyboard presentation fix.",
+  "sources": [
+    {
+      "url": "https://raw.githubusercontent.com/apple-oss-distributions/IOHIDFamily/IOHIDFamily-1915.140.3/IOHIDFamily/IOHIDEventService.cpp",
+      "sha256": "4c0d15bbd851fdcc8372ee0d63ee8bb66d5fc00626473e3a7781836110dd1b44",
+      "lines": "595-654: setSystemProperties/setProperties event-service parameter persistence and excluded markers"
+    },
+    {
+      "url": "https://raw.githubusercontent.com/apple-oss-distributions/IOHIDFamily/IOHIDFamily-1915.140.3/IOHIDSystem/IOHIDevicePrivateKeys.h",
+      "sha256": "91959e8cb298e9cf3711ff94a4d1dc34e7021214054f3355bfef3fbb14fde5c1",
+      "lines": "51/54: HIDEventServiceProperties and HIDDeviceParameters names"
+    }
+  ],
+  "license": "Original APSL2.0 Apple notice retained in A04BR3HIDSettings.h. No Apple binary bytes or modifications.",
+  "behavior": "Copy previous settings, merge actual incoming dictionary, drop envelope/reset markers, publish nested dictionary only. Serialize per service; allocation/merge/publication failures preserve old dictionary and report NoMemory.",
+  "limits": [
+    "Physical keyboard classification/Home/touch event fields unchanged",
+    "No forced keyboard, hardware-attachment, activation or migration flags",
+    "Provider hardware controls not implemented by this parameter-cache subset",
+    "Host tests mock libkern object API; actual XNU SDK and UI test remain required",
+    "No downloaded primary source or sibling repository required by tests"
+  ]
+}
