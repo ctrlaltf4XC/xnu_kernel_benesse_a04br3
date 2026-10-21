@@ -1,0 +1,15 @@
+{
+  "revision": "e1ef8f046c6e37ec1e2a13229560fbb824e5118f",
+  "license": "MIT; original2022 Imagination notice retained",
+  "source_sha256": "dfa8cd8b3fcfedcc44f181fc0e2e4ed6fbfc2ada92dd8a00fc1072f777a6339d",
+  "fixture_sha256": "b167bf9587f578a4e4121d7d8b01a59fbcadad36062931f77ac3bc227b039b72",
+  "selections": [
+    "pvr_pds_pixel_shader_sa_code even-clear branch",
+    "pvr_pds_pixel_shader_uniform_texture_data even-clear branch"
+  ],
+  "adaptations": [
+    "Narrow wrappers select clear=true, packed=false, even-destination, kick_usc=false",
+    "HALT0 written as its exact native word; original named DOUTW/constant allocation functions from existing pixel_event fixture"
+  ],
+  "dependency": "../rogue_pixel_event/mesa_pixel_event.h"
+}
