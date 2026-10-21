@@ -169,6 +169,7 @@ class A04BR3SDIO : public IOService {
    out->control_ready=s->networkInitialized && !s->liveStopping && r->configured && !r->failed;
    out->radio_enabled=r->admin && out->control_ready;
    out->station_phase=out->control_ready?a04_network_phase_from_station(&r->station):A04_NET_PHASE_UNKNOWN;
+   out->join_state=out->control_ready?a04_network_join_from_station(&r->station):A04_NET_JOIN_UNKNOWN;
    out->permitted_channels=out->control_ready?r->station.local.permitted_channels:0;
    out->mac_valid=r->mac_valid;bcopy(r->mac,out->mac,6);out->associated=r->station.sta_active && r->station.join.phase==4 && !r->failed;
    out->datapath_ready=out->control_ready && out->associated && s->nativeClient.packet && a04_wlan_port_allowed(&r->station,&r->security,0);

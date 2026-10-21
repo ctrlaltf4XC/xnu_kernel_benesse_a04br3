@@ -173,7 +173,7 @@ static int set(void *,uint32_t type,uint32_t value,const void *p,uint32_t n){
 }
 static int admin(void *,unsigned enabled){adminCalls++;lastAdmin=enabled;return adminError;}
 static int tx(void *,void *p){txCalls++;if(transmitError)return transmitError;mbuf_freem((mbuf_t)p);return 0;}
-static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={1,1,0,0,0,0,{0,2,3,4,5,6},0,0,0};
+static void reset(){baseEvents=scanEvents=eventError=0;lastBaseIfnet=nullptr;assert(!childCount && !heldLocks);inputCalls=inputError=failChildInit=failChildAttach=0;assert(!lockCount && !allocations && !current && !pending);realState={1,1,0,0,0,0,{0,2,3,4,5,6},0,0,0,0};
  stateError=nativeError=adminError=transmitError=failAlloc=failMtu=failFlags=failAttach=failDetach=failMemory=copyInError=copyOutError=0;
  credentialRoot=1;credentialChecks=setCalls=setError=0;adminCalls=0;lastAdmin=99;registrations=releaseCount=packetFrees=txCalls=nativeCalls=copyIns=copyOuts=0;backendOutput=4;inlineDetach=false;}
 static a04_apple80211_req64 req(){a04_apple80211_req64 r={};strcpy(r.name,"en7");r.type=12;r.value=7;r.length=8;r.user_data=(uintptr_t)userBuffer;return r;}
@@ -250,7 +250,7 @@ static void traceCases(){
  int ins=copyIns,outs=copyOuts;backendOutput=4;
  assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&scalar));
  assert(scalar.value==0x53535353 && scalar.length==0 && !scalar.user_data && copyIns==ins && copyOuts==outs);
- for(unsigned type:{5u,8u,13u,15u,18u,57u,96u}){
+ for(unsigned type:{5u,8u,13u,15u,18u,21u,57u,96u}){
   scalar.type=type;scalar.value=0;assert(!current->init.ioctl(current,A04_APPLE80211_GET64,&scalar));
   assert(scalar.value==0x53535353 && !scalar.length && copyIns==ins && copyOuts==outs);
  }

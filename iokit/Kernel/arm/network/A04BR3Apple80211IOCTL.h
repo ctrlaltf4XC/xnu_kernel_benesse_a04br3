@@ -11,10 +11,12 @@
 #define A04_APPLE80211_GET64 0xc02869c9UL
 #define A04_APPLE80211_MAX_BYTES 16384u
 /* Only observed scalar opcodes in iOS16 GetWithIOCTL's caseD5, corroborated
- * by boot2 length0 calls. Other zero-length GETs remain rejected. */
+ * by boot2 length0 calls. GET21 is also proven by __waitForJoinResult:
+ * type21, length0, null data, result in req.value. Other zero-length GETs
+ * remain rejected. */
 static inline int a04_native_scalar_type(uint32_t type)
 {
-    switch(type){case 5:case 8:case 13:case 15:case 18:case 57:case 96:return 1;}
+    switch(type){case 5:case 8:case 13:case 15:case 18:case 21:case 57:case 96:return 1;}
     return 0;
 }
 struct a04_apple80211_req64 {

@@ -13,6 +13,12 @@ enum a04_network_station_phase {
     A04_NET_PHASE_UNKNOWN=0,A04_NET_PHASE_IDLE=1,A04_NET_PHASE_SCAN=2,
     A04_NET_PHASE_AUTH=3,A04_NET_PHASE_ASSOC=4,A04_NET_PHASE_ASSOCIATED=5
 };
+/* Internal join observation, not an Apple enum. Zero is unknown, not success
+ * or a pending transaction. Only a real open join can reach OPEN_COMPLETE. */
+enum a04_network_join_state {
+    A04_NET_JOIN_UNKNOWN=0,A04_NET_JOIN_NOT_STARTED=1,
+    A04_NET_JOIN_PENDING=2,A04_NET_JOIN_OPEN_COMPLETE=3,A04_NET_JOIN_FAILED=4
+};
 struct a04_network_state {
     /* firmware_running/control_ready describe WLAN firmware and real command
      * transport, not WMT patch delivery. Neither requires association. */
@@ -21,12 +27,13 @@ struct a04_network_state {
     unsigned radio_enabled; /* observed runtime radio/admin state, not association */
     unsigned station_phase; /* enum above; UNKNOWN must not produce INIT */
     unsigned permitted_channels; /* actual enforced 2.4GHz mask; zero=unknown */
+    unsigned join_state; /* wire-neutral enum; actual station under transportLock */
 };
 struct a04_network_backend {
     void *context;
     int (*state)(void *,struct a04_network_state *);
     /* Native GET payload is opaque, bounded and initially copied from user.
-     * Observed scalar GET5/8/13/15/18/57/96 is normalized by the BSD adapter to an internal
+     * Observed scalar GET5/8/13/15/18/21/57/96 is normalized by the BSD adapter to an internal
      * four-byte little-endian output buffer (wire length0, result req.value).
      * This is our adapter representation, not a new SDIO or Apple payload ABI.
      * Return errno, and actual initialized output length <= supplied capacity.

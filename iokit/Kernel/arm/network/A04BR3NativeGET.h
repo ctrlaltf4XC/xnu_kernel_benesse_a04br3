@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: BSD-2-Clause-Patent
  * iOS16 IO80211 GetWithIOCTL codecs observed with REA at0x1d3ec3f64.
+ * Plus scalar GET21 from original __waitForJoinResult/result mapper.
  * Type19: version/count/four state words,24bytes; type43:256byte C string.
  * Type12: thirteen raw capability bytes; advertise no optional native features.
  * Only observed state and this driver's own identity are returned. No invented
@@ -37,6 +38,25 @@ static inline int a04_native_get(const struct a04_network_state *s,
             a04_native_put32(entry+8,0xa);
         }
         a04_native_put32(p+4,count);*bytes=4824;return 0;
+    }
+    if(type==21){
+        // Original __waitForJoinResult polls scalar21; zero is pending and
+        // __errorForAssociateResult table entry1 maps to success0. Actual open
+        // station evidence only, never SET acceptance or secure key success.
+        if(*bytes<4)return EMSGSIZE;
+        uint32_t result;
+        switch(s->join_state){
+        case A04_NET_JOIN_NOT_STARTED:return ENOTCONN;
+        case A04_NET_JOIN_FAILED:return EIO; // no invented native failure code
+        case A04_NET_JOIN_PENDING:
+            if(s->associated)return EAGAIN;
+            result=0;break;
+        case A04_NET_JOIN_OPEN_COMPLETE:
+            if(!s->associated || s->station_phase!=A04_NET_PHASE_ASSOCIATED)return EAGAIN;
+            result=1;break;
+        default:return EOPNOTSUPP;
+        }
+        a04_native_put32((uint8_t *)out,result);*bytes=4;return 0;
     }
     if(type==13){
         if(*bytes<4)return EMSGSIZE;

@@ -50,16 +50,17 @@ PRODUCER
 int main(){
  A04BR3SDIO d;auto &r=d.live->runtime;r.configured=r.mac_valid=1;r.mac[0]=2;r.station.configured=1;
  a04_network_state out={};
- assert(!d.backendState(&d,&out) && out.control_ready && out.station_phase==A04_NET_PHASE_IDLE && !out.associated);
+ assert(!d.backendState(&d,&out) && out.control_ready && out.station_phase==A04_NET_PHASE_IDLE && !out.associated && out.join_state==A04_NET_JOIN_NOT_STARTED);
  r.station.local.permitted_channels=(1u<<1)|(1u<<6);
  assert(!d.backendState(&d,&out) && out.permitted_channels==r.station.local.permitted_channels);
  r.station.scan.pending=1;assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_SCAN);
  r.station.scan.pending=0;r.station.selected=1;r.station.join.phase=1;
- assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_AUTH && !out.associated);
+ assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_AUTH && !out.associated && out.join_state==A04_NET_JOIN_PENDING);
  r.station.join.phase=3;assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_ASSOC && !out.associated);
  r.station.join.phase=4;assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_ASSOC && !out.associated);
- r.station.sta_active=1;assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_ASSOCIATED && out.associated && !out.datapath_ready);
- r.failed=1;assert(!d.backendState(&d,&out) && !out.control_ready && !out.permitted_channels && out.station_phase==A04_NET_PHASE_UNKNOWN);
+ r.station.join.aid=42;r.station.sta_active=1;assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_ASSOCIATED && out.associated && !out.datapath_ready && out.join_state==A04_NET_JOIN_OPEN_COMPLETE);
+ r.station.secured=1;assert(!d.backendState(&d,&out) && out.associated && out.join_state==A04_NET_JOIN_UNKNOWN);r.station.secured=0;
+ r.failed=1;assert(!d.backendState(&d,&out) && !out.control_ready && !out.permitted_channels && out.station_phase==A04_NET_PHASE_UNKNOWN && out.join_state==A04_NET_JOIN_UNKNOWN);
  r.failed=0;d.liveStopping=true;assert(!d.backendState(&d,&out) && out.station_phase==A04_NET_PHASE_UNKNOWN && !out.permitted_channels);
  d.live=nullptr;assert(!d.backendState(&d,&out) && !out.present && out.station_phase==A04_NET_PHASE_UNKNOWN && !locked);
 }

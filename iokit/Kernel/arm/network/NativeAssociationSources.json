@@ -1,0 +1,34 @@
+{
+  "scope": "Source-built native GET21 open-association result only. Does not implement SET20 association or secure keys/supplicant.",
+  "artifact": {
+    "original_io80211_sha256": "d7620894ad830fffd8f4a5489cc5a89564ce2b30b62ee90ca3e5bbe062eeb851",
+    "focused_elf_sha256": "5ad1a0f267e55da17d4af357d19c10c23ac3893f03e2c1c7633d1e8c93062093",
+    "wrapper": "Preserves original code/data addresses; no Apple binary modification."
+  },
+  "native_evidence": [
+    {
+      "procedure": "__waitForJoinResult",
+      "address": "0x1d3ed66a0",
+      "evidence_id": "ev_03c4f1d06025f98f092200688280c3fe567df3681d3ce6ead41a6babace2a8e0",
+      "contract": "Repeated RawGet with req.type21 at16, req.value32bit at20, length0 at24, null user pointer32. Value0 continues; nonzero passes to result mapper. Any ioctl error returns errno. Up to400polls; unresolved delay import not interpreted."
+    },
+    {
+      "procedure": "__errorForAssociateResult",
+      "address": "0x1d3ec1744",
+      "evidence_id": "ev_bec80ff41f168bf26c602e555319e47aad5f0d9812b13a1c1f5a727cd6a05d49",
+      "contract": "Inputs1..35 index table at0x1d3ef90d0; no guessed error-code mapping implemented."
+    },
+    {
+      "address": "0x1d3ef90d0",
+      "evidence_id": "ev_7a77ede896cfe6270764a90281bc5392ffc6980b14a357042f1c300846ab9511",
+      "contract": "Read140mappedbytes; first little-endian32bit entry is0, proving native result1 means successful return. Result0 pending is proven separately by poll body."
+    }
+  ],
+  "backend_contract": "New wire-neutral join_state is filled from real station under existing SDIO transportLock. Unknown/secure state stays unsupported. No selected attempt yields ENOTCONN. Accepted channel/auth/assoc progression including AP response without STA activation is pending0. Only selected open station, successful AP association with validAID and actual STA activation completion, no pending activation/channel and consistent associated/station_phase snapshot yields1. No IFF_RUNNING, controlled-port or IP success is inferred.",
+  "implementation_credit": "Original board adapter implementation; no third-party association implementation copied. Existing MT6630 station parser/event source is reused without firmware ABI changes; Apple original code is inspected only as retained evidence.",
+  "limitations": [
+    "No SET20 decoder/target-generation-safe request admission, disassociation22, key3 or supplicant wiring in this unit.",
+    "Failed backend may return ENETDOWN through existing global runtime failure gate; no invented native association-failure enumerations.",
+    "No actual radio association or hardware GET21 response verified. Actual SDK recompilation remains parent integration gate."
+  ]
+}

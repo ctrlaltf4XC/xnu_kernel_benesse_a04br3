@@ -21,4 +21,28 @@ static inline enum a04_network_station_phase a04_network_phase_from_station(cons
     if(s->join.phase>=2 && s->join.phase<=4)return A04_NET_PHASE_ASSOC;
     return A04_NET_PHASE_UNKNOWN; // e.g. channel grant before auth submission
 }
+/* Do not promote command TX, AP response alone, or secure association to
+ * native join success. Security/key/native supplicant integration is absent. */
+static inline enum a04_network_join_state a04_network_join_from_station(const struct a04_wlan_station *s)
+{
+    if(!s || !s->configured)return A04_NET_JOIN_UNKNOWN;
+    if(s->failed || s->join.failed)return A04_NET_JOIN_FAILED;
+    if(s->secured)return A04_NET_JOIN_UNKNOWN;
+    if(!s->selected){
+        if(!s->join.phase && !s->sta_pending && !s->sta_active)
+            return A04_NET_JOIN_NOT_STARTED;
+        return A04_NET_JOIN_UNKNOWN;
+    }
+    if(s->join.phase>4 || s->scan.pending)return A04_NET_JOIN_UNKNOWN;
+    if(s->sta_active){
+        if(s->join.phase==4 && !s->sta_pending && !s->channel_pending &&
+           s->join.aid && s->join.aid<=2007)return A04_NET_JOIN_OPEN_COMPLETE;
+        return A04_NET_JOIN_UNKNOWN;
+    }
+    if(s->join.phase==4)
+        return s->sta_pending?A04_NET_JOIN_PENDING:A04_NET_JOIN_UNKNOWN;
+    if(s->join.phase || s->channel_pending || s->grant_ms)
+        return A04_NET_JOIN_PENDING;
+    return A04_NET_JOIN_UNKNOWN;
+}
 #endif
