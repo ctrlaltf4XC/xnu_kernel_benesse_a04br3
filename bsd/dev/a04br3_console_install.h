@@ -9,6 +9,8 @@
 #define A04_CONSOLE_DIR "/usr/appleinternal/sbin"
 #define A04_CONSOLE_LEAF "launchd.a04br3"
 #define A04_CONSOLE_TEMP ".launchd.a04br3.new"
+#define A04_CAPTURE_LEAF "a04-fb-capture"
+#define A04_CAPTURE_TEMP ".a04-fb-capture.new"
 
 static int
 a04_console_regular(vnode_t vp, vfs_context_t ctx)
@@ -38,16 +40,15 @@ a04_console_component(struct componentname *cn, char *leaf, int operation,
 }
 
 static int
-prepare_uart_console(void)
+a04_console_install_program(const unsigned char *payload, size_t payload_bytes,
+    char *leaf, char *temporary)
 {
-    unsigned enabled = 0;
-    if (!PE_parse_boot_argn("a04br3.console", &enabled, sizeof(enabled)))
-        PE_parse_boot_argn("a04br3.uart_console", &enabled, sizeof(enabled));
-    if (enabled != 1) return 0;
-    /* Build failure for an absent generated include is intentional: never ship
-     * a placeholder or download a program during boot. */
-    if (sizeof(a04br3_console_payload) == 0 ||
-        sizeof(a04br3_console_payload) > 4U * 1024U * 1024U) return EFBIG;
+    /* No placeholder or boot-time download; each executable is verified and
+     * renamed independently. All callers use the fixed names below. */
+    if (payload_bytes == 0 || payload_bytes > 4U * 1024U * 1024U) return EFBIG;
+    char target_path[128], temp_path[128];
+    if (snprintf(target_path, sizeof(target_path), "%s/%s", A04_CONSOLE_DIR, leaf) >= (int)sizeof(target_path) ||
+        snprintf(temp_path, sizeof(temp_path), "%s/%s", A04_CONSOLE_DIR, temporary) >= (int)sizeof(temp_path)) return ENAMETOOLONG;
 
     static const char *directories[] = {"/usr", "/usr/appleinternal", A04_CONSOLE_DIR};
     vfs_context_t ctx = vfs_context_kernel();
@@ -75,7 +76,7 @@ prepare_uart_console(void)
         if (error) goto out;
     }
 
-    error = vnode_lookup(A04_CONSOLE_DIR "/" A04_CONSOLE_LEAF,
+    error = vnode_lookup(target_path,
         VNODE_LOOKUP_NOFOLLOW, &target, ctx);
     if (!error) error = a04_console_regular(target, ctx);
     else if (error == ENOENT) error = 0;
@@ -84,7 +85,7 @@ prepare_uart_console(void)
     /* Do not truncate until the opened inode has passed the no-link/owner
      * checks. A safe leftover temporary file from an interrupted boot can be
      * rewritten; the previous executable remains untouched until rename. */
-    error = vnode_open(A04_CONSOLE_DIR "/" A04_CONSOLE_TEMP,
+    error = vnode_open(temp_path,
         FWRITE | O_CREAT | O_NOFOLLOW, 0600, 0, &temp, ctx);
     if (error) goto out;
     opened = 1;
@@ -98,21 +99,21 @@ prepare_uart_console(void)
     VATTR_SET(&va, va_data_size, 0);
     error = vnode_setattr(temp, &va, ctx);
     int resid = 0;
-    if (!error) error = vn_rdwr(UIO_WRITE, temp, (caddr_t)a04br3_console_payload,
-        (int)sizeof(a04br3_console_payload), 0, UIO_SYSSPACE, IO_SYNC,
+    if (!error) error = vn_rdwr(UIO_WRITE, temp, (caddr_t)payload,
+        (int)payload_bytes, 0, UIO_SYSSPACE, IO_SYNC,
         vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx));
     if (!error && resid) error = EIO;
     if (error) goto out;
 
     /* Verify the whole generated payload, using bounded kernel stack space. */
     unsigned char check[512];
-    for (size_t offset = 0; offset < sizeof(a04br3_console_payload);) {
-        size_t bytes = sizeof(a04br3_console_payload) - offset;
+    for (size_t offset = 0; offset < payload_bytes;) {
+        size_t bytes = payload_bytes - offset;
         if (bytes > sizeof(check)) bytes = sizeof(check);
         resid = 0;
         error = vn_rdwr(UIO_READ, temp, (caddr_t)check, (int)bytes, (off_t)offset,
             UIO_SYSSPACE, 0, vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx));
-        if (!error && (resid || memcmp(check, a04br3_console_payload + offset, bytes)))
+        if (!error && (resid || memcmp(check, payload + offset, bytes)))
             error = EIO;
         if (error) goto out;
         offset += bytes;
@@ -127,8 +128,8 @@ prepare_uart_console(void)
     if (error) goto out;
 
     struct componentname from, to;
-    a04_console_component(&from, A04_CONSOLE_TEMP, DELETE, ctx);
-    a04_console_component(&to, A04_CONSOLE_LEAF, RENAME, ctx);
+    a04_console_component(&from, temporary, DELETE, ctx);
+    a04_console_component(&to, leaf, RENAME, ctx);
     /* Fixed same-directory rename in the pre-launch, root-owned hierarchy.
      * Source and target iocounts stay with this caller. */
     error = VNOP_RENAME(parent, temp, &from, parent, target, &to, ctx);
@@ -145,15 +146,34 @@ out:
     if (!installed && temp != NULLVP && parent != NULLVP &&
         a04_console_regular(temp, ctx) == 0) {
         struct componentname cn;
-        a04_console_component(&cn, A04_CONSOLE_TEMP, DELETE, ctx);
+        a04_console_component(&cn, temporary, DELETE, ctx);
         int cleanup = VNOP_REMOVE(parent, temp, &cn, 0, ctx);
-        if (cleanup) printf("A04BR3 ROOT: UART wrapper temp cleanup error=%d\n", cleanup);
+        if (cleanup) printf("A04BR3 ROOT: source program %s temp cleanup error=%d\n", leaf, cleanup);
     }
     if (temp != NULLVP) vnode_put(temp);
     if (target != NULLVP) vnode_put(target);
     if (parent != NULLVP) vnode_put(parent);
-    printf("A04BR3 ROOT: UART wrapper installed=%d bytes=%lu error=%d\n",
-        installed, (unsigned long)sizeof(a04br3_console_payload), error);
+    printf("A04BR3 ROOT: source program %s installed=%d bytes=%lu error=%d\n",
+        leaf, installed, (unsigned long)payload_bytes, error);
     return error;
+}
+static int
+prepare_uart_console(void)
+{
+    unsigned enabled = 0;
+    if (!PE_parse_boot_argn("a04br3.console", &enabled, sizeof(enabled)))
+        PE_parse_boot_argn("a04br3.uart_console", &enabled, sizeof(enabled));
+    if (enabled != 1) return 0;
+    int error = a04_console_install_program(a04br3_console_payload,
+        sizeof(a04br3_console_payload), A04_CONSOLE_LEAF, A04_CONSOLE_TEMP);
+    if (error) return error;
+#if defined(A04BR3_CAPTURE_PAYLOAD_PRESENT)
+    /* Capture failure is explicit but must not turn an optional screenshot
+     * helper into a new reason to panic before native launchd. */
+    int capture_error = a04_console_install_program(a04br3_fb_capture_payload,
+        sizeof(a04br3_fb_capture_payload), A04_CAPTURE_LEAF, A04_CAPTURE_TEMP);
+    if (capture_error) printf("A04BR3 ROOT: optional framebuffer capture installation failed error=%d\n", capture_error);
+#endif
+    return 0;
 }
 #endif
