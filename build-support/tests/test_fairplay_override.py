@@ -59,7 +59,7 @@ static int vnode_getattr(vnode_t v,struct vnode_attr *a,vfs_context_t c) {
 static int vnode_open(const char *p,int f,int mode,int flags,vnode_t *v,vfs_context_t c) {
  (void)c;assert(strstr(p,"disabled.plist"));assert(f==(FWRITE|O_CREAT|O_EXCL|O_NOFOLLOW));assert(mode==0644 && !flags);assert(!exists);exists=1;opens++;*v=&file;return 0;
 }
-static int vnode_close(vnode_t v,int f,vfs_context_t c) {(void)c;assert(v==&file && f==FWRITE);return close_error;}
+static int vn_close(vnode_t v,int f,vfs_context_t c) {(void)c;assert(v==&file && f==FWRITE);return close_error;}
 static int vn_rdwr(int rw,vnode_t v,caddr_t data,int len,off_t offset,int seg,int flags,void *cred,int *resid,void *proc) {
  (void)cred;(void)proc;assert(v==&file && !offset && seg==UIO_SYSSPACE);
  *resid=0;

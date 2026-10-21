@@ -50,7 +50,8 @@ static int fp_create(const char *path,const char *leaf,const unsigned char *data
     if(!error)error=vn_rdwr(UIO_WRITE,vp,(caddr_t)data,(int)len,0,UIO_SYSSPACE,IO_SYNC,
         vfs_context_ucred(ctx),&resid,vfs_context_proc(ctx));
     if(!error && resid)error=EIO;
-    int closed=vnode_close(vp,FWRITE,ctx);if(!error)error=closed;
+    /* vn_close retains our iocount; vnode_close would consume it. */
+    int closed=vn_close(vp,FWRITE,ctx);if(!error)error=closed;
     if(error){int cleanup=fp_remove(vp,leaf,ctx);if(cleanup)printf("A04BR3 ROOT: FairPlay cleanup error=%d\n",cleanup);vnode_put(vp);}
     else *result=vp;
     return error;

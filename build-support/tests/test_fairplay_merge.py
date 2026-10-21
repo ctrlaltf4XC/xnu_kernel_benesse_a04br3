@@ -37,6 +37,8 @@ typedef void *vfs_context_t;
 static struct vnode root={.exists=1,.dir=1,.mount=1},nodes[3];
 static vnode_t rootvnode=&root;
 static int writes,fail_write,rename_error;
+static int refs[4];
+static int ref_index(vnode_t v){return v==&root?3:(int)(v-nodes);}
 struct vnode_attr {int va_uid,va_gid,va_mode,va_nlink;size_t va_data_size;};
 #define VATTR_INIT(p) memset(p,0,sizeof(*(p)))
 #define VATTR_WANTED(p,k) ((void)(p))
@@ -45,12 +47,12 @@ struct vnode_attr {int va_uid,va_gid,va_mode,va_nlink;size_t va_data_size;};
 struct componentname {int cn_nameiop,cn_flags;void *cn_context;char *cn_nameptr;int cn_namelen;};
 static int node_index(const char *p) {return strstr(p,".original")?1:strstr(p,".pending")?2:0;}
 static int vnode_lookup(const char *p,int f,vnode_t *v,vfs_context_t c) {
- (void)c;assert(f==VNODE_LOOKUP_NOFOLLOW);if(p[strlen(p)-1]=='/') {*v=&root;return 0;}*v=&nodes[node_index(p)];return (*v)->exists?0:ENOENT;
+ (void)c;assert(f==VNODE_LOOKUP_NOFOLLOW);if(p[strlen(p)-1]=='/') {*v=&root;refs[3]++;return 0;}*v=&nodes[node_index(p)];if(!(*v)->exists){*v=NULL;return ENOENT;}refs[ref_index(*v)]++;return 0;
 }
 static int vnode_isreg(vnode_t v) {return v->reg;}
 static int vnode_isdir(vnode_t v) {return v->dir;}
 static int vnode_mount(vnode_t v) {return v->mount;}
-static void vnode_put(vnode_t v) {assert(v);}
+static void vnode_put(vnode_t v) {assert(v && refs[ref_index(v)]>0);refs[ref_index(v)]--;}
 static void *vfs_context_ucred(vfs_context_t c) {return c;}
 static void *vfs_context_proc(vfs_context_t c) {return c;}
 static int vnode_getattr(vnode_t v,struct vnode_attr *a,vfs_context_t c) {
@@ -58,9 +60,9 @@ static int vnode_getattr(vnode_t v,struct vnode_attr *a,vfs_context_t c) {
 }
 static int vnode_setattr(vnode_t v,struct vnode_attr *a,vfs_context_t c) {(void)c;v->uid=a->va_uid;v->gid=a->va_gid;v->mode=a->va_mode;return 0;}
 static int vnode_open(const char *p,int f,int mode,int flags,vnode_t *v,vfs_context_t c) {
- (void)c;assert(f==(FWRITE|O_CREAT|O_EXCL|O_NOFOLLOW) && !flags);*v=&nodes[node_index(p)];if((*v)->exists)return EEXIST;memset(*v,0,sizeof(**v));(*v)->exists=(*v)->reg=(*v)->mount=(*v)->nlink=1;(*v)->mode=mode;return 0;
+ (void)c;assert(f==(FWRITE|O_CREAT|O_EXCL|O_NOFOLLOW) && !flags);*v=&nodes[node_index(p)];if((*v)->exists)return EEXIST;memset(*v,0,sizeof(**v));(*v)->exists=(*v)->reg=(*v)->mount=(*v)->nlink=1;(*v)->mode=mode;refs[ref_index(*v)]++;return 0;
 }
-static int vnode_close(vnode_t v,int f,vfs_context_t c) {(void)c;assert(v && f==FWRITE);return 0;}
+static int vn_close(vnode_t v,int f,vfs_context_t c) {(void)c;assert(v && f==FWRITE && refs[ref_index(v)]>0);return 0;}
 static int VNOP_REMOVE(vnode_t p,vnode_t v,struct componentname *n,int f,vfs_context_t c) {
  (void)c;assert(p==&root && !f && n->cn_nameiop==DELETE && n->cn_flags==ISLASTCN);assert(n->cn_namelen==(int)strlen(n->cn_nameptr));assert(v==&nodes[node_index(n->cn_nameptr)]);v->exists=0;return 0;
 }
@@ -73,7 +75,7 @@ static int vn_rdwr(int rw,vnode_t v,caddr_t data,int len,off_t offset,int seg,in
 int a04br3_fairplay_override_commit(void) {if(rename_error)return rename_error;assert(nodes[2].exists);nodes[0]=nodes[2];nodes[2].exists=0;return 0;}
 #include "a04br3_fairplay_merge.h"
 static unsigned char baseline[16384];static size_t baseline_size;
-static void reset(void) {memset(nodes,0,sizeof(nodes));nodes[0].exists=nodes[0].reg=nodes[0].mount=nodes[0].nlink=1;nodes[0].gid=20;nodes[0].mode=0640;nodes[0].size=baseline_size;memcpy(nodes[0].bytes,baseline,baseline_size);writes=fail_write=rename_error=0;}
+static void reset(void) {assert(!refs[1] && !refs[2] && !refs[3]);refs[0]=1;memset(nodes,0,sizeof(nodes));nodes[0].exists=nodes[0].reg=nodes[0].mount=nodes[0].nlink=1;nodes[0].gid=20;nodes[0].mode=0640;nodes[0].size=baseline_size;memcpy(nodes[0].bytes,baseline,baseline_size);writes=fail_write=rename_error=0;}
 int main(int argc,char **argv) {
  assert(argc==3);FILE *f=fopen(argv[1],"rb");assert(f);baseline_size=fread(baseline,1,sizeof(baseline),f);fclose(f);reset();
  assert(merge_existing_fairplay(&nodes[0],1,NULL)==0 && !writes);
@@ -87,6 +89,7 @@ int main(int argc,char **argv) {
  nodes[0].bytes[0]='X';assert(merge_existing_fairplay(&nodes[0],1,NULL)==EBUSY && writes==before);nodes[0].bytes[0]=baseline[0];
  assert(merge_existing_fairplay(&nodes[0],1,NULL)==0 && !nodes[1].exists && nodes[0].size==baseline_size && !memcmp(nodes[0].bytes,baseline,baseline_size));
  reset();rename_error=EIO;assert(merge_existing_fairplay(&nodes[0],0,NULL)==EIO && !nodes[2].exists && nodes[1].exists && !memcmp(nodes[0].bytes,baseline,baseline_size));rename_error=0;assert(merge_existing_fairplay(&nodes[0],0,NULL)==0);
+ assert(refs[0]==1 && !refs[1] && !refs[2] && !refs[3]);
  return 0;
 }
 '''

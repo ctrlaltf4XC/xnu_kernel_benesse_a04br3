@@ -131,7 +131,7 @@ prepare_fairplay(unsigned restore)
     error = vn_rdwr(UIO_WRITE, vp, (caddr_t)fp_override, sizeof(fp_override)-1, 0,
         UIO_SYSSPACE, IO_SYNC, vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx));
     if (!error && resid) error = EIO;
-    int close_error = vnode_close(vp, FWRITE, ctx);
+    int close_error = vn_close(vp, FWRITE, ctx);
     if (error || close_error) {
         int cleanup = remove_fairplay_override(vp, ctx);
         if (cleanup) printf("A04BR3 ROOT: incomplete FairPlay override cleanup error=%d\n", cleanup);
