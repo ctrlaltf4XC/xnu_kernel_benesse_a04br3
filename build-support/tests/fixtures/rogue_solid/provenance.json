@@ -1,0 +1,27 @@
+{
+  "revision": "e1ef8f046c6e37ec1e2a13229560fbb824e5118f",
+  "license": "MIT; original Imagination2022/2024 copyright and full permission preserved",
+  "source_sha256": {
+    "pco_map.py": "e6c6f12987dff874049b8171cb27fb0c2bc97414b56307b5b04158cf7ecda431",
+    "pco_map.h.py": "17757927866fb0a97e8d4d2b08df419f6b673c5f0c130d3595e9c8abdf2f2cbe",
+    "pco_isa.py": "c10b5f64912efdeade613652036413f80db576265ad58d1dffb72015e1b4ad84",
+    "pco_group_instrs.c": "4ceaa974588ce2d6cecc470b3f7b4f5a303eefa4470ee87b7e7eadede531b92a",
+    "pco_binary.c": "88a348d7d06f8645a9cdfe5772ae99ca6f9de8e0ec4ef2df128a8d833d06b734",
+    "pco_trans_nir.c": "516b9d74576038fa59f2bb846de40d7f4321bbb8fe628a70abb4a0317eaa4fbf",
+    "pco_end.c": "b3735cc5040b9ebd871e601ac36949150de89f64c5f2780b8ab96456d38b578f"
+  },
+  "fixture_sha256": {
+    "pco_align.h": "f2e91c1da64db52f6bbb363549c69fc9fd8f03456f477ea170de7fd132105e5c"
+  },
+  "note": "Original exact calc_align_padding excerpt + shared existing source-generated rogue_eot encoders. No native shader bytes; no REA/disassembly/emulation used. Modern source equivalence is not BVNC22.40 compatibility proof.",
+  "additional_primary_sources": {
+    "pco_legalize.c": {
+      "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/e1ef8f046c6e37ec1e2a13229560fbb824e5118f/src/imagination/pco/pco_legalize.c",
+      "sha256": "ef9db3ee1e934108930b4ee77a5bd8c5c403fc4907113aa3e4b1b6c055e519a0"
+    },
+    "pco_opt.c": {
+      "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/e1ef8f046c6e37ec1e2a13229560fbb824e5118f/src/imagination/pco/pco_opt.c",
+      "sha256": "f43dfe80848730f9c483afbaf573208c70583d3a5313428104dbf06938497e92"
+    }
+  }
+}

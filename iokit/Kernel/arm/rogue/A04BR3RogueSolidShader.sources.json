@@ -1,0 +1,81 @@
+{
+  "kind": "Independent source-built constant fragment compiler candidate. No runtime admission or Metal/AGX compatibility claim.",
+  "revision": "e1ef8f046c6e37ec1e2a13229560fbb824e5118f",
+  "primary_root": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/e1ef8f046c6e37ec1e2a13229560fbb824e5118f/",
+  "license": "MIT; full permission/copyright in A04BR3RogueSolidShader.h and fixture pco_align.h; original source retained in research area.",
+  "sources": [
+    {
+      "path": "src/imagination/pco/pco_trans_nir.c",
+      "sha256": "516b9d74576038fa59f2bb846de40d7f4321bbb8fe628a70abb4a0317eaa4fbf",
+      "contract": "frag_store uses PIXOUT base and OLCHK; load_preamble reads SHARED; no tilebuffer path"
+    },
+    {
+      "path": "src/imagination/pco/pco_map.py",
+      "sha256": "e6c6f12987dff874049b8171cb27fb0c2bc97414b56307b5b04158cf7ecda431",
+      "contract": "SHARED->bank4, PIXOUT->SPECIAL bank0; O_MBYP phase0 SNGL.BYP S0->FT0->W0; no neg/abs"
+    },
+    {
+      "path": "src/imagination/pco/pco_map.h.py",
+      "sha256": "17757927866fb0a97e8d4d2b08df419f6b673c5f0c130d3595e9c8abdf2f2cbe",
+      "contract": "PIXOUT0..3 -> SPECIAL32..35; shared source requires extended3bit-bank encoding; MAIN unused upper source and ISS emitted"
+    },
+    {
+      "path": "src/imagination/pco/pco_isa.py",
+      "sha256": "c10b5f64912efdeade613652036413f80db576265ad58d1dffb72015e1b4ad84",
+      "contract": "Named group/op/source/destination field encodings used by independent generated encoder fixture"
+    },
+    {
+      "path": "src/imagination/pco/pco_group_instrs.c",
+      "sha256": "4ceaa974588ce2d6cecc470b3f7b4f5a303eefa4470ee87b7e7eadede531b92a",
+      "contract": "Group DA/length and exact8byte final-group size/offset alignment"
+    },
+    {
+      "path": "src/imagination/pco/pco_binary.c",
+      "sha256": "88a348d7d06f8645a9cdfe5772ae99ca6f9de8e0ec4ef2df128a8d833d06b734",
+      "contract": "Byte emission order and f0|alignmentWordCount + ff alignment bytes"
+    },
+    {
+      "path": "src/imagination/pco/pco_end.c",
+      "sha256": "b3735cc5040b9ebd871e601ac36949150de89f64c5f2780b8ab96456d38b578f",
+      "contract": "END on last eligible fragment instruction"
+    },
+    {
+      "path": "src/imagination/vulkan/pvr_usc.c",
+      "sha256": "d3dd5e8050b847fed7216762dc7047cbbad6e727083062fa09b4ee7338dd6263",
+      "contract": "pvr_uscgen_clear_attach non-tile path: load uniform dword then frag_store at pixel offset, up to4 raw dwords. This helper implements the narrow already-register-assigned case, not full NIR optimization."
+    }
+  ],
+  "additional_primary_sources": {
+    "pco_legalize.c": {
+      "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/e1ef8f046c6e37ec1e2a13229560fbb824e5118f/src/imagination/pco/pco_legalize.c",
+      "sha256": "ef9db3ee1e934108930b4ee77a5bd8c5c403fc4907113aa3e4b1b6c055e519a0"
+    },
+    "pco_opt.c": {
+      "url": "https://chromium.googlesource.com/external/gitlab.freedesktop.org/mesa/mesa/+/e1ef8f046c6e37ec1e2a13229560fbb824e5118f/src/imagination/pco/pco_opt.c",
+      "sha256": "f43dfe80848730f9c483afbaf573208c70583d3a5313428104dbf06938497e92"
+    }
+  },
+  "post_ra_rule": "pco_legalize.c legalize_pseudo_post_ra case MOV: register-class SPEC -> MOVS1, other including SHARED -> MBYP. No source modifier or indirect index in this subset.",
+  "API": {
+    "name": "a04_rgx_solid_shader_compile",
+    "input": "exact little-endian count*4 constant bytes, shared register start/exclusive capacity <=256 local policy, count1..4, PIXOUT range0..3",
+    "output": "source-encoded USC MAIN groups, OLCHK, END, exact pinned icache8 alignment; code16/32/40/48bytes; copied raw shared_data; zero allocated temps",
+    "error": "nonzero, every caller buffer unchanged. No unsupported program accepted as successful render."
+  },
+  "tests": "326405 bounded input configurations compared to original generated PCO encoders plus exact pinned calc_align_padding excerpt, allocation-free bounds/overflow/alias/guard cases, ASan/UBSan, C++14 strict caller and freestanding ARM64 C11 caller. No instruction disassembly/interpreter/physical execution used.",
+  "target_corroboration": "Existing separate EOT single emitpix has native board equivalence. This NEW MBYP fragment program has NOT been compared to old board output or run on BVNC22.40.54.30. Existing EOT proof does not transfer automatically.",
+  "runtime_integration_requires_consultation": [
+    "Establish target USC program acceptance/errata with exact old board compiler example or appropriate source. Source encoder equivalence alone is not target validation.",
+    "Provide real owned USC upload/address lifetime and PDS shared-uniform upload + fragment DOUTU task. Existing PDS pixel-event helper is EOT-only and cannot be used as an assumed fragment-shader launcher.",
+    "Select old TQ208 producer shader-enabled path/state with exact task/resource fields. Do not replace existing EOT or merely add these bytes to current shaderless clear task.",
+    "Keep PBE/format/pitch/coverage, cache publication and owned target/readback guard requirements; require physical pixels independently of CCB/UFO completion.",
+    "Retain AGX queue/resource grammar + source-built userdriver boundary; opaque g10p shaders cannot be forwarded as Rogue USC."
+  ],
+  "not_implemented": [
+    "texture/2Dcopy/filter/blending",
+    "glyph/alpha composition",
+    "NIR/SPIR-V/Metal/AGX frontend",
+    "userclient registry or capability advertisement",
+    "runtime dispatch / IOSurface import / cache / framebuffer changes"
+  ]
+}
