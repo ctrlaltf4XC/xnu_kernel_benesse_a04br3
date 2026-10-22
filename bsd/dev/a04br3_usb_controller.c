@@ -105,13 +105,15 @@ int a04br3_usb_controller_poll(void) {
  }
  /* Bounded fallbacks when no host address arrives: reconnect, then FS-only. */
  { static unsigned idle,attempt;
-   if(device.active && !device.address && !device.configured){
-    if(++idle>=2000 && attempt<6){
+   /* Host log showed descriptor IN failing (-71) after address assignment, so
+    * retry whenever configuration is missing; attempts>=3 force full speed. */
+   if(device.active && !device.configured){
+    if(++idle>=3000 && attempt<6){
      idle=0;attempt++;uint8_t p=mac8(&board,1);
      macw8(&board,1,(uint8_t)(p&~0x40u));for(unsigned n=0;n<10;n++)wait_us(&board,20000);
      if(attempt>=3)p&=(uint8_t)~0x20u;
      macw8(&board,1,(uint8_t)(p|0x40u));
-     printf("A04BR3 USB: no host address, reconnect attempt=%u power=0x%x hs=%u\n",attempt,mac8(&board,1),attempt<3);
+     printf("A04BR3 USB: not configured, reconnect attempt=%u power=0x%x hs=%u\n",attempt,mac8(&board,1),attempt<3);
     }
    } else idle=0; }
  /* Bounded enumeration diagnostics: never read clear-on-read INTRUSB here. */
@@ -127,7 +129,7 @@ int a04br3_usb_controller_poll(void) {
  a04br3_usb_console_online(device.active&&device.configured);
  if(before!=device.configured)printf("A04BR3 USB: configured=%u speed_mps=%u\n",device.configured,device.mps);
  /* While a host is enumerating, keep the worker at 1ms cadence. */
- if(device.active && device.address && !device.configured)return 1;
+ if(device.active && !device.configured)return 1;
  return e==0?1:0;
 }
 void a04br3_usb_controller_stop(void) {
