@@ -5,7 +5,6 @@
 #include "A04BR3NativeCurrentNetwork.h"
 #include "A04BR3NativePeerIdentity.h"
 #include "A04BR3NativePersonalAssociation.h"
-#include "A04BR3DevOpenNetwork.h"
 #include "../sdio/A04BR3WLANPSKBinding.h"
 #include "../sdio/A04BR3WLANBackendAPI.h"
 #if !defined(A04_WLAN_JOIN_TARGET_API) || A04_WLAN_JOIN_TARGET_API != 1
@@ -44,50 +43,9 @@ static inline int a04_assoc_personal_set(IOService *provider,unsigned value,cons
  if(!e)e=a04br3_wlan_join_personal(provider,&target,&prepared);
  a04_psk_prepared_clear(&prepared);a04_wlan_secret_clear(&request,sizeof(request));return e;
 }
-/* Development open view join: same target admission and PSK preparation as
- * a04_assoc_personal_set, with the runtime-loaded passphrase instead of the
- * iOS key carrier. Only a real privacy+RSN PSK/CCMP AP is accepted. */
-static inline int a04_assoc_dev_personal_join(IOService *provider,const struct a04_native_association *peer,
- const char *passphrase,unsigned passphrase_length){
- struct a04_network_backend backend={};int e=a04br3_wlan_acquire_backend(provider,&backend);if(e)return e;
- struct a04_network_state state={};e=backend.state(backend.context,&state);
- if(!e && (!a04_network_control_ready(&state) || !state.radio_enabled))e=ENETDOWN;
- struct a04_wlan_scan_record *work=nullptr;
- if(!e){work=(a04_wlan_scan_record *)IOMallocZero(sizeof(*work));if(!work)e=ENOMEM;}
- struct a04_wlan_scan_info info={};if(!e)e=a04br3_wlan_scan_snapshot(provider,&info);
- struct a04_wlan_join_target target={};unsigned matched=0;
- if(!e && (!info.generation || !info.complete))e=EAGAIN;
- if(!e && (info.error || info.count>16))e=EIO;
- for(unsigned i=0;!e && i<info.count;i++){
-  e=a04br3_wlan_scan_copy_record(provider,info.generation,i,work);if(e)break;
-  const auto *ap=&work->ap;
-  if(ap->ssid_length!=peer->ssid_length || memcmp(ap->ssid,peer->ssid,ap->ssid_length) ||
-   (peer->force_bssid && memcmp(ap->mac,peer->bssid,6)))continue;
-  if(!(ap->capability&16) || a04_wlan_rsn_psk_ccmp(ap->rsn,ap->rsn_length))continue;
-  if(matched++)continue; // first matching BSS
-  target.generation=info.generation;target.index=i;target.ssid_length=ap->ssid_length;target.channel=ap->channel;target.band=ap->band;
-  memcpy(target.bssid,ap->mac,6);memcpy(target.ssid,ap->ssid,ap->ssid_length);
- }
- if(!e && !matched)e=ENOENT;
- struct a04_psk_prepared prepared={};auto ops=a04_psk_native_crypto();
- if(!e)e=a04_psk_prepare(&prepared,&ops,(const uint8_t *)passphrase,passphrase_length,1,target.ssid,target.ssid_length)?EIO:0;
- if(!e)e=a04br3_wlan_join_personal(provider,&target,&prepared);
- a04_psk_prepared_clear(&prepared);
- if(work)IOFree(work,sizeof(*work));
- a04br3_wlan_release_backend(provider);return e;
-}
 static inline int a04_assoc_provider_set(IOService *provider,uint32_t value,const void *in,uint32_t bytes)
 {
  if(!provider)return ENXIO;
- // Development open view: iOS joins it as open, the driver uses WPA2-PSK.
- struct a04_native_association open_request;char dev_psk[63];unsigned dev_psk_length=0;
- if(in && bytes==592 && !a04_native_association_decode(value,in,bytes,&open_request) &&
-    a04_dev_open_match(open_request.ssid,open_request.ssid_length,dev_psk,&dev_psk_length)){
-  int e=a04_assoc_dev_personal_join(provider,&open_request,dev_psk,dev_psk_length);
-  a04_wlan_secret_clear(dev_psk,sizeof(dev_psk));
-  IOLog("A04BR3 network: development open-view join errno=%d\n",e);
-  return e;
- }
  struct a04_network_backend backend={};int error=a04br3_wlan_acquire_backend(provider,&backend);
  if(error)return error;
  struct a04_network_state state={};error=backend.state(backend.context,&state);

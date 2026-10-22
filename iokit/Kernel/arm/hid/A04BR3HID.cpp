@@ -439,7 +439,6 @@ static A04BR3HIDButtons *gA04BR3Buttons;
 static A04BR3HIDTouch *gA04BR3Touch;
 static A04BR3HIDKeyboard *gA04BR3Keyboard;
 
-
 /* Registry lock is never held over a gate/callback. It protects snapshots
  * against stop/detach; all event/state operations use the provider workloop.
  * The two workloops MUST match before the private API dispatches anything. */
@@ -452,42 +451,6 @@ static bool a04_ui_registry_init()
         if (!OSCompareAndSwapPtr(NULL, lock, &gA04UIRegistryLock)) IOLockFree(lock);
     }
     return true;
-}
-/*
- * Development-only Wi-Fi credential entry (a04br3.console=1). Text entry is
- * unavailable in Setup, so the private UI client can load one SSID and WPA2
- * passphrase into kernel memory: tap y=1278 with x=32..126 appends that ASCII
- * character, x=0 clears, x=1 commits the buffer as SSID, x=2 as passphrase.
- * Never logged, never persisted; the WLAN adapter consumes it (see
- * A04BR3NativeAssociationAdapter.h a04_dev_open_*).
- */
-static char gA04DevText[64];
-static unsigned gA04DevTextLen;
-static char gA04DevSSID[33], gA04DevPSK[64];
-static unsigned gA04DevSSIDLen, gA04DevPSKLen;
-static void a04_dev_text_input(uint64_t x)
-{
-    if (x >= 32 && x <= 126) { if (gA04DevTextLen < sizeof(gA04DevText)) gA04DevText[gA04DevTextLen++] = (char)x; return; }
-    if (x == 1 && gA04DevTextLen && gA04DevTextLen <= 32) {
-        for (unsigned i = 0; i < gA04DevTextLen; i++) { gA04DevSSID[i] = gA04DevText[i]; } gA04DevSSIDLen = gA04DevTextLen;
-        IOLog("A04BR3 HID: development Wi-Fi SSID loaded (%u bytes)\n", gA04DevSSIDLen);
-    } else if (x == 2 && gA04DevTextLen >= 8 && gA04DevTextLen <= 63) {
-        for (unsigned i = 0; i < gA04DevTextLen; i++) { gA04DevPSK[i] = gA04DevText[i]; } gA04DevPSKLen = gA04DevTextLen;
-        IOLog("A04BR3 HID: development Wi-Fi passphrase loaded (%u bytes)\n", gA04DevPSKLen);
-    }
-    for (unsigned i = 0; i < sizeof(gA04DevText); i++) { ((volatile char *)gA04DevText)[i] = 0; } gA04DevTextLen = 0;
-}
-extern "C" int a04br3_dev_wifi_credentials(char ssid[32], unsigned *ssid_len, char psk[63], unsigned *psk_len)
-{
-    int ok = 0;
-    if (!gA04UIRegistryLock) return 0;
-    IOLockLock(gA04UIRegistryLock);
-    if (gA04DevSSIDLen && gA04DevPSKLen) {
-        for (unsigned i = 0; i < gA04DevSSIDLen; i++) { ssid[i] = gA04DevSSID[i]; } *ssid_len = gA04DevSSIDLen;
-        for (unsigned i = 0; i < gA04DevPSKLen; i++) { psk[i] = gA04DevPSK[i]; } *psk_len = gA04DevPSKLen; ok = 1;
-    }
-    IOLockUnlock(gA04UIRegistryLock);
-    return ok;
 }
 static bool a04_ui_console()
 {
@@ -555,13 +518,6 @@ A04BR3HIDButtons::uiGated(OSObject *owner, void *arg, void *, void *, void *)
         touch->release(); return kIOReturnNotReady;
     }
     if (touch->uiBusy()) { touch->release(); return kIOReturnBusy; }
-    if (s[0] == A04_UI_TAP && s[2] == 1278 && (s[1] <= 2 || (s[1] >= 32 && s[1] <= 126))) {
-        IOLockLock(gA04UIRegistryLock);
-        a04_dev_text_input(s[1]);
-        IOLockUnlock(gA04UIRegistryLock);
-        touch->release();
-        return kIOReturnSuccess;
-    }
     if (s[0] == A04_UI_TAP && s[2] == 1279 && ((s[1] >= 4 && s[1] < 256) || (s[1] >= 260 && s[1] < 512))) {
         IOLockLock(gA04UIRegistryLock);
         A04BR3HIDKeyboard *keyboard = gA04BR3Keyboard;
