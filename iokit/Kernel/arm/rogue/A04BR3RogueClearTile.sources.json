@@ -1,0 +1,49 @@
+{
+  "component": "Offline bounded native zero-clear tile lowering",
+  "license": "BSD-2-Clause-Patent; existing dependencies retain their own licenses",
+  "implementation_files": [
+    "iokit/Kernel/arm/rogue/A04BR3RogueClearTile.h",
+    "build-support/tests/test_rogue_clear_tile.py"
+  ],
+  "reference": {
+    "board_driver_revision": "eb47f42e1f84fe5716ef239620725f82718a620a",
+    "original_libsrv_um_sha256": "d32a4a224d06302d9bec0a66cbb7d17dec663d3985f1c8592f5bb77353ca1d4b",
+    "firmware_profile": "m1.11ED5425693, BVNC22.40.54.30",
+    "existing_source_ledger": "RENDER-UPSTREAM.json",
+    "retained_REA": [
+      {
+        "file": "gpu-worker/rea-fill-map-13e2e4.json",
+        "evidence": "ev_a8b70e873cd2536b115a348ff0bc99a5802b311ce09299c99f127d837cf5ef13",
+        "purpose": "PBE shared address words and linear pixel row-pitch CSR field"
+      },
+      {
+        "file": "gpu-worker/rea-fill-map-12bfb4.json",
+        "evidence": "ev_911334d07d74f42cec857ff9cc8729d3ec4f9cb2a673191e08b4303b58b8e660",
+        "purpose": "Existing fixed32x32 tile extent retained"
+      },
+      {
+        "file": "gpu-worker/rea-fill-reg-135818.json",
+        "evidence": "ev_e334566c42c618fdfef22ce59bd67b66d4786a76ab22f1ef6799720c796ac8ca",
+        "purpose": "Existing payload slots unchanged except CSR row pitch"
+      }
+    ]
+  },
+  "scope": [
+    "One zero-colour32x32 tile, native format0x22, linear singleRT, owned64KiB general BIF map",
+    "Tile origin and pitch multiples32pixels; full surface extent must fit owned map",
+    "Existing native208 payload and generated USC/PDS reused; alter only CSR pitch and PBE target address",
+    "No AGX parser/shader/packet translation, IOSurface import, live submission, completion or capability registration"
+  ],
+  "limits": [
+    "Native format0x22 is not proven equivalent to iOS BGRA",
+    "Observed800x1280/pitch832 display surface is4259840bytes and explicitly rejected by current64KiB ownership bound",
+    "Existing fixed-profile live owner rejects generalized image; parent consultation required before runtime integration",
+    "Native pixel readback previously failed despite CCB/UFO progress; candidate is not a demonstrated fix for that failure",
+    "No actual SDK/link or hardware validation for this new helper; host memory footprint oracle is not firmware simulation"
+  ],
+  "integration_requirements": [
+    "Actual retained/pinned/cache-managed resource ownership and layout-aware readback",
+    "Source-supported generalized owner validation/program publication; do not bypass current fixed-profile check",
+    "Prove pixels before reporting GPU or nativeMetal success"
+  ]
+}
