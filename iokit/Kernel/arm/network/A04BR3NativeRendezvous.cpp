@@ -90,7 +90,23 @@ class A04BR3NativeNetwork : public IOService {
         if(!self->scanLock)return ENXIO;
         IOLockLock(self->scanLock);auto backend=self->scanBackend();
         int error=a04_scan_dispatch_set(&self->scanSession,&backend,type,value,in,bytes,&self->scanCompletion);
-        IOLockUnlock(self->scanLock);return error;
+        IOLockUnlock(self->scanLock);
+        if(error)logScanReject(error,value,in,bytes);
+        return error;
+    }
+    // Diagnostic only: report which stage rejected a real scan SET and the
+    // first bytes that differ from the canonical request the policy accepts.
+    static void logScanReject(int error,uint32_t value,const void *in,uint32_t bytes){
+        unsigned mode=0;int policy=a04_scan_result_policy(value,in,bytes,&mode);
+        if(!in || bytes<0x1314){IOLog("A04BR3 scan reject errno=%d policy=%d bytes=%u\n",error,policy,bytes);return;}
+        const uint8_t *p=(const uint8_t *)in;
+        IOLog("A04BR3 scan reject errno=%d policy=%d mode=%u bytes=%u version=%u type=%u flag38=%u dict=0x%x\n",
+            error,policy,mode,bytes,a04_scan_result_u32(p),a04_scan_result_u32(p+0x34),p[0x38],a04_scan_result_u32(p+0x1310));
+        unsigned shown=0;
+        for(unsigned i=4;i<bytes && shown<24;i++){
+            if(i==4 || i==0x34 || i==0x38 || (i>=0x1310 && i<0x1314) || !p[i])continue;
+            IOLog("A04BR3 scan reject byte off=0x%x val=0x%02x\n",i,p[i]);shown++;
+        }
     }
     static void packet(void *context,unsigned kind,const void *bytes,unsigned length){
         auto *self=(A04BR3NativeNetwork *)context;
