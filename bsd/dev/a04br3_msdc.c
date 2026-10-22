@@ -389,6 +389,26 @@ static int boot_commit(void) {
         (unsigned long long)boot_image_bytes,error,error==0);
     return error;
 }
+/* Read the CURRENT boot partition for verified patch staging (any offset).
+ * Root-only, only while a stage exists; uses the stage scratch buffer and the
+ * same bounded <=64KiB controller transfers. Never touches staged bytes. */
+static int boot_read(__unused dev_t dev,struct uio *uio,__unused int flags) {
+    if(proc_suser(current_proc()))return EPERM;
+    lck_mtx_lock(&boot_lock);
+    uint64_t part=(uint64_t)boot_sectors*512;int error=0;
+    if(!boot_opened || !boot_stage || !boot_scratch || boot_flags!=A04_BOOT_STAGING || uio_offset(uio)<0)error=EINVAL;
+    while(!error && uio_resid(uio)>0 && (uint64_t)uio_offset(uio)<part) {
+        uint64_t off=(uint64_t)uio_offset(uio),base=off&~511ULL,within=off-base;
+        uint64_t want=within+(uint64_t)uio_resid(uio);
+        uint64_t bytes=MIN(65536ULL,(want+511)&~511ULL);
+        bytes=MIN(bytes,part-base);
+        error=boot_transfer(base,(void *)boot_scratch,(unsigned)bytes,0);
+        if(error)break;
+        uint64_t n=MIN(bytes-within,(uint64_t)uio_resid(uio));
+        error=uiomove((caddr_t)(boot_scratch+within),(int)n,uio);
+    }
+    lck_mtx_unlock(&boot_lock);return error;
+}
 static int boot_write(__unused dev_t dev,struct uio *uio,__unused int flags) {
     if(proc_suser(current_proc()))return EPERM;
     lck_mtx_lock(&boot_lock);
@@ -457,7 +477,7 @@ out:
     lck_mtx_unlock(&boot_lock);return error;
 }
 static const struct cdevsw boot_cdevsw = {
-    .d_open=boot_open,.d_close=boot_close,.d_read=eno_rdwrt,.d_write=boot_write,
+    .d_open=boot_open,.d_close=boot_close,.d_read=boot_read,.d_write=boot_write,
     .d_ioctl=boot_ioctl,.d_stop=eno_stop,.d_reset=eno_reset,.d_select=eno_select,
     .d_mmap=eno_mmap,.d_strategy=eno_strat,.d_reserved_1=eno_getc,.d_reserved_2=eno_putc
 };
