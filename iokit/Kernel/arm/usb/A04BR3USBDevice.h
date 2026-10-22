@@ -11,7 +11,8 @@
 struct a04_usb_device_policy {uint16_t vid,pid;uint8_t attributes,maxpower;};
 struct a04_usb_device {struct a04_musb_io io;struct a04_usb_device_policy policy;
  struct a04_usb_session session;struct a04_usb_console console;
- unsigned active,configured,address,mps,pending,value,ep0_in,suspended,tx_pending;};
+ unsigned active,configured,address,mps,pending,value,ep0_in,suspended,tx_pending;
+ unsigned setups,last_setup,last_len,last_csr,ep0_events,resets;};
 static inline void a04_usb_device_bar(struct a04_usb_device *s){s->io.barrier(s->io.context);}
 static inline void a04_usb_device_index(struct a04_usb_device *s,unsigned e){s->io.write8(s->io.context,14,(uint8_t)e);a04_usb_device_bar(s);}
 static inline void a04_usb_device_fifos(struct a04_usb_device *s){
@@ -70,6 +71,7 @@ static inline void a04_usb_device_ep0(struct a04_usb_device *s,unsigned txevent)
  if(count==0 && s->ep0_in){i->write16(c,0x12,0x40);s->ep0_in=0;return;}
  if(count!=8){a04_usb_device_stall(s);return;}
  uint8_t q[8],out[64];for(unsigned b=0;b<8;b++)q[b]=i->read8(c,0x20);
+ s->setups++;s->last_setup=(unsigned)q[0]|((unsigned)q[1]<<8)|((unsigned)q[3]<<16);
  unsigned value=q[2]|((unsigned)q[3]<<8),index=q[4]|((unsigned)q[5]<<8),len=q[6]|((unsigned)q[7]<<8),n=0;
  s->pending=s->ep0_in=0;
  for(unsigned b=0;b<64;b++)out[b]=0;
@@ -97,7 +99,8 @@ static inline void a04_usb_device_ep0(struct a04_usb_device *s,unsigned txevent)
  else if(q[0]==0x81 && q[1]==10 && !value && !index && len==1 && s->configured){n=1;}
  else if(q[0]==1 && q[1]==11 && !value && !index && !len && s->configured){}
  else {a04_usb_device_stall(s);return;}
- if(n){if(n>len)n=len;for(unsigned b=0;b<n;b++)i->write8(c,0x20,out[b]);i->write16(c,0x12,0x4a);s->ep0_in=1;}
+ s->last_len=len;
+ if(n){if(n>len)n=len;for(unsigned b=0;b<n;b++)i->write8(c,0x20,out[b]);i->write16(c,0x12,0x4a);s->ep0_in=1;s->last_csr=i->read16(c,0x12)|(n<<16);}
  else i->write16(c,0x12,0x48);
  a04_usb_device_bar(s);
 }
@@ -127,8 +130,9 @@ static inline int a04_usb_device_poll(struct a04_usb_device *s,unsigned budget){
  if((i->read8(c,0x60)&0x9e)!=0x98){a04_usb_device_stop(s);return A04_MUSB_NOT_READY;}
  unsigned bus=i->read8(c,10),tx=i->read16(c,2),rx=i->read16(c,4);
  if(bus)i->write8(c,10,(uint8_t)bus);if(tx)i->write16(c,2,(uint16_t)tx);if(rx)i->write16(c,4,(uint16_t)rx);
- if(bus&0x24){a04_usb_device_reset(s);if(bus&0x20)continue;}
+ if(bus&0x24){s->resets++;a04_usb_device_reset(s);if(bus&0x20)continue;}
  if(bus&1)s->suspended=1;if(bus&2)s->suspended=0;
+ if(tx&1)s->ep0_events++;
  a04_usb_device_ep0(s,tx&1);result=a04_usb_device_bulk(s,tx&2);
  if(result==A04_MUSB_FAULT){a04_usb_device_stop(s);return result;}
  }

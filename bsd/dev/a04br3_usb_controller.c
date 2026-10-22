@@ -119,10 +119,10 @@ int a04br3_usb_controller_poll(void) {
  /* Bounded enumeration diagnostics: never read clear-on-read INTRUSB here. */
  { static unsigned ticks;
    if(device.active && !device.configured && (++ticks%400)==0 && ticks<=400*60)
-    printf("A04BR3 USB DIAG: t=%u power=0x%x devctl=0x%x faddr=0x%x addr=%u pending=%u phy18=0x%x phy1a=0x%x phy68=0x%x phy6c=0x%x phy6d=0x%x\n",
+    printf("A04BR3 USB DIAG: t=%u power=0x%x devctl=0x%x faddr=0x%x addr=%u pending=%u phy18=0x%x phy1a=0x%x phy68=0x%x phy6c=0x%x phy6d=0x%x setups=%u last=0x%x len=%u csr=0x%x ep0=%u resets=%u\n",
      ticks,mac8(&board,1),mac8(&board,0x60),mac8(&board,0),device.address,device.pending,
      read8(&board,A04_USB_PHY,0x18),read8(&board,A04_USB_PHY,0x1a),read32(&board,A04_USB_PHY,0x68),
-     read8(&board,A04_USB_PHY,0x6c),read8(&board,A04_USB_PHY,0x6d)); }
+     read8(&board,A04_USB_PHY,0x6c),read8(&board,A04_USB_PHY,0x6d),device.setups,device.last_setup,device.last_len,device.last_csr,device.ep0_events,device.resets); }
  if(board.fault)return -EIO;
  if(e==A04_MUSB_FAULT)return -EIO;
  if(e==A04_MUSB_NOT_READY){a04br3_usb_console_online(0);return 0;}
