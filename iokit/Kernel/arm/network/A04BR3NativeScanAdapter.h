@@ -5,6 +5,7 @@
 #ifndef A04BR3_NATIVE_SCAN_ADAPTER_H
 #define A04BR3_NATIVE_SCAN_ADAPTER_H
 #include "A04BR3NativeScanDispatch.h"
+#include "A04BR3DevOpenNetwork.h"
 #include "../sdio/A04BR3WLANBackendAPI.h"
 #include <kern/clock.h>
 static inline uint64_t a04_scan_provider_now()
@@ -64,6 +65,10 @@ static inline int a04_scan_provider_snapshot(void *context,uint64_t expected,uns
             memcpy(record->rates,raw->ap.rates,record->rate_count);
             record->ie_length=(uint16_t)raw->observation.ie_bytes;
             memcpy(record->ies,raw->observation.ies,record->ie_length);
+            if(a04_dev_open_match(record->ssid,record->ssid_length,nullptr,nullptr)){
+                record->capability&=~0x10u; // development open view, see A04BR3DevOpenNetwork.h
+                record->ie_length=a04_dev_open_strip_ies(record->ies,record->ie_length);
+            }
         }
     }
     if(raw)IOFree(raw,sizeof(*raw));
