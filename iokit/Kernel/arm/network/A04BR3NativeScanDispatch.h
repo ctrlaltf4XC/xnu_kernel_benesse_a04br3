@@ -69,8 +69,14 @@ static inline int a04_scan_dispatch_get(struct a04_scan_result_session *session,
         struct a04_scan_observation record={};
         error=backend->snapshot(backend->context,session->generation,session->cursor,&snapshot,&record);
         if(error)return error;
-        if(a04_scan_result_selected(session->filtered,session->channels,&record))
-            return a04_scan_result_next(session,&snapshot,&record,out,bytes);
+        unsigned why=0;
+        if(a04_scan_result_selected(session->filtered,session->channels,&record)){
+            int check=snapshot.complete && record.generation==snapshot.generation ?
+                a04_scan_result_record_check(&snapshot,&record,&why) : 0;
+            if(check!=EINVAL && check!=EOPNOTSUPP)
+                return a04_scan_result_next(session,&snapshot,&record,out,bytes);
+            session->skipped++;session->skip_why=why;
+        }
         if(snapshot.generation!=session->generation)return ESTALE;
         if(!snapshot.complete)return EAGAIN;
         if(session->pinned && snapshot.count!=session->count)return ESTALE;

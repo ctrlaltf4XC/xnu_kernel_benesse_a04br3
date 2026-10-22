@@ -64,8 +64,21 @@ class A04BR3NativeNetwork : public IOService {
         if(type==11){
             if(!self->scanLock)return ENXIO;
             IOLockLock(self->scanLock);auto backend=self->scanBackend();
+            uint32_t skippedBefore=self->scanSession.skipped,cursorBefore=self->scanSession.cursor;
             int error=a04_scan_dispatch_get(&self->scanSession,&backend,type,value,out,bytes);
-            IOLockUnlock(self->scanLock);return error;
+            uint32_t skipped=self->scanSession.skipped,why=self->scanSession.skip_why,
+                cursor=self->scanSession.cursor,count=self->scanSession.count;
+            uint64_t generation=self->scanSession.generation;
+            IOLockUnlock(self->scanLock);
+            if(skipped!=skippedBefore)
+                IOLog("A04BR3 scan get skipped=%u last_why=%u cursor=%u->%u count=%u\n",skipped,why,cursorBefore,cursor,count);
+            if(error && error!=EIO){
+                const uint8_t *o=(const uint8_t *)out;
+                IOLog("A04BR3 scan get errno=%d gen=%llu cursor=%u count=%u bytes=%u ver=%u ielen=%u\n",error,
+                    (unsigned long long)generation,cursor,count,bytes?*bytes:0,o?a04_scan_result_u32(o):0,
+                    o?((unsigned)o[0x8a]|((unsigned)o[0x8b]<<8)):0);
+            }
+            return error;
         }
         a04_network_backend backend={};
         int error=a04br3_wlan_acquire_backend(self->backendProvider,&backend);
@@ -102,9 +115,18 @@ class A04BR3NativeNetwork : public IOService {
         const uint8_t *p=(const uint8_t *)in;
         IOLog("A04BR3 scan reject errno=%d policy=%d mode=%u bytes=%u version=%u type=%u flag38=%u dict=0x%x\n",
             error,policy,mode,bytes,a04_scan_result_u32(p),a04_scan_result_u32(p+0x34),p[0x38],a04_scan_result_u32(p+0x1310));
+        uint32_t count=a04_scan_result_u32(p+0x44);
+        IOLog("A04BR3 scan reject dwell=%u rest=%u count=%u flags=0x%x:%x\n",(unsigned)p[0x3c]|((unsigned)p[0x3d]<<8),
+            a04_scan_result_u32(p+0x40),count,a04_scan_result_u32(p+0x130c),a04_scan_result_u32(p+0x1308));
+        for(unsigned i=0;i<count && i<40;i++){
+            const uint8_t *c=p+0x48+12*i;
+            IOLog("A04BR3 scan reject chan[%u] v=%u ch=%u flags=0x%x\n",i,a04_scan_result_u32(c),
+                a04_scan_result_u32(c+4),a04_scan_result_u32(c+8));
+        }
         unsigned shown=0;
         for(unsigned i=4;i<bytes && shown<24;i++){
-            if(i==4 || i==0x34 || i==0x38 || (i>=0x1310 && i<0x1314) || !p[i])continue;
+            if(i==4 || i==0x34 || i==0x38 || (i>=0x3c && i<0x48) || (i>=0x48 && i<0x48+12*(count<400?count:400)) ||
+               (i>=0x1308 && i<0x1314) || !p[i])continue;
             IOLog("A04BR3 scan reject byte off=0x%x val=0x%02x\n",i,p[i]);shown++;
         }
     }

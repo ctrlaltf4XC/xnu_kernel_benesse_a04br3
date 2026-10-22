@@ -222,6 +222,14 @@ int main(){
  // Unfiltered request returns all three.
  base(p);s={};assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev)&&!s.filtered);
  for(unsigned i=0;i<3;i++){memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;bytes=1164;assert(!a04_scan_dispatch_get(&s,&b,11,0,out,&bytes));}
+ // A record whose IEs disagree with its metadata is skipped, others returned.
+ m.records[1].rate_count=2;base(p);s={};assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev));
+ unsigned got=0;for(;;){memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;bytes=1164;
+  int e=a04_scan_dispatch_get(&s,&b,11,0,out,&bytes);if(e){assert(e==EIO);break;}got++;}
+ assert(got==2&&s.skipped==1&&s.skip_why==8);
+ // Header mismatch is still a caller error, not a skip.
+ memset(out,0,sizeof(out));out[0]=2;out[0x8b]=4;bytes=1164;s={};assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev));
+ assert(a04_scan_dispatch_get(&s,&b,11,0,out,&bytes)==EINVAL&&!s.skipped);
  return 0;
 }
 '''

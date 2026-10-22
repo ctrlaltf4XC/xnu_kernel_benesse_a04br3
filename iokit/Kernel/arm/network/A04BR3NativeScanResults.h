@@ -90,6 +90,40 @@ static inline unsigned a04_scan_result_selected(unsigned filtered,uint32_t chann
     if(!filtered)return 1;
     return r && r->band==1 && r->channel && r->channel<=14 && ((channels>>r->channel)&1u);
 }
+/* Record-level validation. Codes: 1 bounds, 2 band/channel/rcpi, 3 bssid,
+ * 4 TLV framing, 5 SSID IE mismatch, 6 rate IE mismatch, 7 DS channel
+ * mismatch, 8 missing SSID/rates or rate count mismatch. A failing record is
+ * skipped by GET iteration instead of aborting every other observed AP.
+ */
+static inline int a04_scan_result_record_check(const struct a04_scan_snapshot *s,
+    const struct a04_scan_observation *r,unsigned *why)
+{
+    unsigned dummy;if(!why)why=&dummy;*why=0;
+    if(r->seen_us>s->now_us || r->ssid_length>32 || r->rate_count>15 ||
+       r->ie_length<2 || r->ie_length>1024 || r->ie_truncated || r->from_probe>1 ||
+       r->beacon>65535 || r->capability>65535){*why=1;return EINVAL;}
+    if(r->band!=1 || !r->channel || r->channel>13 || !r->rcpi_valid || r->rcpi>220){*why=2;return EOPNOTSUPP;}
+    unsigned any=0;for(unsigned i=0;i<6;i++)any|=r->bssid[i];
+    if(!any || (r->bssid[0]&1)){*why=3;return EINVAL;}
+    // Full captured TLVs must agree with separately observed metadata. This
+    // prevents accidentally combining an updated cache entry with older IEs.
+    unsigned ssids=0,rates=0;
+    for(unsigned i=0;i<r->ie_length;){
+        if(r->ie_length-i<2 || (unsigned)r->ies[i+1]>r->ie_length-i-2){*why=4;return EINVAL;}
+        unsigned id=r->ies[i],n=r->ies[i+1];const uint8_t *data=r->ies+i+2;
+        if(id==0){
+            if(ssids++ || n!=r->ssid_length || memcmp(data,r->ssid,n)){*why=5;return EINVAL;}
+        }
+        if(id==1 || id==50){
+            if(!n || rates+n>r->rate_count || memcmp(data,r->rates+rates,n)){*why=6;return EINVAL;}
+            rates+=n;
+        }
+        if(id==3 && (n!=1 || data[0]!=r->channel)){*why=7;return EINVAL;}
+        i+=2+n;
+    }
+    if(!ssids || !rates || rates!=r->rate_count){*why=8;return EINVAL;}
+    return 0;
+}
 static inline int a04_scan_result_encode(const struct a04_scan_snapshot *s,
     const struct a04_scan_observation *r,void *out,uint32_t *bytes)
 {
@@ -98,29 +132,8 @@ static inline int a04_scan_result_encode(const struct a04_scan_snapshot *s,
     if(a04_scan_result_u32(p)!=1 || ((unsigned)p[0x8a]|((unsigned)p[0x8b]<<8))!=1024)return EINVAL;
     if(!s->generation || r->generation!=s->generation)return ESTALE;
     if(!s->complete)return EAGAIN;
-    if(r->seen_us>s->now_us || r->ssid_length>32 || r->rate_count>15 ||
-       r->ie_length<2 || r->ie_length>1024 || r->ie_truncated || r->from_probe>1 ||
-       r->beacon>65535 || r->capability>65535)return EINVAL;
-    if(r->band!=1 || !r->channel || r->channel>13 || !r->rcpi_valid || r->rcpi>220)return EOPNOTSUPP;
-    unsigned any=0;for(unsigned i=0;i<6;i++)any|=r->bssid[i];
-    if(!any || (r->bssid[0]&1))return EINVAL;
-    // Full captured TLVs must agree with separately observed metadata. This
-    // prevents accidentally combining an updated cache entry with older IEs.
-    unsigned ssids=0,rates=0;
-    for(unsigned i=0;i<r->ie_length;){
-        if(r->ie_length-i<2 || (unsigned)r->ies[i+1]>r->ie_length-i-2)return EINVAL;
-        unsigned id=r->ies[i],n=r->ies[i+1];const uint8_t *data=r->ies+i+2;
-        if(id==0){
-            if(ssids++ || n!=r->ssid_length || memcmp(data,r->ssid,n))return EINVAL;
-        }
-        if(id==1 || id==50){
-            if(!n || rates+n>r->rate_count || memcmp(data,r->rates+rates,n))return EINVAL;
-            rates+=n;
-        }
-        if(id==3 && (n!=1 || data[0]!=r->channel))return EINVAL;
-        i+=2+n;
-    }
-    if(!ssids || !rates || rates!=r->rate_count)return EINVAL;
+    int error=a04_scan_result_record_check(s,r,nullptr);
+    if(error)return error;
     uint64_t age=(s->now_us-r->seen_us)/1000;
     if(age>UINT32_MAX)age=UINT32_MAX;
     memset(p,0,1164);a04_scan_result_put32(p,1);a04_scan_result_put32(p+4,1);
@@ -144,13 +157,14 @@ struct a04_scan_result_session {
     uint64_t generation;
     uint32_t cursor,count,pinned;
     uint32_t filtered,channels; // requested 2.4GHz channel bitmap when filtered
+    uint32_t skipped,skip_why;  // records not encodable, last reason code
 };
 static inline int a04_scan_result_accept(struct a04_scan_result_session *session,
     const struct a04_scan_snapshot *snapshot,unsigned cached)
 {
     if(!session || !snapshot || !snapshot->generation)return EINVAL;
     if(cached && !snapshot->complete)return EAGAIN;
-    *session={snapshot->generation,0,snapshot->complete?snapshot->count:0,snapshot->complete?1u:0u,0,0};
+    *session={snapshot->generation,0,snapshot->complete?snapshot->count:0,snapshot->complete?1u:0u,0,0,0,0};
     return 0;
 }
 /* Get snapshot/record atomically from backend for session.generation and
