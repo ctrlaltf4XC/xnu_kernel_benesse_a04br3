@@ -100,7 +100,16 @@ static inline void a04_usb_device_ep0(struct a04_usb_device *s,unsigned txevent)
  else if(q[0]==1 && q[1]==11 && !value && !index && !len && s->configured){}
  else {a04_usb_device_stall(s);return;}
  s->last_len=len;
- if(n){if(n>len)n=len;for(unsigned b=0;b<n;b++)i->write8(c,0x20,out[b]);i->write16(c,0x12,0x4a);s->ep0_in=1;s->last_csr=i->read16(c,0x12)|(n<<16);}
+ if(n){if(n>len)n=len;
+  /* EP0 shares one FIFO for SETUP RX and IN data. As in the BSP/Linux MUSB
+   * gadget, acknowledge the SETUP and wait for RXPKTRDY to clear before
+   * loading IN data, then set TXPKTRDY|DATAEND. Loading while RXPKTRDY is
+   * still set corrupts the IN packet (host saw descriptor read -71). */
+  i->write16(c,0x12,0x40);a04_usb_device_bar(s);
+  for(unsigned spin=0;(i->read16(c,0x12)&1)&&spin<100000;spin++){}
+  if(i->read16(c,0x12)&1){a04_usb_device_stall(s);return;}
+  for(unsigned b=0;b<n;b++)i->write8(c,0x20,out[b]);a04_usb_device_bar(s);
+  i->write16(c,0x12,0x0a);s->ep0_in=1;s->last_csr=i->read16(c,0x12)|(n<<16);}
  else i->write16(c,0x12,0x48);
  a04_usb_device_bar(s);
 }
