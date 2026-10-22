@@ -133,9 +133,14 @@ int main(){
   request(p,type,dictionary?0x80000000u:0);memcpy(old,p,sizeof(p));unsigned mode=99;
   assert(!a04_scan_result_policy(0,p,sizeof(p),&mode)&&mode==type);
   assert(!memcmp(p,old,sizeof(p)));cases++;
-  // Every other policy bit remains rejected; both original carriers retained.
+  // Every bit outside dwell/rest hints, channel entries and scheduling flags
+  // remains rejected; both original carriers retained.
   for(unsigned i=4;i<sizeof(p);i++)for(unsigned bit=0;bit<8;bit++){
    if(i>=0x34&&i<0x38)continue;
+   if((i>=0x3c&&i<0x3e)||(i>=0x40&&i<0x44))continue;
+   if(i>=0x48&&i<0x1308)continue; // channel entries: covered below
+   if(i==0x1308&&(bit==1||bit==5||bit==6||bit==7))continue;
+   if(i==0x44)continue; // nonzero count with zero entries: covered below
    p[i]^=1u<<bit;mode=99;int error=a04_scan_result_policy(0,p,sizeof(p),&mode);
    if(i==0x1313&&bit==7)assert(!error&&mode==type);
    else assert(error==EOPNOTSUPP&&mode==99);
@@ -152,7 +157,7 @@ int main(){
   assert(a04_scan_dispatch_set(&session,&b,10,0,p,sizeof(p),&event)==ENETDOWN);
   assert(!memcmp(&session,&before,sizeof(session))&&backend.begins+backend.snapshots==calls+1);
   // Unknown policy cannot reach callbacks or mutate accepted generation.
-  p[0x1308]=1;calls=backend.begins+backend.snapshots;
+  p[0x1308]=8;calls=backend.begins+backend.snapshots;
   assert(a04_scan_dispatch_set(&session,&b,10,0,p,sizeof(p),&event)==EOPNOTSUPP);
   assert(!memcmp(&session,&before,sizeof(session))&&backend.begins+backend.snapshots==calls);
  }
@@ -163,7 +168,61 @@ int main(){
  assert(a04_scan_result_policy(1,p,sizeof(p),&mode)==EOPNOTSUPP&&mode==99);
  assert(a04_scan_result_policy(0,nullptr,sizeof(p),&mode)==EINVAL&&mode==99);
  assert(a04_scan_result_policy(0,p,sizeof(p),nullptr)==EINVAL);
- puts("PASS donor default scan admission: 261510 carriers, active/passive/cached real callback/generation/error contract, no fabricated completion");
+ puts("PASS donor default scan admission: active/passive/cached real callback/generation/error contract, no fabricated completion");
+}
+'''
+  with tempfile.TemporaryDirectory() as tmp:
+   p=Path(tmp);(p/'case.cpp').write_text(case)
+   subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I',str(ROOT),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
+   subprocess.run([str(p/'case')],check=True)
+ def test_observed_setup_requests_and_channel_filter(self):
+  # Exact shapes logged on hardware by kernel 911d14d (scan reject diagnostics).
+  case=r'''
+#include "A04BR3NativeScanDispatch.h"
+#include <assert.h>
+struct Mock {a04_scan_snapshot meta;a04_scan_observation records[3];unsigned begins;};
+static int begin(void *c,unsigned,uint64_t *generation){
+ auto *m=(Mock *)c;m->begins++;*generation=m->meta.generation;return 0;}
+static int snapshot(void *c,uint64_t expected,unsigned index,a04_scan_snapshot *meta,a04_scan_observation *record){
+ auto *m=(Mock *)c;if(expected && expected!=m->meta.generation)return ESTALE;*meta=m->meta;
+ if(record){if(index>=m->meta.count)return ENOENT;*record=m->records[index];}return 0;}
+static void base(uint8_t *p){memset(p,0,5456);a04_scan_result_put32(p,1);a04_scan_result_put32(p+4,3);
+ a04_scan_result_put32(p+0x34,1);a04_scan_result_put32(p+0x38,1);a04_scan_result_put32(p+0x1310,0x80000000u);}
+static void channel(uint8_t *p,unsigned i,unsigned ch,unsigned flags){uint8_t *c=p+0x48+12*i;
+ a04_scan_result_put32(c,1);a04_scan_result_put32(c+4,ch);a04_scan_result_put32(c+8,flags);}
+static void record(a04_scan_observation *r,unsigned ch,unsigned i){*r={};r->generation=7;r->seen_us=1;r->channel=ch;r->band=1;
+ r->beacon=100;r->capability=1;r->rcpi_valid=1;r->rcpi=100;r->bssid[0]=2;r->bssid[5]=(uint8_t)(i+1);
+ r->ssid_length=1;r->ssid[0]='x';r->rate_count=1;r->rates[0]=0x82;
+ uint8_t ies[]={0,1,'x',1,1,0x82};r->ie_length=sizeof(ies);memcpy(r->ies,ies,sizeof(ies));}
+int main(){
+ static uint8_t p[5456];uint8_t out[1166];unsigned mode=0;
+ base(p);p[0x1308]=0x20;assert(!a04_scan_result_policy(0,p,sizeof(p),&mode)&&mode==1); // LOW_LATENCY
+ base(p);a04_scan_result_put32(p+0x44,13);for(unsigned i=0;i<13;i++)channel(p,i,i+1,0x0a);
+ a04_scan_request q={};assert(!a04_scan_result_request(0,p,sizeof(p),&q)&&q.filtered&&q.channels==0x3ffe);
+ p[0x1308]=0x20|0x2|0x40|0x80;assert(!a04_scan_result_request(0,p,sizeof(p),&q));
+ p[0x1308]=0x08;assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP); // OFFCHANNEL shapes results
+ p[0x1308]=0;p[0x1309]=1;assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP); // 6GHz followup
+ p[0x1309]=0;a04_scan_result_put32(p+0x1310,(uint32_t)-70);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP);
+ a04_scan_result_put32(p+0x1310,0x80000000u);
+ channel(p,13,0,0);a04_scan_result_put32(p+0x48+12*13,1);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP); // entry past count
+ memset(p+0x48+12*13,0,12);channel(p,0,1,0x2);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP); // no band
+ channel(p,0,1,0x18);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP); // both bands
+ channel(p,0,1,0x200a);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP); // unknown flag
+ channel(p,0,15,0x0a);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP);
+ channel(p,0,1,0x0a);a04_scan_result_put32(p+0x44,401);assert(a04_scan_result_request(0,p,sizeof(p),&q)==EOPNOTSUPP);
+ // Request channels 1 and 6 only (plus 5GHz 36): results on 11 are skipped.
+ base(p);a04_scan_result_put32(p+0x44,3);channel(p,0,1,0x0a);channel(p,1,6,0x0a);channel(p,2,36,0x12);
+ Mock m={};m.meta={7,1000,3,1};record(&m.records[0],11,0);record(&m.records[1],6,1);record(&m.records[2],1,2);
+ a04_scan_backend b={&m,begin,snapshot};a04_scan_result_session s={};a04_scan_completion_state ev={};
+ assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev)&&s.filtered&&s.channels==((1u<<1)|(1u<<6)));
+ unsigned seen[2];for(unsigned i=0;i<2;i++){memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;uint32_t bytes=1164;
+  assert(!a04_scan_dispatch_get(&s,&b,11,0,out,&bytes));seen[i]=a04_scan_result_u32(out+8);}
+ assert(seen[0]==6&&seen[1]==1&&s.cursor==3);
+ memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;uint32_t bytes=1164;assert(a04_scan_dispatch_get(&s,&b,11,0,out,&bytes)==EIO);
+ // Unfiltered request returns all three.
+ base(p);s={};assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev)&&!s.filtered);
+ for(unsigned i=0;i<3;i++){memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;bytes=1164;assert(!a04_scan_dispatch_get(&s,&b,11,0,out,&bytes));}
+ return 0;
 }
 '''
   with tempfile.TemporaryDirectory() as tmp:

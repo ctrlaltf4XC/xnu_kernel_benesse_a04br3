@@ -26,24 +26,69 @@ static inline void a04_scan_result_put32(uint8_t *p,uint32_t v)
  * (ev_371521687beae85eb7e32175bef34ad1e5b80173f752700d8b64896957bbe0d9).
  * Accept those two default carriers only; no arbitrary option/filter values.
  * An unsupported policy leaves *mode unchanged, never silently drops filters.
+ *
+ * Layout (itlwm apple80211_scan_data, iOS16 channel array of 400 entries):
+ * +0x3c dwell u16, +0x40 rest u32, +0x44 num_channels, +0x48 channels[400]
+ * of {version1,channel,flags}, +0x1308 SCAN_FLAGS u64, +0x1310
+ * SCAN_RSSI_THRESHOLD (CFString keys resolved from donor io80211 cfstrings
+ * 0x1dabadcd8..0x1dabade18 used by __getScanData). Real Setup requests carry
+ * SCAN_LOW_LATENCY(0x20) and a 2.4GHz channel list 1..13 flags0x0a.
+ * Only scheduling hints LOW_PRIORITY/LOW_LATENCY/PRIO_OVERRIDE/IS_THROTTLED
+ * are accepted; result-shaping flags (OFFCHANNEL, 6GHz, FILS, RNR) are not.
+ * A channel list becomes a result filter: 2.4GHz channels form *channels,
+ * 5GHz entries are valid requests the 2.4GHz-only backend cannot report.
  */
-static inline int a04_scan_result_policy(uint32_t value,const void *in,
-    uint32_t bytes,unsigned *mode)
+enum { A04_SCAN_CHANNELS=400, A04_SCAN_FLAG_HINTS=0x2|0x20|0x40|0x80,
+    A04_SCAN_CHANNEL_FLAGS=0x1|0x2|0x4|0x8|0x10|0x20|0x40|0x80|0x100|0x200|0x400|0x800 };
+struct a04_scan_request { unsigned mode,filtered; uint32_t channels; };
+static inline int a04_scan_result_request(uint32_t value,const void *in,
+    uint32_t bytes,struct a04_scan_request *out)
 {
-    if(!in || !mode || bytes!=5456)return EINVAL;
+    if(!in || !out || bytes!=5456)return EINVAL;
     if(value)return EOPNOTSUPP;
     const uint8_t *p=(const uint8_t *)in;
     if(a04_scan_result_u32(p)!=1)return EINVAL;
     unsigned type=a04_scan_result_u32(p+0x34);
     if(type<1 || type>3)return EOPNOTSUPP;
-    uint32_t dictionary_default=a04_scan_result_u32(p+0x1310);
-    if(dictionary_default && dictionary_default!=0x80000000u)return EOPNOTSUPP;
-    for(unsigned i=4;i<bytes;i++){
-        uint8_t want=i==4?3:(i==0x34?(uint8_t)type:(i==0x38?1:0));
-        if(i>=0x1310 && i<0x1314)want=(uint8_t)(dictionary_default>>(8*(i-0x1310)));
-        if(p[i]!=want)return EOPNOTSUPP;
+    if(a04_scan_result_u32(p+4)!=3 || a04_scan_result_u32(p+0x38)!=1)return EOPNOTSUPP;
+    for(unsigned i=8;i<0x34;i++)if(p[i])return EOPNOTSUPP; // no directed BSSID/SSID
+    if(p[0x3e] || p[0x3f])return EOPNOTSUPP; // padding after u16 dwell
+    uint32_t count=a04_scan_result_u32(p+0x44);
+    if(count>A04_SCAN_CHANNELS)return EOPNOTSUPP;
+    uint32_t channels=0;
+    for(unsigned i=0;i<A04_SCAN_CHANNELS;i++){
+        const uint8_t *c=p+0x48+12*i;
+        uint32_t version=a04_scan_result_u32(c),channel=a04_scan_result_u32(c+4),
+            flags=a04_scan_result_u32(c+8);
+        if(i>=count){if(version || channel || flags)return EOPNOTSUPP;continue;}
+        if(version!=1 || !channel || (flags & ~(uint32_t)A04_SCAN_CHANNEL_FLAGS))return EOPNOTSUPP;
+        unsigned band2=(flags & 0x8)!=0,band5=(flags & 0x10)!=0;
+        if(band2==band5)return EOPNOTSUPP;
+        if(band2){if(channel>14)return EOPNOTSUPP;channels|=1u<<channel;}
+        else if(channel>196)return EOPNOTSUPP;
     }
-    *mode=type;return 0;
+    uint64_t scan_flags=(uint64_t)a04_scan_result_u32(p+0x1308)|
+        ((uint64_t)a04_scan_result_u32(p+0x130c)<<32);
+    if(scan_flags & ~(uint64_t)A04_SCAN_FLAG_HINTS)return EOPNOTSUPP;
+    uint32_t rssi=a04_scan_result_u32(p+0x1310);
+    if(rssi && rssi!=0x80000000u)return EOPNOTSUPP;
+    for(unsigned i=0x1314;i<bytes;i++)if(p[i])return EOPNOTSUPP;
+    out->mode=type;out->filtered=count!=0;out->channels=channels;return 0;
+}
+static inline int a04_scan_result_policy(uint32_t value,const void *in,
+    uint32_t bytes,unsigned *mode)
+{
+    if(!mode)return EINVAL;
+    struct a04_scan_request request={};
+    int error=a04_scan_result_request(value,in,bytes,&request);
+    if(!error)*mode=request.mode;
+    return error;
+}
+static inline unsigned a04_scan_result_selected(unsigned filtered,uint32_t channels,
+    const struct a04_scan_observation *r)
+{
+    if(!filtered)return 1;
+    return r && r->band==1 && r->channel && r->channel<=14 && ((channels>>r->channel)&1u);
 }
 static inline int a04_scan_result_encode(const struct a04_scan_snapshot *s,
     const struct a04_scan_observation *r,void *out,uint32_t *bytes)
@@ -98,13 +143,14 @@ static inline int a04_scan_result_encode(const struct a04_scan_snapshot *s,
 struct a04_scan_result_session {
     uint64_t generation;
     uint32_t cursor,count,pinned;
+    uint32_t filtered,channels; // requested 2.4GHz channel bitmap when filtered
 };
 static inline int a04_scan_result_accept(struct a04_scan_result_session *session,
     const struct a04_scan_snapshot *snapshot,unsigned cached)
 {
     if(!session || !snapshot || !snapshot->generation)return EINVAL;
     if(cached && !snapshot->complete)return EAGAIN;
-    *session={snapshot->generation,0,snapshot->complete?snapshot->count:0,snapshot->complete?1u:0u};
+    *session={snapshot->generation,0,snapshot->complete?snapshot->count:0,snapshot->complete?1u:0u,0,0};
     return 0;
 }
 /* Get snapshot/record atomically from backend for session.generation and

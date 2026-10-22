@@ -25,13 +25,17 @@ static inline int a04_scan_dispatch_set(struct a04_scan_result_session *session,
 {
     if(type!=10)return EOPNOTSUPP;
     if(!session || !backend || !backend->snapshot || !events)return EINVAL;
-    unsigned mode=0;int error=a04_scan_result_policy(value,in,bytes,&mode);
+    struct a04_scan_request request={};
+    int error=a04_scan_result_request(value,in,bytes,&request);
     if(error)return error;
+    unsigned mode=request.mode;
     struct a04_scan_snapshot snapshot={};
     if(mode==3){
         error=backend->snapshot(backend->context,0,0,&snapshot,nullptr);
         if(error)return error;
-        return a04_scan_result_accept(session,&snapshot,1);
+        error=a04_scan_result_accept(session,&snapshot,1);
+        if(!error){session->filtered=request.filtered;session->channels=request.channels;}
+        return error;
     }
     if(events->publishing)return EBUSY;
     if(!backend->begin)return EOPNOTSUPP;
@@ -40,7 +44,9 @@ static inline int a04_scan_dispatch_set(struct a04_scan_result_session *session,
     if(error)return error; // real errno, no unsupported mode success
     if(!generation)return EIO; // backend violated accepted-start contract
     snapshot.generation=generation;
-    return a04_scan_result_accept(session,&snapshot,0);
+    error=a04_scan_result_accept(session,&snapshot,0);
+    if(!error){session->filtered=request.filtered;session->channels=request.channels;}
+    return error;
 }
 static inline int a04_scan_dispatch_get(struct a04_scan_result_session *session,
     const struct a04_scan_backend *backend,uint32_t type,uint32_t value,
@@ -56,12 +62,20 @@ static inline int a04_scan_dispatch_get(struct a04_scan_result_session *session,
     if(error)return error;
     if(snapshot.generation!=session->generation)return ESTALE;
     if(!snapshot.complete)return EAGAIN;
-    if(session->cursor>=snapshot.count)
-        return a04_scan_result_next(session,&snapshot,nullptr,out,bytes);
-    struct a04_scan_observation record={};
-    error=backend->snapshot(backend->context,session->generation,session->cursor,&snapshot,&record);
-    if(error)return error;
-    return a04_scan_result_next(session,&snapshot,&record,out,bytes);
+    // Records outside a requested channel list are skipped, never encoded.
+    for(;;){
+        if(session->cursor>=snapshot.count)
+            return a04_scan_result_next(session,&snapshot,nullptr,out,bytes);
+        struct a04_scan_observation record={};
+        error=backend->snapshot(backend->context,session->generation,session->cursor,&snapshot,&record);
+        if(error)return error;
+        if(a04_scan_result_selected(session->filtered,session->channels,&record))
+            return a04_scan_result_next(session,&snapshot,&record,out,bytes);
+        if(snapshot.generation!=session->generation)return ESTALE;
+        if(!snapshot.complete)return EAGAIN;
+        if(session->pinned && snapshot.count!=session->count)return ESTALE;
+        session->count=snapshot.count;session->pinned=1;session->cursor++;
+    }
 }
 static inline unsigned a04_scan_completion_due(const struct a04_scan_completion_state *state,
     const struct a04_scan_snapshot *snapshot)
