@@ -413,7 +413,7 @@ OSDefineMetaClassAndStructors(A04BR3HIDTouch, IOHIDEventService);
 
 /*
  * Development-only virtual USB keyboard (GenericDesktop/Keyboard), published
- * only with a04br3.console=1. Setup on this iPad identity is already in
+ * only with a04br3.console=1 and a04br3.vkbd=1. Setup on this iPad identity is already in
  * hardware-keyboard mode (only the shortcut bar appears for a focused field),
  * so text entry is driven through this keyboard by the private UI test
  * client: a tap request on the bottom row y=1279 with x in 4..255 types HID
@@ -800,6 +800,12 @@ bool
 A04BR3HIDKeyboard::start(IOService *provider)
 {
     if (!a04_ui_console()) return false; // development console only
+    /* A published USB keyboard puts UIKit in hardware-keyboard mode and keeps
+     * the on-screen keyboard minimized, so the virtual keyboard additionally
+     * requires a04br3.vkbd=1. Without it, text is entered by tapping the
+     * on-screen keyboard like on a real device. */
+    int vkbd = 0;
+    if (!PE_parse_boot_argn("a04br3.vkbd", &vkbd, sizeof(vkbd)) || vkbd != 1) return false;
 	if (!IOHIDEventService::start(provider)) return false;
     if (!a04_ui_registry_init()) return false;
     // Layout attributes a physical USB keyboard reports (US ANSI).
