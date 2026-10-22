@@ -72,7 +72,7 @@ class A04BR3NativeNetwork : public IOService {
             IOLockUnlock(self->scanLock);
             if(skipped!=skippedBefore)
                 IOLog("A04BR3 scan get skipped=%u last_why=%u cursor=%u->%u count=%u\n",skipped,why,cursorBefore,cursor,count);
-            if(error && error!=EIO){
+            if(error){
                 const uint8_t *o=(const uint8_t *)out;
                 IOLog("A04BR3 scan get errno=%d gen=%llu cursor=%u count=%u bytes=%u ver=%u ielen=%u\n",error,
                     (unsigned long long)generation,cursor,count,bytes?*bytes:0,o?a04_scan_result_u32(o):0,

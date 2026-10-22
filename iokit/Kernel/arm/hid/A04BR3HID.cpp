@@ -513,10 +513,11 @@ A04BR3HIDButtons::uiGated(OSObject *owner, void *arg, void *, void *, void *)
         uint64_t deadline = 0;
         clock_interval_to_deadline(100, kMillisecondScale, &deadline);
         if (s[0] == A04_UI_HOME) {
-            self->dispatchEvent(down);
+            // Same path as the physical Home key (logs client count).
+            const uint64_t press[2] = {kHIDUsage_Csmr_Menu, 1}, release[2] = {kHIDUsage_Csmr_Menu, 0};
+            keyGated(self, (void *)press, NULL, NULL, NULL);
             self->_hidGate->commandSleep(&self->fUIActive, deadline, THREAD_UNINT);
-            up->setTimeStamp(mach_absolute_time());
-            self->dispatchEvent(up);
+            keyGated(self, (void *)release, NULL, NULL, NULL);
         } else {
             touch->uiDispatch(down);
             self->_hidGate->commandSleep(&self->fUIActive, deadline, THREAD_UNINT);
