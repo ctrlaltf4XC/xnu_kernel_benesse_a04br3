@@ -19,6 +19,12 @@ struct a04_boot_begin { uint64_t image_bytes;uint8_t sha256[32];uint64_t reserve
 #define A04_BOOT_BEGIN _IOW('B',0x61,struct a04_boot_begin)
 #define A04_BOOT_COMMIT _IO('B',0x62)
 #define A04_BOOT_ABORT _IO('B',0x63)
+/* Delta transfer: append bytes copied from the CURRENT boot partition at a
+ * 512-aligned source offset to the staging image. Only staged RAM changes;
+ * the final full-image SHA/header/GPT/readback COMMIT gate is unchanged. */
+struct a04_boot_copy { uint64_t source,bytes; };
+#define A04_BOOT_COPY _IOW('B',0x64,struct a04_boot_copy)
+_Static_assert(sizeof(struct a04_boot_copy)==16,"boot copy ABI");
 _Static_assert(sizeof(struct a04_boot_info)==32,"boot info ABI");
 _Static_assert(sizeof(struct a04_boot_begin)==48,"boot begin ABI");
 static inline uint32_t a04_boot_u32(const uint8_t *p) {

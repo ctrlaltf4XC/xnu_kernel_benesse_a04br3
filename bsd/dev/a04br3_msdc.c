@@ -436,6 +436,19 @@ static int boot_ioctl(__unused dev_t dev,u_long cmd,caddr_t data,int flag,struct
     }
     case A04_BOOT_COMMIT:
         error=(flag&FWRITE) ? boot_commit() : EBADF;break;
+    case A04_BOOT_COPY: {
+        const struct a04_boot_copy *copy=(void *)data;
+        uint64_t part=(uint64_t)boot_sectors*512;
+        if(!(flag&FWRITE)){error=EBADF;break;}
+        if(!boot_stage || boot_flags!=A04_BOOT_STAGING){error=EINVAL;break;}
+        if(!copy->bytes || copy->bytes>65536 || (copy->bytes&511u) || (copy->source&511u) ||
+            copy->source>part || copy->bytes>part-copy->source ||
+            copy->bytes>boot_image_bytes-boot_staged){error=EINVAL;break;}
+        error=boot_transfer(copy->source,(void *)boot_scratch,(unsigned)copy->bytes,0);
+        if(error){boot_flags=A04_BOOT_FAILED;__atomic_store_n(&boot_rx_fast,0,__ATOMIC_RELAXED);break;}
+        memcpy((void *)(boot_stage+boot_staged),(void *)boot_scratch,(size_t)copy->bytes);
+        boot_staged+=copy->bytes;break;
+    }
     case A04_BOOT_ABORT:
         if(!(flag&FWRITE))error=EBADF;else boot_discard();break;
     default:error=ENOTTY;break;
