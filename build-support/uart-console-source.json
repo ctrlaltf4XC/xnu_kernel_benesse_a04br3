@@ -1,7 +1,7 @@
 {
   "github_repository": "mouseos/xnu_device_benesse_a04br3",
   "repository": "https://github.com/mouseos/xnu_device_benesse_a04br3",
-  "commit": "65e301db75a719111a123fe9c77418d2e73ba10e",
+  "commit": "48545613ade4715e2cbb4753bcdc16479705a5bb",
   "files": {
     "tools/uart-console.c": "cf117e382270839a2c131ae5d564f6d8dba20ae3f33c75ab85e3d246b780a07c",
     "tools/uart-libSystem.tbd": "1d200943df8d7f10ecb24d0f05dfb694fa0aff5015bad45d28796d6568028079",
@@ -14,6 +14,8 @@
     "tools/build-a04-ui-test.sh": "ae8c5fe57f8bf0851c52daa6b563343d5bf74f1b11c3c02ff6fa64f9d794ea1d",
     "tools/a04br3_keyboard_state.c": "0bb4eabd0b4613b5addca60951273f7e8c6880731b427ff01b57451206189c30",
     "tools/a04br3_keyboard_state_sources.json": "6b57e4d68829bb613b56a66ac019d4f711520568201e6e584dab9b3bd2e4fecf",
-    "tools/build-a04br3-keyboard-state.sh": "fa9c045b1154a5ba9e84637c5fb24b7baa39a2d0601b1eaaffa3dfad6ad6a433"
+    "tools/build-a04br3-keyboard-state.sh": "fa9c045b1154a5ba9e84637c5fb24b7baa39a2d0601b1eaaffa3dfad6ad6a433",
+    "tools/a04-root-tweaks.c": "1e60b3aeef3da393cfaf852351abdc7efb6b89fef497b2b15a2b195d32c1934e",
+    "tools/build-a04-root-tweaks.sh": "4ec87aeba42fdc736043dd7c2214bbf9e2a2d77fc1242aad86dbcf0a1ca9c65f"
   }
 }

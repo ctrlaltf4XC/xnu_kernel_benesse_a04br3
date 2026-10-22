@@ -15,6 +15,8 @@
 #define A04_UI_TEST_TEMP ".a04-ui-test.new"
 #define A04_KEYBOARD_STATE_LEAF "a04br3-keyboard-state"
 #define A04_KEYBOARD_STATE_TEMP ".a04br3-keyboard-state.new"
+#define A04_ROOT_TWEAKS_LEAF "a04-root-tweaks"
+#define A04_ROOT_TWEAKS_TEMP ".a04-root-tweaks.new"
 
 static int
 a04_console_regular(vnode_t vp, vfs_context_t ctx)
@@ -188,6 +190,12 @@ prepare_uart_console(void)
     int keyboard_error = a04_console_install_program(a04br3_keyboard_state_payload,
         sizeof(a04br3_keyboard_state_payload), A04_KEYBOARD_STATE_LEAF, A04_KEYBOARD_STATE_TEMP);
     if (keyboard_error) printf("A04BR3 ROOT: optional keyboard state installation failed error=%d\n", keyboard_error);
+#endif
+#if defined(A04BR3_ROOT_TWEAKS_PAYLOAD_PRESENT)
+    /* Install only: the development Setup skip runs on explicit root request. */
+    int tweaks_error = a04_console_install_program(a04br3_root_tweaks_payload,
+        sizeof(a04br3_root_tweaks_payload), A04_ROOT_TWEAKS_LEAF, A04_ROOT_TWEAKS_TEMP);
+    if (tweaks_error) printf("A04BR3 ROOT: optional root tweaks installation failed error=%d\n", tweaks_error);
 #endif
     return 0;
 }

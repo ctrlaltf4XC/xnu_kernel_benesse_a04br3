@@ -15,6 +15,7 @@ CAPTURE_FILES=frozenset(('tools/a04-fb-capture.c','tools/a04-fb-capture.h',
 KEYBOARD_STATE_FILES=frozenset(('tools/a04br3_keyboard_state.c',
     'tools/a04br3_keyboard_state_sources.json','tools/build-a04br3-keyboard-state.sh'))
 UI_TEST_FILES=frozenset(('tools/a04-ui-test.c','tools/build-a04-ui-test.sh'))
+ROOT_TWEAKS_FILES=frozenset(('tools/a04-root-tweaks.c','tools/build-a04-root-tweaks.sh'))
 
 def _binary_bytes(path,label):
     data=path.read_bytes()
@@ -43,6 +44,9 @@ def stage_console(work_source,cache):
     ui_test=UI_TEST_FILES.intersection(pin['files'])
     if ui_test and ui_test!=UI_TEST_FILES:
         raise ValueError('incomplete pinned UI test source set: '+','.join(sorted(UI_TEST_FILES-ui_test)))
+    root_tweaks=ROOT_TWEAKS_FILES.intersection(pin['files'])
+    if root_tweaks and root_tweaks!=ROOT_TWEAKS_FILES:
+        raise ValueError('incomplete pinned root tweaks source set: '+','.join(sorted(ROOT_TWEAKS_FILES-root_tweaks)))
     keyboard_state=KEYBOARD_STATE_FILES.intersection(pin['files'])
     if keyboard_state and keyboard_state!=KEYBOARD_STATE_FILES:
         raise ValueError('incomplete pinned keyboard state source set: '+','.join(sorted(KEYBOARD_STATE_FILES-keyboard_state)))
@@ -77,6 +81,12 @@ def stage_console(work_source,cache):
         result['keyboard_state']=keyboard_result
         text+='#define A04BR3_KEYBOARD_STATE_PAYLOAD_PRESENT 1\n'
         text+=_array('a04br3_keyboard_state_payload',data)
+    if root_tweaks:
+        data,tweaks_result=_build_program(src,cache,'a04-root-tweaks','build-a04-root-tweaks.sh',
+            pin,previous.get('root_tweaks',{}),'root tweaks')
+        result['root_tweaks']=tweaks_result
+        text+='#define A04BR3_ROOT_TWEAKS_PAYLOAD_PRESENT 1\n'
+        text+=_array('a04br3_root_tweaks_payload',data)
     # Publish only after every requested source build and validation succeeded.
     target=Path(work_source)/'bsd/dev/a04br3_console_payload.inc'
     if not target.is_file() or target.read_text()!=text:target.write_text(text)
