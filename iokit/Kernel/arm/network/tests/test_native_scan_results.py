@@ -221,7 +221,9 @@ int main(){
  memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;uint32_t bytes=1164;assert(a04_scan_dispatch_get(&s,&b,11,0,out,&bytes)==EIO);
  // Unfiltered request returns all three.
  base(p);s={};assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev)&&!s.filtered);
- for(unsigned i=0;i<3;i++){memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;bytes=1164;assert(!a04_scan_dispatch_get(&s,&b,11,0,out,&bytes));}
+ // Hardware CoreWiFi caller header: version0, ie_len1024; output written as version1.
+ for(unsigned i=0;i<3;i++){memset(out,0,sizeof(out));out[0x8b]=4;bytes=1164;
+  assert(!a04_scan_dispatch_get(&s,&b,11,0,out,&bytes)&&a04_scan_result_u32(out)==1);}
  // A record whose IEs disagree with its metadata is skipped, others returned.
  m.records[1].rate_count=2;base(p);s={};assert(!a04_scan_dispatch_set(&s,&b,10,0,p,sizeof(p),&ev));
  unsigned got=0;for(;;){memset(out,0,sizeof(out));out[0]=1;out[0x8b]=4;bytes=1164;

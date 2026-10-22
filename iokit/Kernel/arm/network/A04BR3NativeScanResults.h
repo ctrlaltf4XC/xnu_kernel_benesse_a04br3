@@ -90,6 +90,15 @@ static inline unsigned a04_scan_result_selected(unsigned filtered,uint32_t chann
     if(!filtered)return 1;
     return r && r->band==1 && r->channel && r->channel<=14 && ((channels>>r->channel)&1u);
 }
+/* GET11 caller header: CoreWiFi on hardware passes version0 with ie_len1024
+ * (kernel 5f41857 UART "scan get ... ver=0 ielen=1024"); version1 is the
+ * itlwm producer form. Output is always written as version1.
+ */
+static inline unsigned a04_scan_result_get_header(const uint8_t *p)
+{
+    uint32_t version=a04_scan_result_u32(p);
+    return (version==0 || version==1) && ((unsigned)p[0x8a]|((unsigned)p[0x8b]<<8))==1024;
+}
 /* Record-level validation. Codes: 1 bounds, 2 band/channel/rcpi, 3 bssid,
  * 4 TLV framing, 5 SSID IE mismatch, 6 rate IE mismatch, 7 DS channel
  * mismatch, 8 missing SSID/rates or rate count mismatch. A failing record is
@@ -129,7 +138,7 @@ static inline int a04_scan_result_encode(const struct a04_scan_snapshot *s,
 {
     if(!s || !r || !out || !bytes || *bytes!=1164)return EINVAL;
     uint8_t *p=(uint8_t *)out;
-    if(a04_scan_result_u32(p)!=1 || ((unsigned)p[0x8a]|((unsigned)p[0x8b]<<8))!=1024)return EINVAL;
+    if(!a04_scan_result_get_header(p))return EINVAL;
     if(!s->generation || r->generation!=s->generation)return ESTALE;
     if(!s->complete)return EAGAIN;
     int error=a04_scan_result_record_check(s,r,nullptr);

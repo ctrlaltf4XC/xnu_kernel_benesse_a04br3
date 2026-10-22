@@ -56,7 +56,7 @@ static inline int a04_scan_dispatch_get(struct a04_scan_result_session *session,
     if(!session || !session->generation || !backend || !backend->snapshot)return EINVAL;
     if(!out || !bytes || *bytes!=1164)return EINVAL;
     const uint8_t *p=(const uint8_t *)out;
-    if(a04_scan_result_u32(p)!=1 || ((unsigned)p[0x8a]|((unsigned)p[0x8b]<<8))!=1024)return EINVAL;
+    if(!a04_scan_result_get_header(p))return EINVAL;
     struct a04_scan_snapshot snapshot={};
     int error=backend->snapshot(backend->context,session->generation,session->cursor,&snapshot,nullptr);
     if(error)return error;
