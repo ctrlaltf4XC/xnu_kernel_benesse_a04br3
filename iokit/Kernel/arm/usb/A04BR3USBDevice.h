@@ -46,7 +46,8 @@ static inline int a04_usb_device_start(struct a04_usb_device *s,unsigned enable,
  a04_usb_device_bar(s);wait_us(c,20000);
  io->write16(c,0x74,(uint16_t)(io->read16(c,0x74)|3));
  a04_usb_device_reset(s);s->active=1;
- io->write8(c,1,(uint8_t)((io->read8(c,1)&~0x0dU)|0x60));a04_usb_device_bar(s);return 0;
+ /* Board HS receive did not deliver SETUPs; start at full speed (HSENAB=0). */
+ io->write8(c,1,(uint8_t)((io->read8(c,1)&~0x2dU)|0x40));a04_usb_device_bar(s);return 0;
 }
 static inline void a04_usb_device_stop(struct a04_usb_device *s){
  if(!s || !s->active)return;
@@ -117,7 +118,11 @@ static inline int a04_usb_device_bulk(struct a04_usb_device *s,unsigned txevent)
  if(!s->configured)return A04_MUSB_AGAIN;
  struct a04_musb_io *i=&s->io;void *c=i->context;a04_usb_device_index(s,1);
  unsigned tx=i->read16(c,0x12),rx=i->read16(c,0x16);
- if((tx&0xdcb4) || !(tx&0x2000) || (rx&0xe96c))return A04_MUSB_FAULT;
+ /* UNDERRUN (TXCSR bit2) only means the host sent an IN token while no
+  * reply was loaded; that is normal for a polled bulk IN. Clear it (W0C) as
+  * the MUSB gadget does, and keep treating DMA/ISO/stall bits as faults. */
+ if(tx&0x0004){i->write16(c,0x12,(uint16_t)(tx&~0x0004U));a04_usb_device_bar(s);tx=i->read16(c,0x12);}
+ if((tx&0xdcb0) || !(tx&0x2000) || (rx&0xe96c))return A04_MUSB_FAULT;
  if(s->tx_pending && txevent && !(tx&3)){s->tx_pending=0;if(s->console.ops.tx_complete)s->console.ops.tx_complete(s->console.ops.context);}
  /* ACK and SUSPEND can coalesce between finite worker polls. Retire the
   * already ACKed IN before gating new OUT work, or drain loses its event. */
