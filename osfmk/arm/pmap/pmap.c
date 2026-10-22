@@ -11337,6 +11337,18 @@ pmap_max_64bit_offset(
 		panic("pmap_max_64bit_offset illegal option 0x%x", option);
 	}
 
+#if defined(ARM64_BOARD_CONFIG_A04BR3)
+	/*
+	 * This board builds the macOS configuration (as ios-sweet does), whose
+	 * MACH_VM_MAX_ADDRESS exceeds the 4K-page user translation range
+	 * (T0SZ_BOOT). A jumbo map (WebKit WebContent) was then handed VAs above
+	 * pmap->max (1 << (64 - T0SZ_BOOT)) and pmap_remove_options() panicked.
+	 * Never advertise more user VA than the page tables can translate.
+	 */
+	if (max_offset_ret > (1ULL << (64 - T0SZ_BOOT))) {
+		max_offset_ret = 1ULL << (64 - T0SZ_BOOT);
+	}
+#endif
 	assert(max_offset_ret <= MACH_VM_MAX_ADDRESS);
 	assert(max_offset_ret >= min_max_offset);
 #else
