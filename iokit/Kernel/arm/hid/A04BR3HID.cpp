@@ -802,6 +802,9 @@ A04BR3HIDKeyboard::start(IOService *provider)
     if (!a04_ui_console()) return false; // development console only
 	if (!IOHIDEventService::start(provider)) return false;
     if (!a04_ui_registry_init()) return false;
+    // Layout attributes a physical USB keyboard reports (US ANSI).
+    setProperty("CountryCode", 0ULL, 32);
+    setProperty("StandardType", 0ULL, 32);
     IOLockLock(gA04UIRegistryLock);
     gA04BR3Keyboard = this;
     IOLockUnlock(gA04UIRegistryLock);
