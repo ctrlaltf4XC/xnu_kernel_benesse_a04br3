@@ -159,6 +159,7 @@ int hfs_vnop_rename(struct vnop_rename_args*);
 int hfs_vnop_renamex(struct vnop_renamex_args*);
 int hfs_vnop_rmdir(struct vnop_rmdir_args*);
 int hfs_vnop_symlink(struct vnop_symlink_args*);
+int hfs_vnop_clonefile(struct vnop_clonefile_args*);
 int hfs_vnop_setattr(struct vnop_setattr_args*);
 int hfs_vnop_readlink(struct vnop_readlink_args *);
 int hfs_vnop_pathconf(struct vnop_pathconf_args *);
@@ -7413,6 +7414,197 @@ hfs_vnop_fsync(struct vnop_fsync_args *ap)
 	return (error);
 }
 
+/*
+ * clonefile(2) for HFS+.  HFS+ has no shared-extent clones, so a clone is a
+ * new catalog node whose contents are copied from the source.  installd's
+ * MIFileManager stages every bundle file with clonefile() and has no
+ * fallback, so without this VNOP no app can be installed on this volume.
+ * Regular files and symbolic links are supported; directories return
+ * ENOTSUP as before (callers create directories themselves).
+ */
+#define HFS_CLONE_COPY_CHUNK	(256 * 1024)
+
+static int
+hfs_clone_copy_data(struct vnode *fvp, struct vnode *tvp, vfs_context_t ctx)
+{
+	struct vnode_attr va;
+	kauth_cred_t cred = vfs_context_ucred(ctx);
+	proc_t p = vfs_context_proc(ctx);
+	off_t size, offset = 0;
+	caddr_t buf;
+	int error;
+
+	VATTR_INIT(&va);
+	VATTR_WANTED(&va, va_data_size);
+	if ((error = vnode_getattr(fvp, &va, ctx)) != 0) {
+		return error;
+	}
+	size = (off_t)va.va_data_size;
+	if (size == 0) {
+		return 0;
+	}
+
+	buf = hfs_malloc_data(HFS_CLONE_COPY_CHUNK);
+	if (buf == NULL) {
+		return ENOMEM;
+	}
+	while (offset < size) {
+		int len = (int)MIN((off_t)HFS_CLONE_COPY_CHUNK, size - offset);
+		int resid = 0;
+
+		error = vn_rdwr(UIO_READ, fvp, buf, len, offset, UIO_SYSSPACE,
+		    IO_NOAUTH, cred, &resid, p);
+		if (error) {
+			break;
+		}
+		if (resid == len) {
+			/* Source shrank underneath us: clone what exists. */
+			break;
+		}
+		len -= resid;
+		error = vn_rdwr(UIO_WRITE, tvp, buf, len, offset, UIO_SYSSPACE,
+		    IO_NOAUTH, cred, &resid, p);
+		if (error) {
+			break;
+		}
+		if (resid != 0) {
+			error = EIO;
+			break;
+		}
+		offset += len;
+	}
+	hfs_free_data(buf, HFS_CLONE_COPY_CHUNK);
+	return error;
+}
+
+int
+hfs_vnop_clonefile(struct vnop_clonefile_args *ap)
+{
+	struct vnode *fvp = ap->a_fvp;
+	struct vnode *dvp = ap->a_dvp;
+	struct vnode_attr *vap = ap->a_vap;
+	vfs_context_t ctx = ap->a_context;
+	struct vnode *tvp = NULLVP;
+	u_int32_t want_flags = 0;
+	int set_flags = 0;
+	int error;
+
+	*ap->a_vpp = NULLVP;
+
+	if (VTOVCB(dvp)->vcbSigWord != kHFSPlusSigWord) {
+		return ENOTSUP;
+	}
+	if (vnode_mount(fvp) != vnode_mount(dvp)) {
+		return EXDEV;
+	}
+	if (ap->a_flags & VNODE_CLONEFILE_NOOWNERCOPY) {
+		/* Owner comes from the caller's credentials. */
+		VATTR_CLEAR_ACTIVE(vap, va_uid);
+		VATTR_CLEAR_ACTIVE(vap, va_gid);
+	}
+	/*
+	 * BSD flags (e.g. immutable) must be applied after the data is
+	 * written, otherwise the copy itself would be refused.
+	 */
+	if (VATTR_IS_ACTIVE(vap, va_flags)) {
+		want_flags = vap->va_flags;
+		set_flags = 1;
+		VATTR_CLEAR_ACTIVE(vap, va_flags);
+	}
+
+	switch (vnode_vtype(fvp)) {
+	case VREG:
+		error = hfs_makenode(dvp, &tvp, ap->a_cnp, vap, ctx);
+		if (error) {
+			break;
+		}
+		error = hfs_clone_copy_data(fvp, tvp, ctx);
+		break;
+
+	case VLNK: {
+		struct vnop_readlink_args rla;
+		struct vnop_symlink_args sla;
+		char *target;
+		uio_t auio;
+		user_ssize_t len;
+
+		target = hfs_malloc_data(MAXPATHLEN + 1);
+		if (target == NULL) {
+			error = ENOMEM;
+			break;
+		}
+		auio = uio_create(1, 0, UIO_SYSSPACE, UIO_READ);
+		if (auio == NULL) {
+			hfs_free_data(target, MAXPATHLEN + 1);
+			error = ENOMEM;
+			break;
+		}
+		uio_addiov(auio, CAST_USER_ADDR_T(target), MAXPATHLEN);
+		rla.a_desc = &vnop_readlink_desc;
+		rla.a_vp = fvp;
+		rla.a_uio = auio;
+		rla.a_context = ctx;
+		error = hfs_vnop_readlink(&rla);
+		len = MAXPATHLEN - uio_resid(auio);
+		uio_free(auio);
+		if (error == 0) {
+			target[len] = '\0';
+			sla.a_desc = &vnop_symlink_desc;
+			sla.a_dvp = dvp;
+			sla.a_vpp = &tvp;
+			sla.a_cnp = ap->a_cnp;
+			sla.a_vap = vap;
+			sla.a_target = target;
+			sla.a_context = ctx;
+			error = hfs_vnop_symlink(&sla);
+		}
+		hfs_free_data(target, MAXPATHLEN + 1);
+		break;
+	}
+
+	default:
+		return ENOTSUP;
+	}
+
+	if (error == 0 && set_flags) {
+		struct vnode_attr fva;
+
+		VATTR_INIT(&fva);
+		VATTR_SET(&fva, va_flags, want_flags);
+		error = vnode_setattr(tvp, &fva, ctx);
+		if (error == 0) {
+			VATTR_SET_SUPPORTED(vap, va_flags);
+		}
+	}
+	if (set_flags) {
+		/* Keep the caller's attribute bookkeeping consistent. */
+		VATTR_SET_ACTIVE(vap, va_flags);
+		if (error == 0) {
+			VATTR_SET_SUPPORTED(vap, va_flags);
+		}
+	}
+
+	if (error) {
+		if (tvp != NULLVP) {
+			/* Do not leave a partial clone behind. */
+			struct vnop_remove_args rma;
+
+			rma.a_desc = &vnop_remove_desc;
+			rma.a_dvp = dvp;
+			rma.a_vp = tvp;
+			rma.a_cnp = ap->a_cnp;
+			rma.a_flags = 0;
+			rma.a_context = ctx;
+			(void)hfs_vnop_remove(&rma);
+			vnode_put(tvp);
+		}
+		return error;
+	}
+	*ap->a_vpp = tvp;
+	return 0;
+}
+
+
 int (**hfs_vnodeop_p)(void *);
 
 #define VOPFUNC int (*)(void *)
@@ -7422,6 +7614,7 @@ const struct vnodeopv_entry_desc hfs_vnodeop_entries[] = {
     { &vnop_default_desc, (VOPFUNC)vn_default_error },
     { &vnop_lookup_desc, (VOPFUNC)hfs_vnop_lookup },		/* lookup */
     { &vnop_create_desc, (VOPFUNC)hfs_vnop_create },		/* create */
+    { &vnop_clonefile_desc, (VOPFUNC)hfs_vnop_clonefile },	/* clonefile */
     { &vnop_mknod_desc, (VOPFUNC)hfs_vnop_mknod },             /* mknod */
     { &vnop_open_desc, (VOPFUNC)hfs_vnop_open },			/* open */
     { &vnop_close_desc, (VOPFUNC)hfs_vnop_close },		/* close */
