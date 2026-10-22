@@ -69,6 +69,7 @@ struct IOCommandGate:OSObject {using Action=IOReturn(*)(OSObject*,void*,void*,vo
  pthread_mutex_unlock(&loop->mutex);
 #endif
  return r;}
+ static inline unsigned sleeps=0;int commandSleep(void*,uint64_t,int){++sleeps;return 0;}
  IOReturn attemptAction(Action f,void *a=NULL){if(gateDeny)return kIOReturnCannotLock;
 #ifndef A04_ARM64
  if(pthread_mutex_trylock(&loop->mutex))return kIOReturnCannotLock;
@@ -97,6 +98,9 @@ template<class T>static T *allocate(){return clientAllocFail?NULL:new T();}
 static void *current_task(){return (void*)1;}
 static bool PE_parse_boot_argn(const char *s,void *out,unsigned){if(s[0]=='a'&&s[6]=='.'){*(int*)out=console;return console!=-1;}return false;}
 extern "C" uint64_t mach_absolute_time(){static uint64_t t;return ++t;}
+#define kMillisecondScale 1000000u
+#define THREAD_UNINT 0
+static void clock_interval_to_deadline(uint32_t,uint32_t,uint64_t *d){*d=1;}
 extern "C" void a04br3_keys_init(){++keysInit;}extern "C" void a04br3_touch_init(){++touchInit;}
 struct IOHIDEvent:OSObject {int type=0,usage=0,down=0;uint64_t timestamp=0,sender=0;int fields[16]={};OSArray *children=NULL;
  ~IOHIDEvent(){if(children)children->release();}
@@ -172,6 +176,7 @@ int main(){
  // A hardware arrival waits for the gate, then is delivered after release.
  callbackMode=3;std::thread physical([]{while(!entered)std::this_thread::yield();a04br3_hid_key(3,1);physicalFinished=1;});assert(!client->externalMethod(0,&args));physical.join();callbackMode=0;assert(sent==3&&downs==2&&ups==1&&physicalFinished);a04br3_hid_key(3,0);cleanEvents();
  touch->stop(NULL);assert(client->externalMethod(0,&args)==kIOReturnNotReady&&!sent);touch->release();buttons->stop(NULL);assert(client->externalMethod(0,&args)==kIOReturnNotReady&&!sent);client->clientClose();client->release();buttons->release();assert(alive==baseline);
+ assert(IOCommandGate::sleeps>0); // held press between down and up
  printf("PASS private dispatch/native input/allocation rollback/close death/gate concurrency/refcounts\n");
 }
 #endif

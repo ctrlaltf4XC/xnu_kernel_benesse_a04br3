@@ -506,13 +506,20 @@ A04BR3HIDButtons::uiGated(OSObject *owner, void *arg, void *, void *, void *)
     }
     IOReturn result = kIOReturnNoMemory;
     if (down && up) {
-        // No allocations, blocking delay or userland roundtrip between the pair.
+        // No allocations or userland roundtrip between the pair. A zero-length
+        // press did not advance Setup Hello on hardware (Home and tap reached
+        // the queue, UI unchanged) while physical presses do, so hold ~100ms
+        // with the gate released; fUIActive keeps other UI requests busy.
+        uint64_t deadline = 0;
+        clock_interval_to_deadline(100, kMillisecondScale, &deadline);
         if (s[0] == A04_UI_HOME) {
             self->dispatchEvent(down);
+            self->_hidGate->commandSleep(&self->fUIActive, deadline, THREAD_UNINT);
             up->setTimeStamp(mach_absolute_time());
             self->dispatchEvent(up);
         } else {
             touch->uiDispatch(down);
+            self->_hidGate->commandSleep(&self->fUIActive, deadline, THREAD_UNINT);
             up->setTimeStamp(mach_absolute_time());
             touch->uiDispatch(up);
         }
