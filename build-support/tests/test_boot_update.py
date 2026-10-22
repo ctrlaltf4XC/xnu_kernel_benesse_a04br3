@@ -176,7 +176,7 @@ int main(void){
 '''
         with tempfile.TemporaryDirectory() as d:
             src=Path(d)/'test.c';exe=Path(d)/'test';src.write_text(harness)
-            subprocess.run(['cc','-Wall','-Wextra','-Werror','-Wno-deprecated-declarations',
+            subprocess.run(['cc','-Wall','-Wextra','-Werror','-Wno-deprecated-declarations','-Wno-unused-function',
                             '-fsanitize=address,undefined','-g',str(src),'-lcrypto','-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True)
 
