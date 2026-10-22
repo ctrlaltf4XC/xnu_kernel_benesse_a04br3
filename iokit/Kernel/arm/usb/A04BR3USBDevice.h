@@ -46,8 +46,8 @@ static inline int a04_usb_device_start(struct a04_usb_device *s,unsigned enable,
  a04_usb_device_bar(s);wait_us(c,20000);
  io->write16(c,0x74,(uint16_t)(io->read16(c,0x74)|3));
  a04_usb_device_reset(s);s->active=1;
- /* Board HS receive did not deliver SETUPs; start at full speed (HSENAB=0). */
- io->write8(c,1,(uint8_t)((io->read8(c,1)&~0x2dU)|0x40));a04_usb_device_bar(s);return 0;
+ /* High speed first (HSENAB); the controller falls back to FS on timeout. */
+ io->write8(c,1,(uint8_t)((io->read8(c,1)&~0x0dU)|0x60));a04_usb_device_bar(s);return 0;
 }
 static inline void a04_usb_device_stop(struct a04_usb_device *s){
  if(!s || !s->active)return;

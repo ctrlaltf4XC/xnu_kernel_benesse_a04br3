@@ -15,6 +15,8 @@
 #include "../../iokit/Kernel/arm/usb/A04BR3USBDevice.h"
 #include "../../iokit/Kernel/arm/usb/A04BR3USBPwrap.h"
 extern vm_offset_t ml_io_map(vm_offset_t,vm_size_t);
+extern uint64_t mach_absolute_time(void);
+extern void absolutetime_to_nanoseconds(uint64_t,uint64_t *);
 int a04br3_usb_controller_start(void);
 int a04br3_usb_controller_poll(void);
 void a04br3_usb_controller_stop(void);
@@ -103,19 +105,22 @@ int a04br3_usb_controller_poll(void) {
  for(unsigned spin=0;device.active && device.pending && e!=A04_MUSB_FAULT && spin<1000;spin++){
   wait_us(&board,5);e=a04_usb_device_poll(&device,1);
  }
- /* Bounded fallbacks when no host address arrives: reconnect, then FS-only. */
- { static unsigned idle,attempt;
-   /* Host log showed descriptor IN failing (-71) after address assignment, so
-    * retry whenever configuration is missing; attempts>=3 force full speed. */
+ /* Time-based fallback. Poll counts are not time: the worker batches up to
+  * 16 polls per 1ms wake, so a count-based 3000-poll limit reconnected every
+  * ~0.2s and aborted the ~2s HS reset/chirp (host: "Cannot enable"). Wait
+  * 10s per attempt; two HS attempts, then full speed (HSENAB=0). */
+ { static uint64_t since;static unsigned attempt;
    if(device.active && !device.configured){
-    if(++idle>=3000 && attempt<6){
-     idle=0;attempt++;uint8_t p=mac8(&board,1);
+    uint64_t now=mach_absolute_time(),ns=0;if(!since)since=now;
+    absolutetime_to_nanoseconds(now-since,&ns);
+    if(ns>=10000000000ULL && attempt<4){
+     since=now;attempt++;uint8_t p=mac8(&board,1);
      macw8(&board,1,(uint8_t)(p&~0x40u));for(unsigned n=0;n<10;n++)wait_us(&board,20000);
-     if(attempt>=3)p&=(uint8_t)~0x20u;
+     if(attempt>=2)p&=(uint8_t)~0x20u;
      macw8(&board,1,(uint8_t)(p|0x40u));
-     printf("A04BR3 USB: not configured, reconnect attempt=%u power=0x%x hs=%u\n",attempt,mac8(&board,1),attempt<3);
+     printf("A04BR3 USB: not configured, reconnect attempt=%u power=0x%x hs=%u\n",attempt,mac8(&board,1),attempt<2);
     }
-   } else idle=0; }
+   } else since=0; }
  /* Bounded enumeration diagnostics: never read clear-on-read INTRUSB here. */
  { static unsigned ticks;
    if(device.active && !device.configured && (++ticks%400)==0 && ticks<=400*60)
