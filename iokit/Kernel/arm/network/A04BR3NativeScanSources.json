@@ -33,7 +33,18 @@
     "scan": "ev_b9c18a1c2b0fd086a404e9a5e5983d2f63254c702d741d4c854d126c578bf7b8",
     "helper": "ev_a250abba8853b15f80f39b56fd03170e795fd288c364a68e3585c5ec6d303266",
     "policy": "ev_371521687beae85eb7e32175bef34ad1e5b80173f752700d8b64896957bbe0d9",
-    "crosscheck": "Direct SET10/5456 GET11/1164; exact result offsets match mac12+ inlineIE1024. Donor REA proves consumer offsets/end/event; source corroborates scan enum, nested channel version1, band0x8, age ms. Rates copy loop precedes count assignment and does NOT prove rate conversion."
+    "crosscheck": "Direct SET10/5456 GET11/1164; exact result offsets match mac12+ inlineIE1024. Donor REA proves consumer offsets/end/event; source corroborates scan enum, nested channel version1, band0x8, age ms. Rates copy loop precedes count assignment and does NOT prove rate conversion.",
+    "request_dictionary_default": {
+      "evidence": "ev_371521687beae85eb7e32175bef34ad1e5b80173f752700d8b64896957bbe0d9",
+      "offset": "0x1310",
+      "values": [
+        "0x00000000 (NULL options carrier)",
+        "0x80000000 (non-NULL options dictionary, no override)"
+      ],
+      "contract": "Accept only the two observed defaults; identity of CFString option key not assumed. Other bits/filters still rejected. Backend modes/generation/result/complete unchanged.",
+      "current_boot": "kernel7d3/device565 has real14AP then SET10/5456 errno102; request payload not observed, no sole-cause assertion.",
+      "tests": "test_native_scan_results.py donor defaults + 261510 carriers; actual dispatch callbacks/errors/generation and no cached RF"
+    }
   },
   "notes": [
     "Production A04BR3NativeRendezvous uses A04BR3NativeScanAdapter -> actual SDIO snapshot/copy_record and scan_mode(service,active,&acceptedGeneration); API1 required at compile time, no fallback.",

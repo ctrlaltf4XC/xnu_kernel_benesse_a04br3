@@ -106,4 +106,68 @@ int main(){
    p=Path(tmp);(p/'case.cpp').write_text(case)
    subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I',str(ROOT),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
    subprocess.run([str(p/'case')],check=True)
+ def test_donor_dictionary_defaults_and_strict_policy_before_backend(self):
+  # REA ev_371521...: NULL options and non-NULL dictionary use different
+  # default wire carriers. This is a semantic fixture, not native raw bytes.
+  case=r'''
+#include "A04BR3NativeScanDispatch.h"
+#include <assert.h>
+#include <stdio.h>
+struct Backend {unsigned begins,snapshots,active;int error;uint64_t generation;};
+static int begin(void *c,unsigned active,uint64_t *generation){
+ auto *b=(Backend *)c;b->begins++;b->active=active;if(b->error)return b->error;
+ *generation=++b->generation;return 0;
+}
+static int snapshot(void *c,uint64_t,unsigned,a04_scan_snapshot *out,a04_scan_observation *){
+ auto *b=(Backend *)c;b->snapshots++;if(b->error)return b->error;
+ *out={b->generation,1000,0,1};return 0;
+}
+static void request(uint8_t *p,unsigned type,uint32_t def){
+ memset(p,0,5456);a04_scan_result_put32(p,1);a04_scan_result_put32(p+4,3);
+ a04_scan_result_put32(p+0x34,type);a04_scan_result_put32(p+0x38,1);
+ a04_scan_result_put32(p+0x1310,def);
+}
+int main(){
+ uint8_t p[5456],old[5456];unsigned cases=0;
+ for(unsigned type=1;type<=3;type++)for(unsigned dictionary=0;dictionary<2;dictionary++){
+  request(p,type,dictionary?0x80000000u:0);memcpy(old,p,sizeof(p));unsigned mode=99;
+  assert(!a04_scan_result_policy(0,p,sizeof(p),&mode)&&mode==type);
+  assert(!memcmp(p,old,sizeof(p)));cases++;
+  // Every other policy bit remains rejected; both original carriers retained.
+  for(unsigned i=4;i<sizeof(p);i++)for(unsigned bit=0;bit<8;bit++){
+   if(i>=0x34&&i<0x38)continue;
+   p[i]^=1u<<bit;mode=99;int error=a04_scan_result_policy(0,p,sizeof(p),&mode);
+   if(i==0x1313&&bit==7)assert(!error&&mode==type);
+   else assert(error==EOPNOTSUPP&&mode==99);
+   p[i]^=1u<<bit;cases++;
+  }
+  Backend backend={0,0,0,0,50};a04_scan_backend b={&backend,begin,snapshot};
+  a04_scan_result_session session={};a04_scan_completion_state event={};
+  assert(!a04_scan_dispatch_set(&session,&b,10,0,p,sizeof(p),&event));
+  assert(session.generation==(type==3?50:51));
+  assert(backend.begins==(type==3?0u:1u));
+  if(type!=3)assert(backend.active==(type==1?1u:0u));
+  // Every valid request still reaches the real callback error contract.
+  backend.error=ENETDOWN;auto before=session;unsigned calls=backend.begins+backend.snapshots;
+  assert(a04_scan_dispatch_set(&session,&b,10,0,p,sizeof(p),&event)==ENETDOWN);
+  assert(!memcmp(&session,&before,sizeof(session))&&backend.begins+backend.snapshots==calls+1);
+  // Unknown policy cannot reach callbacks or mutate accepted generation.
+  p[0x1308]=1;calls=backend.begins+backend.snapshots;
+  assert(a04_scan_dispatch_set(&session,&b,10,0,p,sizeof(p),&event)==EOPNOTSUPP);
+  assert(!memcmp(&session,&before,sizeof(session))&&backend.begins+backend.snapshots==calls);
+ }
+ request(p,1,0x80000000u);unsigned mode=99;
+ for(unsigned length=0;length<5456;length++){
+  assert(a04_scan_result_policy(0,p,length,&mode)==EINVAL&&mode==99);
+ }
+ assert(a04_scan_result_policy(1,p,sizeof(p),&mode)==EOPNOTSUPP&&mode==99);
+ assert(a04_scan_result_policy(0,nullptr,sizeof(p),&mode)==EINVAL&&mode==99);
+ assert(a04_scan_result_policy(0,p,sizeof(p),nullptr)==EINVAL);
+ puts("PASS donor default scan admission: 261510 carriers, active/passive/cached real callback/generation/error contract, no fabricated completion");
+}
+'''
+  with tempfile.TemporaryDirectory() as tmp:
+   p=Path(tmp);(p/'case.cpp').write_text(case)
+   subprocess.run(['c++','-std=c++14','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-fno-sanitize-recover=all','-I',str(ROOT),str(p/'case.cpp'),'-o',str(p/'case')],check=True)
+   subprocess.run([str(p/'case')],check=True)
 if __name__=='__main__':unittest.main()

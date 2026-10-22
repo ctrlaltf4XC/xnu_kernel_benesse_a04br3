@@ -21,6 +21,10 @@ static inline void a04_scan_result_put32(uint8_t *p,uint32_t v)
 {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(8*i));}
 /* 1=active,2=passive,3=cached, corroborated source enum + donor type3 wait
  * bypass. Only canonical unfiltered version1/BSSany/PHY1 request is accepted.
+ * Donor __getScanData leaves +0x1310 zero for NULL options, but explicitly
+ * writes 0x80000000 for a non-NULL dictionary without a key override
+ * (ev_371521687beae85eb7e32175bef34ad1e5b80173f752700d8b64896957bbe0d9).
+ * Accept those two default carriers only; no arbitrary option/filter values.
  * An unsupported policy leaves *mode unchanged, never silently drops filters.
  */
 static inline int a04_scan_result_policy(uint32_t value,const void *in,
@@ -32,8 +36,11 @@ static inline int a04_scan_result_policy(uint32_t value,const void *in,
     if(a04_scan_result_u32(p)!=1)return EINVAL;
     unsigned type=a04_scan_result_u32(p+0x34);
     if(type<1 || type>3)return EOPNOTSUPP;
+    uint32_t dictionary_default=a04_scan_result_u32(p+0x1310);
+    if(dictionary_default && dictionary_default!=0x80000000u)return EOPNOTSUPP;
     for(unsigned i=4;i<bytes;i++){
         uint8_t want=i==4?3:(i==0x34?(uint8_t)type:(i==0x38?1:0));
+        if(i>=0x1310 && i<0x1314)want=(uint8_t)(dictionary_default>>(8*(i-0x1310)));
         if(p[i]!=want)return EOPNOTSUPP;
     }
     *mode=type;return 0;
