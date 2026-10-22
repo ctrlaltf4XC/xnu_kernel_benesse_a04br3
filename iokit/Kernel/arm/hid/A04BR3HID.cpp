@@ -411,8 +411,33 @@ private:
 };
 OSDefineMetaClassAndStructors(A04BR3HIDTouch, IOHIDEventService);
 
+/*
+ * Development-only virtual USB keyboard (GenericDesktop/Keyboard), published
+ * only with a04br3.console=1. Setup on this iPad identity is already in
+ * hardware-keyboard mode (only the shortcut bar appears for a focused field),
+ * so text entry is driven through this keyboard by the private UI test
+ * client: a tap request on the bottom row y=1279 with x in 4..255 types HID
+ * keyboard usage x, x in 260..511 types usage x-256 with Left Shift held.
+ */
+class A04BR3HIDKeyboard : public IOHIDEventService {
+	OSDeclareDefaultStructors(A04BR3HIDKeyboard);
+public:
+	virtual bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+    virtual void stop(IOService *provider) APPLE_KEXT_OVERRIDE;
+    IOWorkLoop *uiWorkLoop() const { return _hidWorkLoop; }
+    void uiKey(IOCommandGate *gate, void *sleeper, UInt32 usage, bool shift);
+    static IOReturn unpublish(OSObject *, void *, void *, void *, void *);
+protected:
+	virtual UInt32 getPrimaryUsagePage() APPLE_KEXT_OVERRIDE { return kHIDPage_GenericDesktop; }
+	virtual UInt32 getPrimaryUsage() APPLE_KEXT_OVERRIDE { return kHIDUsage_GD_Keyboard; }
+	virtual UInt32 getProductID() APPLE_KEXT_OVERRIDE { return 3; }
+	virtual OSString *getTransport() APPLE_KEXT_OVERRIDE { return OSString::withCString("USB"); }
+};
+OSDefineMetaClassAndStructors(A04BR3HIDKeyboard, IOHIDEventService);
+
 static A04BR3HIDButtons *gA04BR3Buttons;
 static A04BR3HIDTouch *gA04BR3Touch;
+static A04BR3HIDKeyboard *gA04BR3Keyboard;
 
 /* Registry lock is never held over a gate/callback. It protects snapshots
  * against stop/detach; all event/state operations use the provider workloop.
@@ -493,6 +518,20 @@ A04BR3HIDButtons::uiGated(OSObject *owner, void *arg, void *, void *, void *)
         touch->release(); return kIOReturnNotReady;
     }
     if (touch->uiBusy()) { touch->release(); return kIOReturnBusy; }
+    if (s[0] == A04_UI_TAP && s[2] == 1279 && ((s[1] >= 4 && s[1] < 256) || (s[1] >= 260 && s[1] < 512))) {
+        IOLockLock(gA04UIRegistryLock);
+        A04BR3HIDKeyboard *keyboard = gA04BR3Keyboard;
+        if (keyboard) keyboard->retain();
+        IOLockUnlock(gA04UIRegistryLock);
+        if (keyboard && keyboard->uiWorkLoop() == self->_hidWorkLoop) {
+            self->fUIActive = true;
+            keyboard->uiKey(self->_hidGate, &self->fUIActive, (UInt32)(s[1] & 0xff), s[1] >= 256);
+            self->fUIActive = false;
+            keyboard->release(); touch->release();
+            return kIOReturnSuccess;
+        }
+        OSSafeReleaseNULL(keyboard);
+    }
     self->fUIActive = true;
     IOHIDEvent *down = NULL, *up = NULL;
     if (s[0] == A04_UI_HOME) {
@@ -752,6 +791,59 @@ IOReturn A04BR3HIDTouch::unpublish(OSObject *owner, void *, void *, void *, void
     return kIOReturnSuccess;
 }
 void A04BR3HIDTouch::stop(IOService *provider)
+{
+    _hidGate->runAction(unpublish);
+    IOHIDEventService::stop(provider);
+}
+
+bool
+A04BR3HIDKeyboard::start(IOService *provider)
+{
+    if (!a04_ui_console()) return false; // development console only
+	if (!IOHIDEventService::start(provider)) return false;
+    if (!a04_ui_registry_init()) return false;
+    IOLockLock(gA04UIRegistryLock);
+    gA04BR3Keyboard = this;
+    IOLockUnlock(gA04UIRegistryLock);
+    registerService();
+    IOLog("A04BR3 HID: development virtual keyboard registered\n");
+    return true;
+}
+
+void
+A04BR3HIDKeyboard::uiKey(IOCommandGate *gate, void *sleeper, UInt32 usage, bool shift)
+{
+    // Caller holds the shared workloop gate. Hold each key ~40ms with the gate
+    // released, like a physical keyboard, instead of a zero-length pair.
+    const UInt32 kLeftShift = 0xe1;
+    IOHIDEvent *event;
+    if (shift && (event = IOHIDEvent::keyboardEvent(mach_absolute_time(), kHIDPage_KeyboardOrKeypad, kLeftShift, true))) {
+        dispatchEvent(event); event->release();
+    }
+    if ((event = IOHIDEvent::keyboardEvent(mach_absolute_time(), kHIDPage_KeyboardOrKeypad, usage, true))) {
+        dispatchEvent(event); event->release();
+    }
+    uint64_t deadline = 0;
+    clock_interval_to_deadline(40, kMillisecondScale, &deadline);
+    gate->commandSleep(sleeper, deadline, THREAD_UNINT);
+    if ((event = IOHIDEvent::keyboardEvent(mach_absolute_time(), kHIDPage_KeyboardOrKeypad, usage, false))) {
+        dispatchEvent(event); event->release();
+    }
+    if (shift && (event = IOHIDEvent::keyboardEvent(mach_absolute_time(), kHIDPage_KeyboardOrKeypad, kLeftShift, false))) {
+        dispatchEvent(event); event->release();
+    }
+    IOLog("A04BR3 HID: virtual key usage 0x%x%s (%u clients)\n", (unsigned)usage, shift ? " shift" : "",
+        _clients ? _clients->getCount() : 0);
+}
+
+IOReturn A04BR3HIDKeyboard::unpublish(OSObject *owner, void *, void *, void *, void *)
+{
+    IOLockLock(gA04UIRegistryLock);
+    if (gA04BR3Keyboard == owner) gA04BR3Keyboard = NULL;
+    IOLockUnlock(gA04UIRegistryLock);
+    return kIOReturnSuccess;
+}
+void A04BR3HIDKeyboard::stop(IOService *provider)
 {
     _hidGate->runAction(unpublish);
     IOHIDEventService::stop(provider);

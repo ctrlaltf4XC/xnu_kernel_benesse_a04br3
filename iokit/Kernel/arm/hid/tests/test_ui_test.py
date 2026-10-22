@@ -35,6 +35,7 @@ using UInt32=uint32_t;using UInt64=uint64_t;using IOFixed=int32_t;using IOReturn
 #define kOSBooleanTrue true
 #define IOLog(...) ((void)0)
 enum {kIOReturnSuccess=0,kIOReturnBadArgument=1,kIOReturnUnsupported=2,kIOReturnNoMemory=3,kIOReturnNotPermitted=4,kIOReturnNotReady=5,kIOReturnBusy=6,kIOReturnCannotLock=7};
+enum {kHIDPage_GenericDesktop=1,kHIDUsage_GD_Keyboard=6,kHIDPage_KeyboardOrKeypad=7};
 enum {kHIDPage_Consumer=12,kHIDUsage_Csmr_ConsumerControl=1,kHIDUsage_Csmr_Menu=64,kHIDUsage_Csmr_Power=48,kHIDUsage_Csmr_VolumeIncrement=233,kHIDUsage_Csmr_VolumeDecrement=234,kHIDPage_Digitizer=13,kHIDUsage_Dig_TouchScreen=4};
 enum {kIOHIDDigitizerTransducerTypeHand=2,kIOHIDDigitizerTransducerTypeFinger=3};
 enum {kIOHIDDigitizerEventFromEdgeTip=1,kIOHIDDigitizerEventTouch=2,kIOHIDDigitizerEventRange=4,kIOHIDDigitizerEventPosition=8,kIOHIDDigitizerEventIdentity=16};
@@ -42,6 +43,7 @@ enum {kIOHIDEventFieldDigitizerIndex,kIOHIDEventFieldDigitizerIdentity,kIOHIDEve
 static const int kIOClientPrivilegeAdministrator=1;
 static const UInt32 kIOHIDEventServiceUserClientType=0x65737563;
 struct OSObject {int refs=1;OSObject(){++alive;}virtual ~OSObject(){--alive;}bool init(){return true;}void retain(){assert(refs>0);++refs;}virtual void free(){}void release(){assert(refs>0);if(!--refs){free();delete this;}}};
+struct OSString:OSObject {static OSString *withCString(const char*){return new OSString;}};
 struct OSDictionary:OSObject{};
 struct OSArray:OSObject {OSObject *data[8]={};unsigned count=0;~OSArray(){for(unsigned i=0;i<count;i++)data[i]->release();}unsigned getCount(){return count;}OSObject *getObject(unsigned i){assert(i<count);return data[i];}bool setObject(OSObject *p){assert(count<8);p->retain();data[count++]=p;return true;}};
 struct IOLock {bool held=false;};static IOLock lockPool[32];static unsigned lockNext;
@@ -112,7 +114,7 @@ struct IOHIDEvent:OSObject {int type=0,usage=0,down=0;uint64_t timestamp=0,sende
 struct IOHIDEventService:IOService {using Action=void(*)(OSObject*,OSObject*,void*,OSObject*,IOOptionBits);IOLock *_clientLock=NULL;OSArray *_clients=NULL;IOWorkLoop *_hidWorkLoop=&defaultLoop;IOCommandGate *_hidGate=NULL;
  bool start(IOService *p) override{if(!IOService::start(p))return false;_clientLock=IOLockAlloc();_clients=new OSArray;_hidGate=new IOCommandGate;_hidGate->owner=this;_hidGate->loop=_hidWorkLoop;return true;}
  ~IOHIDEventService(){if(_clients)_clients->release();if(_hidGate)_hidGate->release();}
- virtual UInt32 getPrimaryUsagePage(){return 0;}virtual UInt32 getPrimaryUsage(){return 0;}virtual UInt32 getProductID(){return 0;}
+ virtual UInt32 getPrimaryUsagePage(){return 0;}virtual UInt32 getPrimaryUsage(){return 0;}virtual UInt32 getProductID(){return 0;}virtual OSString *getTransport(){return OSString::withCString("SPU");}
  void dispatchEvent(IOHIDEvent*,IOOptionBits=0);IOReturn newUserClient(task_t,void*,UInt32,OSDictionary*,IOUserClient**) override;
 };
 '''.replace('IOExternalMethodDispatch*=NULL,OSObject*=NULL,void*=NULL','IOExternalMethodDispatch * =NULL,OSObject * =NULL,void * =NULL')
