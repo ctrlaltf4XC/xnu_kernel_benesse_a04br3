@@ -114,13 +114,15 @@ A04BR3PlatformExpert::getProductName(char *name, int maxLength)
 		return false;
 	}
 	/*
-	 * MobileGestalt derives DeviceClass from the hw.product prefix. An
-	 * unrecognized prefix falls back to iPod; this board is a tablet.
-	 * Keep a distinct port product, not an Apple model identifier. The ADT
-	 * model (and inherited hw.machine) remains Benesse TAB-A04-BR3, while
-	 * hw.target remains a04br3 for board-specific driver selection.
+	 * MobileGestalt derives DeviceClass and its model data from hw.product.
+	 * The userland is the iPhone X (iPhone10,3, D22) 16.7.16 IPSW: it ships
+	 * only iPhone assets (e.g. TextInputUI KBLayouts_iPhone.dat, no
+	 * KBLayouts_iPad.dat), so an iPad class leaves UIKit without a software
+	 * keyboard layout and Settings without iPad-only icons. Match the
+	 * userland exactly, as dipa-studio/ios-sweet 0059 does. hw.target stays
+	 * a04br3 for board-specific driver selection.
 	 */
-	strlcpy(name, "iPad-A04BR3", (size_t)maxLength);
+	strlcpy(name, "iPhone10,3", (size_t)maxLength);
 	return true;
 }
 #endif /* A04BR3 */
