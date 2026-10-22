@@ -98,6 +98,11 @@ int a04br3_usb_controller_poll(void) {
   printf("A04BR3 USB: peripheral softconnect; private console 0e8d:20ff\n");
  }
  unsigned before=device.configured;int e=a04_usb_device_poll(&device,1);
+ /* SET_ADDRESS/SET_CONFIGURATION take effect at the status-stage event; the
+  * host uses the new address about 2ms later. Spin briefly (max 5ms). */
+ for(unsigned spin=0;device.active && device.pending && e!=A04_MUSB_FAULT && spin<1000;spin++){
+  wait_us(&board,5);e=a04_usb_device_poll(&device,1);
+ }
  /* Bounded fallbacks when no host address arrives: reconnect, then FS-only. */
  { static unsigned idle,attempt;
    if(device.active && !device.address && !device.configured){
@@ -121,6 +126,8 @@ int a04br3_usb_controller_poll(void) {
  if(e==A04_MUSB_NOT_READY){a04br3_usb_console_online(0);return 0;}
  a04br3_usb_console_online(device.active&&device.configured);
  if(before!=device.configured)printf("A04BR3 USB: configured=%u speed_mps=%u\n",device.configured,device.mps);
+ /* While a host is enumerating, keep the worker at 1ms cadence. */
+ if(device.active && device.address && !device.configured)return 1;
  return e==0?1:0;
 }
 void a04br3_usb_controller_stop(void) {
