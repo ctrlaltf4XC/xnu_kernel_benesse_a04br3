@@ -335,7 +335,7 @@ ARM64_LINK_ADDR    =0xfffffff007004000
 # Apple MacOSX boards use the large VA layout. A04BR3 uses a sub-page
 # 16K L1 table (39-bit TTBR1), so retain the normal ARM64 kernel layout.
 ifneq ($(filter $(PLATFORM),MacOSX),)
-ifneq ($(CURRENT_MACHINE_CONFIG),A04BR3)
+ifneq ($(CURRENT_MACHINE_CONFIG),A04BR3 BEGONIA)
 LARGE_MEMORY_DEFINE=-DARM_LARGE_MEMORY=1
 ARM64_PLKSEG_ADDR  =0xfffffe0004004000
 ARM64_LINK_ADDR    =0xfffffe0007004000
