@@ -364,6 +364,9 @@ arm_init(
 #if defined(A04BR3)
 	a04br3_bootstrap_trace("\r\nXNU_A04BR3_C_ENTRY_MMU_ON\r\n");
 #endif
+#if defined(BEGONIA)
+	begonia_bootstrap_trace("\r\nXNU_BEGONIA_C_ENTRY_MMU_ON\r\n");
+#endif
 	arm_setup_pre_sign();
 
 	arm_slide_rebase_and_sign_image();
@@ -382,9 +385,15 @@ arm_init(
 #if defined(A04BR3)
 	a04br3_bootstrap_trace("XNU_A04BR3_BEFORE_PLATFORM\r\n");
 #endif
+#if defined(BEGONIA)
+	begonia_bootstrap_trace("XNU_BEGONIA_BEFORE_PLATFORM\r\n");
+#endif
 	PE_init_platform(FALSE, args); /* Get platform expert set up */
 #if defined(A04BR3)
 	a04br3_bootstrap_trace("XNU_A04BR3_PLATFORM_READY\r\n");
+#endif
+#if defined(BEGONIA)
+	begonia_bootstrap_trace("XNU_BEGONIA_PLATFORM_READY\r\n");
 #endif
 
 #if __arm64__
@@ -539,6 +548,9 @@ arm_init(
 
 #if defined(A04BR3)
 	a04br3_bootstrap_trace("XNU_A04BR3_BEFORE_VM_INIT\r\n");
+#endif
+#if defined(BEGONIA)
+	begonia_bootstrap_trace("XNU_BEGONIA_BEFORE_VM_INIT\r\n");
 #endif
 	arm_vm_init(xmaxmem, args);
 

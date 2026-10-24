@@ -565,9 +565,15 @@ pe_arm_init_interrupts(void *args)
 
 	/* Set up mappings for interrupt controller and possibly timers (if they haven't been set up already) */
 	if (args != NULL) {
+#if defined(A04BR3)
 		if (!pe_arm_map_interrupt_controller()) {
 			return 0;
 		}
+		a04br3_gic_init();
+#endif
+#if defined(BEGONIA)
+		begonia_gic_init();
+#endif
 	}
 
 	return pe_arm_init_timer(args);

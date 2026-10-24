@@ -95,6 +95,14 @@
 #define CORE_NCTRS                     8 /* Capacity only; KPC is disabled. */
 #endif /* ARM64_BOARD_CONFIG_A04BR3 */
 
+#ifdef ARM64_BOARD_CONFIG_BEGONIA
+#include <pexpert/arm64/BEGONIA.h>
+#define MAX_L2_CLINE                   7
+#define MAX_CPUS                       8
+#define MAX_CPU_CLUSTERS               2
+#define CORE_NCTRS                     8 /* Capacity only; KPC is disabled. */
+#endif /* ARM64_BOARD_CONFIG_BEGONIA */
+
 #ifdef ARM64_BOARD_CONFIG_BCM2837
 #include <pexpert/arm64/BCM2837.h>
 

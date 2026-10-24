@@ -1897,6 +1897,88 @@ a04br3_early_map_final(void)
 }
 #endif
 
+#if defined(BEGONIA)
+/* Adapted from A04BR3: retain early diagnostics across TTBR0
+ * teardown. MT6785 uses a Device UART block at 0x11002000. */
+#define BEGONIA_EARLY_UART_VA (LOW_GLOBAL_BASE_ADDRESS + ARM_TT_L2_SIZE)
+static boolean_t begonia_uart_final;
+static boolean_t begonia_uart_panicking;
+static vm_offset_t begonia_uart_mapped;
+
+static void
+begonia_vm_trace(const char *text, boolean_t final_mapping)
+{
+	volatile uint32_t *uart = (volatile uint32_t *)(uintptr_t)
+	    (final_mapping ? (begonia_uart_mapped ? begonia_uart_mapped :
+	    BEGONIA_EARLY_UART_VA + 0x01002000) : 0x11002000);
+	while (*text) {
+		unsigned int remaining = 0xffff;
+		while (!(uart[5] & 0x20) && --remaining) { }
+		if (!remaining) { return; }
+		uart[0] = (uint8_t)*text++;
+	}
+}
+
+static void
+begonia_panic_putc(char c)
+{
+	char text[2] = {c, 0};
+	begonia_vm_trace(text, begonia_uart_final);
+}
+
+void begonia_early_panic(const char *fmt, va_list *args);
+void
+begonia_early_panic(const char *fmt, va_list *args)
+{
+	if (begonia_uart_panicking) { return; }
+	begonia_uart_panicking = TRUE;
+	begonia_vm_trace("\r\nXNU_EARLY_PANIC: ", begonia_uart_final);
+	va_list copy;
+	va_copy(copy, *args);
+	_doprnt(fmt, &copy, begonia_panic_putc, 16);
+	va_end(copy);
+	begonia_vm_trace("\r\n", begonia_uart_final);
+}
+
+void begonia_early_uart_handoff(vm_offset_t uart);
+void
+begonia_early_uart_handoff(vm_offset_t uart)
+{
+	if (!uart || !begonia_uart_final) { return; }
+	boolean_t release_alias = (begonia_uart_mapped == 0);
+	begonia_uart_mapped = uart;
+	if (release_alias) {
+		const vm_map_address_t va = BEGONIA_EARLY_UART_VA;
+		tt_entry_t l1 = cpu_tte[(va & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT];
+		tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
+		tt_entry_t *slot = &l2[(va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT];
+		assert((*slot & (ARM_TTE_VALID | ARM_TTE_TYPE_MASK)) ==
+		    (ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK));
+		*slot = ARM_TTE_EMPTY;
+		__asm__ volatile("dsb ishst" ::: "memory");
+		flush_mmu_tlb();
+		begonia_vm_trace("XNU_UART_BOOTSTRAP_ALIAS_RELEASED\r\n", TRUE);
+	}
+}
+
+static void
+begonia_early_map_final(void)
+{
+	const vm_map_address_t va = BEGONIA_EARLY_UART_VA;
+	assert(va + ARM_TT_L2_SIZE <= gVirtBase);
+	tt_entry_t l1 = cpu_tte[(va & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT];
+	assert((l1 & (ARM_TTE_VALID | ARM_TTE_TYPE_MASK)) ==
+	    (ARM_TTE_VALID | ARM_TTE_TYPE_TABLE));
+	tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
+	tt_entry_t *slot = &l2[(va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT];
+	assert(*slot == ARM_TTE_EMPTY);
+	*slot = 0x10000000ULL | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
+	    ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_DISABLE) |
+	    ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX;
+	__asm__ volatile("dsb ishst" ::: "memory");
+}
+#endif
+
 void
 arm_vm_init(uint64_t memory_size, boot_args * args)
 {
@@ -2230,14 +2312,26 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 	a04br3_early_map_final();
 	a04br3_vm_trace("XNU_VM_UART_ALIAS_BUILT\r\n", FALSE);
 #endif
+#if defined(BEGONIA)
+	begonia_vm_trace("XNU_VM_TABLES_BUILT\r\n", FALSE);
+	begonia_early_map_final();
+	begonia_vm_trace("XNU_VM_UART_ALIAS_BUILT\r\n", FALSE);
+#endif
 	arm_vm_physmap_init(args);
 #if defined(A04BR3)
 	a04br3_vm_trace("XNU_VM_PHYSMAP_READY\r\n", FALSE);
+#endif
+#if defined(BEGONIA)
+	begonia_vm_trace("XNU_VM_PHYSMAP_READY\r\n", FALSE);
 #endif
 	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
 #if defined(A04BR3)
 	a04br3_uart_final = TRUE;
 	a04br3_vm_trace("XNU_VM_TTBR1_ACTIVE\r\n", TRUE);
+#endif
+#if defined(BEGONIA)
+	begonia_uart_final = TRUE;
+	begonia_vm_trace("XNU_VM_TTBR1_ACTIVE\r\n", TRUE);
 #endif
 
 	ml_enable_monitor();
@@ -2247,6 +2341,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 	flush_mmu_tlb();
 #if defined(A04BR3)
 	a04br3_vm_trace("XNU_VM_TTBR0_OFF\r\n", TRUE);
+#endif
+#if defined(BEGONIA)
+	begonia_vm_trace("XNU_VM_TTBR0_OFF\r\n", TRUE);
 #endif
 	kva_active = TRUE;
 	// global table pointers may need to be different due to physical aperture remapping

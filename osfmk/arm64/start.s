@@ -318,6 +318,45 @@ La04br3_secondary_el1:
 	msr		SPSel, #1
 	b		EXT(LowResetVectorBase)
 #endif /* A04BR3 */
+#if defined(BEGONIA)
+	.align 2
+	.globl EXT(begonia_secondary_entry)
+LEXT(begonia_secondary_entry)
+	msr		DAIFSet, #0xf
+	mrs		x1, CurrentEL
+	cmp		x1, #0x4
+	b.eq	Lbegonia_secondary_el1
+	cmp		x1, #0x8
+	b.ne	Lbegonia_secondary_bad_el
+	adrp	x1, EXT(LowExceptionVectorBase)@page
+	add		x1, x1, EXT(LowExceptionVectorBase)@pageoff
+	msr		VBAR_EL2, x1
+	/* No stage 2, AArch64 EL1, no EL2 interrupt or FP/debug traps. */
+	mov		x1, #(1 << 31)
+	msr		HCR_EL2, x1
+	msr		VTTBR_EL2, xzr
+	msr		CPTR_EL2, xzr
+	msr		MDCR_EL2, xzr
+	mov		x1, #3
+	msr		CNTHCTL_EL2, x1
+	msr		CNTVOFF_EL2, xzr
+	/* Known Armv8 SCTLR RES1 bits, M/C/I off, little endian. */
+	MOV64	x1, 0x30d00800
+	msr		SCTLR_EL1, x1
+	isb
+	adrp	x1, Lbegonia_secondary_el1@page
+	add		x1, x1, Lbegonia_secondary_el1@pageoff
+	msr		ELR_EL2, x1
+	mov		x1, #0x3c5			// DAIF masked, AArch64 EL1h
+	msr		SPSR_EL2, x1
+	eret
+Lbegonia_secondary_bad_el:
+	b		.
+Lbegonia_secondary_el1:
+	/* x0 is deliberately unused; reset_vector selects CPU data by MPIDR. */
+	msr		SPSel, #1
+	b		EXT(LowResetVectorBase)
+#endif /* BEGONIA */
 
 	.align 2
 	.globl EXT(resume_idle_cpu)
@@ -522,6 +561,33 @@ L_a04br3_entry_message:
 	.asciz "\r\nXNU_A04BR3_KERNEL_ENTRY\r\n"
 	.align 2
 L_a04br3_entry_done:
+#endif
+#if defined(BEGONIA)
+	/* First real kernel-entry evidence, before stack/MMU initialization.
+	 * Preserve x0 (boot_args) and the inherited MediaTek UART configuration.
+	 */
+	msr DAIFSet, #0xf
+	adrp x9, L_begonia_entry_message@page
+	add x9, x9, L_begonia_entry_message@pageoff
+	mov x10, #0x2000
+	movk x10, #0x1100, lsl #16
+L_begonia_entry_char:
+	ldrb w11, [x9], #1
+	cbz w11, L_begonia_entry_done
+	mov w13, #0xffff
+L_begonia_entry_wait:
+	ldr w12, [x10, #0x14]
+	tbnz w12, #5, L_begonia_entry_send
+	subs w13, w13, #1
+	b.ne L_begonia_entry_wait
+	b L_begonia_entry_done
+L_begonia_entry_send:
+	str w11, [x10]
+	b L_begonia_entry_char
+L_begonia_entry_message:
+	.asciz "\r\nXNU_BEGONIA_KERNEL_ENTRY\r\n"
+	.align 2
+L_begonia_entry_done:
 #endif
 
 	// Unlock the core for debugging

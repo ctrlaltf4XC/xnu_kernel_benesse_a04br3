@@ -681,8 +681,8 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
 
 /*****************************************************************************/
 
-#if defined(A04BR3)
-/* MT8167 UART: 16550-compatible registers at 32-bit spacing. Retain LK's
+#if defined(BEGONIA)
+/* MT6785 UART: 16550-compatible registers at 32-bit spacing. Retain LK's
  * clock, divisors and 921600 baud line setup; polling needs no IRQ driver.
  */
 static vm_offset_t mtk_uart_base;
@@ -704,9 +704,9 @@ static uint8_t mtk_uart_receive_data(void)
 }
 static void mtk_uart_init(void)
 {
-	extern void a04br3_early_uart_handoff(vm_offset_t);
-	a04br3_early_uart_handoff(mtk_uart_base);
-	const char *p = "\r\nXNU_A04BR3_UART_MAPPED\r\n";
+	extern void begonia_early_uart_handoff(vm_offset_t);
+	begonia_early_uart_handoff(mtk_uart_base);
+	const char *p = "\r\nXNU_BEGONIA_UART_MAPPED\r\n";
 	while (*p) {
 		unsigned int remaining = 0xffff;
 		while (!mtk_uart_transmit_ready() && --remaining) { }
@@ -823,6 +823,15 @@ serial_init(void)
 	if (SecureDTFindEntry("name", "uart0", &entryP) == kSuccess &&
 	    SecureDTGetProperty(entryP, "reg", (void const **)&reg_prop, &prop_size) == kSuccess &&
 	    prop_size == 2 * sizeof(uintptr_t) && *reg_prop == 0x01005000 &&
+	    *(reg_prop + 1) == 0x1000 && soc_base == 0x10000000) {
+		mtk_uart_base = ml_io_map(soc_base + *reg_prop, *(reg_prop + 1));
+		if (mtk_uart_base) { register_serial_functions(&mtk_uart_serial_functions); }
+	}
+#endif
+#if defined(BEGONIA)
+	if (SecureDTFindEntry("name", "uart0", &entryP) == kSuccess &&
+	    SecureDTGetProperty(entryP, "reg", (void const **)&reg_prop, &prop_size) == kSuccess &&
+	    prop_size == 2 * sizeof(uintptr_t) && *reg_prop == 0x01002000 &&
 	    *(reg_prop + 1) == 0x1000 && soc_base == 0x10000000) {
 		mtk_uart_base = ml_io_map(soc_base + *reg_prop, *(reg_prop + 1));
 		if (mtk_uart_base) { register_serial_functions(&mtk_uart_serial_functions); }

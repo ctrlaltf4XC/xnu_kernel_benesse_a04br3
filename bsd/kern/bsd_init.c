@@ -705,6 +705,12 @@ bsd_init(void)
 	extern void a04br3_display_init(void);
 	a04br3_display_init();
 #endif
+#if defined(ARM64_BOARD_CONFIG_BEGONIA)
+	extern void begonia_msdc_probe(void);
+	begonia_msdc_probe();
+	extern void begonia_display_init(void);
+	begonia_display_init();
+#endif
 
 #if CONFIG_PROC_UUID_POLICY
 	/* Initial proc_uuid_policy subsystem */
