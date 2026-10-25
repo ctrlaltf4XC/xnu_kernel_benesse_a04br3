@@ -3604,10 +3604,16 @@ check_for_dataless_file(struct vnode *vp, uint64_t op_type)
 {
 	int error;
 
+#if HFS_COMPRESSION
 	if (vp == NULL || (VTOC(vp)->c_bsdflags & UF_COMPRESSED) == 0 || VTOCMP(vp) == NULL || decmpfs_cnode_cmp_type(VTOCMP(vp)) != DATALESS_CMPFS_TYPE) {
 		// there's nothing to do, it's not dataless
 		return 0;
 	}
+#else
+	if (vp == NULL || (VTOC(vp)->c_bsdflags & UF_COMPRESSED) == 0) {
+		return 0;
+	}
+#endif
 
 	/* Swap files are special; ignore them */
 	if (vnode_isswap(vp)) {
