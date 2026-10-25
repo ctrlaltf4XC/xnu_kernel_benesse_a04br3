@@ -19,7 +19,7 @@ static inline int a04_psk_native_mic(void *ctx,const uint8_t kck[16],const uint8
 static inline int a04_psk_native_unwrap(void *ctx,const uint8_t kek[16],const uint8_t *p,unsigned n,uint8_t *out,unsigned cap,unsigned *bytes){
  (void)ctx;return a04_wlan_personal_unwrap(kek,p,n,out,cap,bytes);
 }
-#if defined(KERNEL) && defined(ARM64_BOARD_CONFIG_A04BR3)
+#if defined(KERNEL) && (defined(ARM64_BOARD_CONFIG_A04BR3) || defined(ARM64_BOARD_CONFIG_BEGONIA))
 #include <sys/types.h>
 #include <sys/random.h>
 /* IOKit driver/worker entry only, AFTER EARLY_BOOT STARTUP_RANK_FIRST has

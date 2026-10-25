@@ -348,6 +348,20 @@ a04br3_bootstrap_trace(const char *text)
 	}
 }
 #endif
+#if defined(BEGONIA)
+/* Only valid while the initial TTBR0 V=P device mapping is installed. */
+static void
+begonia_bootstrap_trace(const char *text)
+{
+	volatile uint32_t *uart = (volatile uint32_t *)(uintptr_t)0x11002000;
+	while (*text) {
+		unsigned int remaining = 0xffff;
+		while (!(uart[5] & 0x20) && --remaining) { }
+		if (!remaining) { return; }
+		uart[0] = (uint8_t)*text++;
+	}
+}
+#endif
 
 __startup_func
 void

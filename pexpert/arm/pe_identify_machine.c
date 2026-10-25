@@ -572,6 +572,7 @@ pe_arm_init_interrupts(void *args)
 		a04br3_gic_init();
 #endif
 #if defined(BEGONIA)
+		extern void begonia_gic_init(void);
 		begonia_gic_init();
 #endif
 	}

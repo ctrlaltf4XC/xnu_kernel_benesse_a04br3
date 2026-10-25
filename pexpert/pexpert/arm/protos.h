@@ -48,6 +48,16 @@ uint32_t a04br3_gic_ipi_count(void);
 uint32_t a04br3_gic_timer_count(void);
 void a04br3_watchdog_quiesce(void);
 #endif
+#if defined(ARM64_BOARD_CONFIG_BEGONIA)
+void begonia_gic_init(void);
+uint32_t begonia_gic_acknowledge(void);
+void begonia_gic_complete(uint32_t iar);
+void begonia_gic_signal_self(void);
+void begonia_gic_signal_cpu(unsigned logical);
+uint32_t begonia_gic_ipi_count(void);
+uint32_t begonia_gic_timer_count(void);
+void begonia_gic_secondary_init(unsigned logical);
+#endif
 
 #ifdef PRIVATE
 /**
