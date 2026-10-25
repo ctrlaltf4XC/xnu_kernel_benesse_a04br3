@@ -30,7 +30,7 @@
 #define hfs_iokit_h
 
 #include <sys/cdefs.h>
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled: no AppleKeyStore on A04BR3/Begonia */
 #include <AppleKeyStore/AppleKeyStoreFSServices.h>
 #endif
 
