@@ -410,7 +410,6 @@ bsd/a04br3_hfs/core/hfs_btreeio.c		optional a04br3_hfs
 bsd/a04br3_hfs/core/hfs_catalog.c		optional a04br3_hfs
 bsd/a04br3_hfs/core/hfs_chash.c		optional a04br3_hfs
 bsd/a04br3_hfs/core/hfs_cnode.c		optional a04br3_hfs
-bsd/a04br3_hfs/core/hfs_cprotect.c		optional a04br3_hfs
 bsd/a04br3_hfs/core/hfs_endian.c		optional a04br3_hfs
 bsd/a04br3_hfs/core/hfs_extents.c		optional a04br3_hfs
 bsd/a04br3_hfs/core/hfs_fsinfo.c		optional a04br3_hfs
