@@ -44,7 +44,7 @@ void hfs_iterate_media_with_content(const char *content_uuid_cstring,
 									void *arg);
 kern_return_t hfs_get_platform_serial_number(char *serial_number_str,
 											 uint32_t len);
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled: no AppleKeyStore on A04BR3/Begonia */
 int hfs_unwrap_key(aks_cred_t access, const aks_wrapped_key_t wrapped_key_in,
 				   aks_raw_key_t key_out);
 int hfs_rewrap_key(aks_cred_t access, cp_key_class_t dp_class,
