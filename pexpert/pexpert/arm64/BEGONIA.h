@@ -18,7 +18,7 @@
 #define __ARM64_PMAP_SUBPAGE_L1__   1
 #define __ARM_AMP__                 1
 #define __ARM_52BIT_PA__            1
-#define HAS_CLUSTER                 1 /* Has eCores and pCores in separate clusters */
+#define HAS_CLUSTER                 0
 #define ARM_LSE                     1
 #define ARM_LSE_ATOMICS             1
 #define ARM_FEAT_PAN                1
