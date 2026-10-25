@@ -194,7 +194,7 @@ hfs_vnop_read(struct vnop_read_args *ap)
 	fp = VTOF(vp);
 	hfsmp = VTOHFS(vp);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if ((retval = cp_handle_vnop (vp, CP_READ_ACCESS, ap->a_ioflag)) != 0) {
 		goto exit;
 	}
@@ -413,7 +413,7 @@ hfs_vnop_write(struct vnop_write_args *ap)
 	fp = VTOF(vp);
 	hfsmp = VTOHFS(vp);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if ((retval = cp_handle_vnop (vp, CP_WRITE_ACCESS, 0)) != 0) {
 		goto exit;
 	}
@@ -1696,7 +1696,7 @@ hfs_vnop_ioctl( struct vnop_ioctl_args /* {
 
 	is64bit = proc_is64bit(p);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 #if HFS_CONFIG_KEY_ROLL
 	// The HFSIOC_KEY_ROLL fsctl does its own access checks
 	if (ap->a_command != HFSIOC_KEY_ROLL)
@@ -3047,7 +3047,7 @@ fail_change_next_allocation:
 
 #endif // HFS_CONFIG_KEY_ROLL
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	case F_TRANSCODEKEY:
 		/*
 		 * This API is only supported when called via kernel so
@@ -3409,7 +3409,7 @@ hfs_vnop_blockmap(struct vnop_blockmap_args *ap)
 		}
 	}
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if (cp->c_cpentry) {
 		const int direction = (ISSET(ap->a_flags, VNODE_WRITE)
 							   ? VNODE_WRITE : VNODE_READ);
@@ -3669,7 +3669,7 @@ hfs_vnop_strategy(struct vnop_strategy_args *ap)
 		bufattr_markisochronous(buf_attr(bp));
 	}
 	
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	error = cp_handle_strategy(bp);
 
 	if (error)
@@ -4600,7 +4600,7 @@ hfs_vnop_pagein(struct vnop_pagein_args *ap)
 	cp = VTOC(vp);
 	fp = VTOF(vp);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if ((error = cp_handle_vnop(vp, CP_READ_ACCESS | CP_WRITE_ACCESS, 0)) != 0) {
 		/* 
 		 * If we errored here, then this means that one of two things occurred:
@@ -5473,7 +5473,7 @@ hfs_relocate(struct  vnode *vp, u_int32_t  blockHint, kauth_cred_t cred,
 	if (fp->ff_unallocblocks)
 		return (EINVAL);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/* 
 	 * <rdar://problem/9118426>
 	 * Disable HFS file relocation on content-protected filesystems
@@ -5715,7 +5715,7 @@ hfs_clonefile(struct vnode *vp, int blkstart, int blkcnt, int blksize)
 
 	hfs_unlock(VTOC(vp));
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if ((error = cp_handle_vnop(vp, CP_WRITE_ACCESS, 0)) != 0) {
 		hfs_lock(VTOC(vp), HFS_EXCLUSIVE_LOCK, HFS_LOCK_ALLOW_NOEXISTS);	
 		return (error);

@@ -587,7 +587,7 @@ static int hfs_issue_unmap (struct hfsmount *hfsmp, struct jnl_trim_list *list)
 			KERNEL_DEBUG_CONSTANT(HFSDBG_UNMAP_SCAN_TRIM | DBG_FUNC_NONE, hfsmp->hfs_raw_dev, unmap.extentsCount, 0, 0, 0);
 		}
 	
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		/* 
 		 * If we have not yet completed the first scan through the bitmap, then
 		 * optionally inform the block driver below us that this is an initialization

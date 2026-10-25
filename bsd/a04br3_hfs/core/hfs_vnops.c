@@ -469,7 +469,7 @@ hfs_vnop_open(struct vnop_open_args *ap)
 	struct cnode *cp = VTOC(vp);
 	struct hfsmount *hfsmp = VTOHFS(vp);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	error = cp_handle_open(vp, ap->a_mode);
 	if (error)
 		return error;
@@ -524,7 +524,7 @@ hfs_vnop_open(struct vnop_open_args *ap)
 
 	bool have_lock = false;
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if (ISSET(ap->a_mode, FENCRYPTED) && cp->c_cpentry && vnode_isreg(vp)) {
 		bool have_trunc_lock = false;
 
@@ -581,7 +581,7 @@ hfs_vnop_open(struct vnop_open_args *ap)
 #endif
 		|| !hfsmp->jnl || vnode_isinuse(vp, 0)) {
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		if (have_lock)
 			hfs_unlock(cp);
 #endif
@@ -667,7 +667,7 @@ hfs_vnop_close(struct vnop_close_args *ap)
 	cp = VTOC(vp);
 	hfsmp = VTOHFS(vp);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if (cp->c_cpentry && ISSET(ap->a_fflag, FENCRYPTED) && vnode_isreg(vp)) {
 		hfs_assert(cp->c_cpentry->cp_raw_open_count > 0);
 		--cp->c_cpentry->cp_raw_open_count;
@@ -1154,7 +1154,7 @@ hfs_vnop_getattr(struct vnop_getattr_args *ap)
 	vap->va_supported |= VNODE_ATTR_va_data_size;
 #endif
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if (VATTR_IS_ACTIVE(vap, va_dataprotect_class)) {
     		vap->va_dataprotect_class = cp->c_cpentry ? CP_CLASS(cp->c_cpentry->cp_pclass) : 0;
     		VATTR_SET_SUPPORTED(vap, va_dataprotect_class);
@@ -1385,7 +1385,7 @@ hfs_vnop_setattr(struct vnop_setattr_args *ap)
 		nspace_snapshot_event(vp, orig_ctime, NAMESPACE_HANDLER_METADATA_MOD, NSPACE_REARM_NO_ARG);
 	}
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/*
 	 * All metadata changes should be allowed except a size-changing setattr, which
 	 * has effects on file content and requires calling into cp_handle_vnop
@@ -1639,7 +1639,7 @@ out:
 #endif
 	}
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	VATTR_SET_SUPPORTED(vap, va_dataprotect_class);
 	if (!error && VATTR_IS_ACTIVE(vap, va_dataprotect_class))
 		error = cp_vnode_setclass(vp, vap->va_dataprotect_class);
@@ -2129,7 +2129,7 @@ hfs_vnop_exchange(struct vnop_exchange_args *ap)
 	orig_from_ctime = from_cp->c_ctime;
 	orig_to_ctime = to_cp->c_ctime;
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/* 
 	 * Do not allow exchangedata/F_MOVEDATAEXTENTS on data-protected filesystems 
 	 * because the EAs will not be swapped.  As a result, the persistent keys would not
@@ -2741,7 +2741,7 @@ hfs_vnop_mmap(struct vnop_mmap_args *ap)
 		}
 	}
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	error = cp_handle_vnop(vp, (ap->a_fflags & PROT_WRITE
 								? CP_WRITE_ACCESS : 0) | CP_READ_ACCESS, 0);
 	if (error)
@@ -6465,7 +6465,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 	int nocache = 0;
 	vnode_t old_doc_vp = NULL;
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	struct cprotect *entry = NULL;
 	int32_t cp_class = -1;
 
@@ -6560,7 +6560,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 		attr.ca_recflags = kHFSThreadExistsMask;
 	}
 
-#if CONFIG_PROTECT	
+#if 0 /* CONFIG_PROTECT disabled */ 	
 	if (cp_fs_protected(hfsmp->hfs_mp)) {
 		protected_mount = 1;
 	}
@@ -6626,7 +6626,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 	in_desc.cd_hint = dcp->c_childhint;
 	in_desc.cd_encoding = 0;
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/*
 	 * To preserve file creation atomicity with regards to the content protection EA,
 	 * we must create the file in the catalog and then write out its EA in the same
@@ -6683,7 +6683,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 
 		hfs_update(dcp->c_vp, 0);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		/*
 		 * If we are creating a content protected file, now is when
 		 * we create the EA. We must create it in the same transaction
@@ -6749,7 +6749,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 	    started_tr = 0;
 	}
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/* 
 	 * At this point, we must have encountered success with writing the EA.
 	 * Destroy our temporary cprotect (which had no keys). 
@@ -6861,7 +6861,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 	
 	*vpp = tvp;
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/* 
 	 * Now that we have a vnode-in-hand, generate keys for this namespace item.
 	 * If we fail to create the keys, then attempt to delete the item from the 
@@ -6945,7 +6945,7 @@ hfs_makenode(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp,
 exit:
 	cat_releasedesc(&out_desc);
 	
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/*  
 	 * We may have jumped here in error-handling various situations above.
 	 * If we haven't already dumped the temporary CP used to initialize

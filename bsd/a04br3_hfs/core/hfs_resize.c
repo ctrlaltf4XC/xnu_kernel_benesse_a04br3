@@ -934,7 +934,7 @@ hfs_copy_extent(
 	u_int32_t ioSizeSectors;	/* Device sectors in this I/O */
 	daddr64_t srcSector, destSector;
 	u_int32_t sectorsPerBlock = hfsmp->blockSize / hfsmp->hfs_logical_block_size;
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	int cpenabled = 0;
 #endif
     
@@ -949,7 +949,7 @@ hfs_copy_extent(
 	if (cp != hfsmp->hfs_allocation_cp && cp->c_lockowner != current_thread())
 		panic("hfs_copy_extent: vp=%p (cp=%p) not owned?\n", vp, cp);
     
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/*
 	 * Prepare the CP blob and get it ready for use, if necessary.
 	 *
@@ -1000,7 +1000,7 @@ hfs_copy_extent(
 		 */
         
 		/* Attach the new CP blob  to the buffer if needed */
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		if (cpenabled) {
 			/* attach the RELOCATION_INFLIGHT flag for the underlying call to VNOP_STRATEGY */
 			cp->c_cpentry->cp_flags |= CP_RELOCATION_INFLIGHT;
@@ -1016,7 +1016,7 @@ hfs_copy_extent(
 		if (!err)
 			err = buf_biowait(bp);
 		if (err) {
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 			/* Turn the flag off in error cases. */
 			if (cpenabled) {
 				cp->c_cpentry->cp_flags &= ~CP_RELOCATION_INFLIGHT;
@@ -1035,7 +1035,7 @@ hfs_copy_extent(
 		if (vnode_issystem(vp) && journal_uses_fua(hfsmp->jnl))
 			buf_markfua(bp);
         
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		/* Attach the CP to the buffer if needed */
 		if (cpenabled) {
 			bufattr_setcpx(buf_attr(bp), hfsmp->hfs_resize_cpx);
@@ -1054,7 +1054,7 @@ hfs_copy_extent(
 		if (!err) {
 			err = buf_biowait(bp);
 		}
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		/* Turn the flag off regardless once the strategy call finishes. */
 		if (cpenabled) {
 			cp->c_cpentry->cp_flags &= ~CP_RELOCATION_INFLIGHT;
@@ -3002,7 +3002,7 @@ hfs_reclaim_filespace(struct hfsmount *hfsmp, u_int32_t allocLimit, vfs_context_
 	u_int32_t files_moved = 0;
 	u_int32_t prev_blocksmoved;
     
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	int keys_generated = 0;
 #endif
     
@@ -3010,7 +3010,7 @@ hfs_reclaim_filespace(struct hfsmount *hfsmp, u_int32_t allocLimit, vfs_context_
 	/* Store the value to print total blocks moved by this function at the end */
 	prev_blocksmoved = hfsmp->hfs_resize_blocksmoved;
 	
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/*
 	 * For content-protected filesystems, we may need to relocate files that
 	 * are encrypted.  If they use the new-style offset-based IVs, then
@@ -3128,7 +3128,7 @@ hfs_reclaim_filespace(struct hfsmount *hfsmp, u_int32_t allocLimit, vfs_context_
                files_moved, hfsmp->vcbVN);
 	}
 	
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 reclaim_filespace_done:
 
 	if (keys_generated) {

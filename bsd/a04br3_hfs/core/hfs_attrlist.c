@@ -379,7 +379,7 @@ hfs_readdirattr_internal(struct vnode *dvp, struct attrlist *alist,
 
 		if (((alist->commonattr & ATTR_CMN_USERACCESS) &&
 		    (cattrp->ca_recflags & kHFSHasSecurityMask))
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		    ||
 		   ((alist->commonattr & ATTR_CMN_DATA_PROTECT_FLAGS) && (vap))
 #endif
@@ -467,7 +467,7 @@ hfs_readdirattr_internal(struct vnode *dvp, struct attrlist *alist,
 			get_vattr_data_for_attrs(alist, vap, hfsmp, vp, cdescp,
 			    cattrp, &c_datafork, &c_rsrcfork, ctx);
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 			if ((alist->commonattr & ATTR_CMN_DATA_PROTECT_FLAGS) &&
 			    vp) {
 				cp_key_class_t class;

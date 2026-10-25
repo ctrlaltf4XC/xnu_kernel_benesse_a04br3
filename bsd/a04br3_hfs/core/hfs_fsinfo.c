@@ -82,7 +82,7 @@ static errno_t traverse_btree(struct hfsmount *hfsmp, uint32_t btree_fileID, int
 		int (*callback)(struct hfsmount *, HFSPlusKey *, HFSPlusRecord *, void *));
 static errno_t hfs_fsinfo_free_extents(struct hfsmount *hfsmp, struct hfs_fsinfo_data *fsinfo);
 static void fsinfo_free_extents_callback(void *data, off_t free_extent_size);
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 static errno_t fsinfo_cprotect_count_callback(struct hfsmount *hfsmp, HFSPlusKey *key, HFSPlusRecord *record, void *data);
 #endif
 static errno_t fsinfo_symlink_size_callback(struct hfsmount *hfsmp, HFSPlusKey *key, HFSPlusRecord *record, void *data);
@@ -163,7 +163,7 @@ errno_t hfs_get_fsinfo(struct hfsmount *hfsmp, void *a_data)
 			error = traverse_btree(hfsmp, kHFSCatalogFileID, 0, &(fsinfo_union->data), &fsinfo_symlink_size_callback);
 			break;
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		case HFS_FSINFO_FILE_CPROTECT_COUNT:
 			/* Traverse attribute btree and invoke callback for all records */
 			error = traverse_btree(hfsmp, kHFSAttributesFileID, TRAVERSE_BTREE_XATTR_CPROTECT, &(fsinfo_union->cprotect), &fsinfo_cprotect_count_callback);
@@ -822,7 +822,7 @@ static errno_t fsinfo_symlink_size_callback(__unused struct hfsmount *hfsmp,
 	return 0;
 }
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 /*
  * Callback function to get total number of files/directories
  * for each content protection class

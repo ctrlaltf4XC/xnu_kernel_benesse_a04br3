@@ -29,7 +29,7 @@
 #ifndef HFS_CPROTECT_H_
 #define	HFS_CPROTECT_H_
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 
 #include <sys/cprotect.h>
 

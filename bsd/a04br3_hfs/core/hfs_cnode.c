@@ -1454,7 +1454,7 @@ hfs_getnewvnode(
 		(void) hfs_removehotfile(vp);
 	}
 	
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/* Initialize the cp data structures. The key should be in place now. */
 	if (!issystemfile && (*out_flags & GNV_NEW_CNODE)) {
 		cp_entry_init(cp, mp);
@@ -1516,7 +1516,7 @@ hfs_reclaim_cnode(hfsmount_t *hfsmp, struct cnode *cp)
 		decmpfs_cnode_free(cp->c_decmp);
 	}
 #endif
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	cp_entry_destroy(hfsmp, cp->c_cpentry);
 	cp->c_cpentry = NULL;
 #else

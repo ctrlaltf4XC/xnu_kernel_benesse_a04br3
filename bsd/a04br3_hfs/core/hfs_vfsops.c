@@ -4043,7 +4043,7 @@ hfs_vfs_getattr(struct mount *mp, struct vfs_attr *fsap, __unused vfs_context_t 
 	searchfs_on = 1;
 #endif
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	if (cp_fs_protected(mp)) {
 		exchangedata_on = 0;
 	}
@@ -4221,7 +4221,7 @@ hfs_vfs_getattr(struct mount *mp, struct vfs_attr *fsap, __unused vfs_context_t 
 		vol_attributes_attr_t *attrp = &fsap->f_attributes;
 
         	attrp->validattr.commonattr = HFS_ATTR_CMN_VOL_VALIDMASK;
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
         	attrp->validattr.commonattr |= ATTR_CMN_DATA_PROTECT_FLAGS;
 #endif // CONFIG_PROTECT
 
@@ -4231,7 +4231,7 @@ hfs_vfs_getattr(struct mount *mp, struct vfs_attr *fsap, __unused vfs_context_t 
         	attrp->validattr.forkattr = 0;
 
 		attrp->nativeattr.commonattr = HFS_ATTR_CMN_VOL_VALIDMASK;
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		attrp->nativeattr.commonattr |= ATTR_CMN_DATA_PROTECT_FLAGS;
 #endif // CONFIG_PROTECT
 		
@@ -4515,7 +4515,7 @@ static int hfs_vfs_ioctl(struct mount *mp, u_long command, caddr_t data,
 						 __unused int flags, __unused vfs_context_t context)
 {
 	switch (command) {
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	case FIODEVICELOCKED:
 		cp_device_locked_callback(mp, (cp_lock_state_t)data);
 		return 0;

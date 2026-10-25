@@ -850,7 +850,7 @@ OSErr hfs_MountHFSPlusVolume(struct hfsmount *hfsmp, HFSPlusVolumeHeader *vhp,
 	/* At this point, if the mount point flag is set, we can enable it. */
 	if (vfs_flags(hfsmp->hfs_mp) & MNT_CPROTECT) {
 		/* Cases 2+3 above */
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 		/* Get the EAs as needed. */
 		int cperr = 0;
 		struct cp_root_xattr *xattr = NULL;

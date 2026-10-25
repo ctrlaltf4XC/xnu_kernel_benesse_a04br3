@@ -25,7 +25,7 @@
  *
  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
  */
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 
 #include <sys/mount.h>
 #include <sys/random.h>

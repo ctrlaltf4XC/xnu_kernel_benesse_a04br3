@@ -77,7 +77,7 @@
 
 __BEGIN_DECLS
 
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 /* Forward declare the cprotect struct */
 struct cprotect;
 #endif
@@ -427,7 +427,7 @@ typedef struct hfsmount {
 	u_int32_t		hfs_resize_blocksmoved;
 	u_int32_t		hfs_resize_totalblocks;
 	u_int32_t		hfs_resize_progress;
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	/* Data Protection fields */
 	cpx_t			hfs_resize_cpx;
 	u_int16_t		hfs_running_cp_major_vers;

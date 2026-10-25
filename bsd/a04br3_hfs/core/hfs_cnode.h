@@ -41,7 +41,7 @@
 #if HFS_COMPRESSION
 #include <sys/decmpfs.h>
 #endif
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 #include <sys/cprotect.h>
 #endif
 #include <kern/locks.h>
@@ -197,7 +197,7 @@ struct cnode {
 #if HFS_COMPRESSION
 	struct decmpfs_cnode  *c_decmp;
 #endif /* HFS_COMPRESSION */
-#if CONFIG_PROTECT
+#if 0 /* CONFIG_PROTECT disabled */ 
 	struct cprotect *c_cpentry;	/* content protection data */
 #endif
 };
