@@ -1536,7 +1536,7 @@ hfs_vnop_setattr(struct vnop_setattr_args *ap)
 	if (VATTR_IS_ACTIVE(vap, va_flags)) {
 		if ((error = hfs_set_bsd_flags(hfsmp, cp, vap->va_flags, document_id,
 									   ap->a_context,
-									   &decmpfs_reset_state)) != 0) {
+									   NULL)) != 0) {
 			goto out;
 		}
 	}
@@ -1616,7 +1616,7 @@ out:
 
 		hfs_unlock(cp);
 #if HFS_COMPRESSION
-		if (decmpfs_reset_state) {
+		if (0) { /* decmpfs disabled */
 			/*
 			 * we've changed the UF_COMPRESSED flag, so reset the decmpfs state for this cnode
 			 * but don't do it while holding the hfs cnode lock
@@ -2726,7 +2726,7 @@ hfs_vnop_mmap(struct vnop_mmap_args *ap)
 	if (VNODE_IS_RSRC(vp)) {
 		/* allow pageins of the resource fork */
 	} else {
-		int compressed = hfs_file_is_compressed(cp, 1); /* 1 == don't take the cnode lock */
+		int compressed = 0; /* compression disabled on Begonia */
 		time_t orig_ctime = cp->c_ctime;
 		
 		if (!compressed && (cp->c_bsdflags & UF_COMPRESSED)) {
@@ -5785,8 +5785,8 @@ hfs_vnop_readdir(struct vnop_readdir_args *ap)
 		return (EINVAL);
 
 	if (VTOC(vp)->c_bsdflags & UF_COMPRESSED) {
-		int compressed = hfs_file_is_compressed(VTOC(vp), 0);  /* 0 == take the cnode lock */
-		if (VTOCMP(vp) != NULL && !compressed) {
+		int compressed = 0; /* compression disabled on Begonia */
+		if (0) { /* compression disabled on Begonia */
 			error = check_for_dataless_file(vp, NAMESPACE_HANDLER_READ_OP);
 			if (error) {
 				return error;
