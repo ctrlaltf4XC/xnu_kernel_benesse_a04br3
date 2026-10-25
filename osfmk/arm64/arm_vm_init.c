@@ -2334,7 +2334,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
 	begonia_vm_trace("XNU_VM_TTBR1_ACTIVE\r\n", TRUE);
 #endif
 
+#if defined(A04BR3)
 	ml_enable_monitor();
+#endif
 
 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
 

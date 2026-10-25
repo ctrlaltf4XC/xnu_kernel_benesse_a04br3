@@ -48,6 +48,8 @@
 #include "hfs.h"
 #include "hfs_cnode.h"
 extern int hfs_file_is_compressed(struct cnode *cp, int skiplock);
+/* Stub: content compression disabled on Begonia (no decmpfs). */
+int hfs_file_is_compressed(struct cnode *cp, int skiplock) { (void)cp; (void)skiplock; return 0; }
 #include "hfs_mount.h"
 #include "hfs_dbg.h"
 #include "hfs_attrlist.h"
