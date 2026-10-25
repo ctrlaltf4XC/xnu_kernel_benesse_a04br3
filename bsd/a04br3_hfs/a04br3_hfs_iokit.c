@@ -86,10 +86,10 @@ a04br3_hfs_register(void)
 	hfs_init_zones();
 	hfs_sysctl_register();
 
-	uint32_t num_cpus;
-	size_t sz = sizeof(num_cpus);
+	uint32_t num_cpus = 8; /* Begonia: 8 cores; no sysctlbyname in kernel */
+	size_t sz = sizeof(num_cpus); (void)sz;
 
-	if (sysctlbyname("hw.physicalcpu", &num_cpus, &sz, NULL, 0) == 0) {
+	if (1) {
 		if ((2 * num_cpus) > MAX_CACHED_ORIGINS_DEFAULT) {
 			_hfs_max_origins = 2 * num_cpus;
 			_hfs_max_file_origins = 2 * num_cpus;
