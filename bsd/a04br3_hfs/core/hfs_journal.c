@@ -1550,9 +1550,8 @@ size_up_tbuffer(journal *jnl, int tbuffer_size, int phys_blksz)
 	// there is in the machine.
 	//
 	if (def_tbuffer_size == 0) {
-		uint64_t memsize = 0;
-		size_t l = sizeof(memsize);
-		sysctlbyname("hw.memsize", &memsize, &l, NULL, 0);
+		uint64_t memsize = 1024*1024*1024; /* Begonia: no sysctlbyname in kernel; assume >= 1 GiB */
+		size_t l = sizeof(memsize); (void)l;
 
 		if (memsize < (256*1024*1024)) {
 			def_tbuffer_size = DEFAULT_TRANSACTION_BUFFER_SIZE;
