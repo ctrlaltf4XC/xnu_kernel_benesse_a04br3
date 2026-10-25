@@ -4,7 +4,7 @@
  * No heap, SIMD or CPU crypto extension is needed. Contexts can be copied:
  * their only pointer is the immutable BearSSL class descriptor.
  */
-#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#if defined(ARM64_BOARD_CONFIG_A04BR3) || defined(ARM64_BOARD_CONFIG_BEGONIA)
 #include <libkern/libkern.h>
 #include <libkern/crypto/aes.h>
 #include <corecrypto/ccmode.h>

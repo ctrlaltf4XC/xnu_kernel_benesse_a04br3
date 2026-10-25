@@ -17,7 +17,7 @@ setCount(MD5_CTX *ctx, uint64_t count)
 }
 
 /* Copy a ccdigest ctx into a legacy MD5 context */
-#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#if defined(ARM64_BOARD_CONFIG_A04BR3) || defined(ARM64_BOARD_CONFIG_BEGONIA)
 /*
  * A04BR3 has no corecrypto kext (g_crypto_funcs stays NULL). MD5 uses
  * BearSSL's portable implementation (libkern/crypto/a04br3_md5.c), with

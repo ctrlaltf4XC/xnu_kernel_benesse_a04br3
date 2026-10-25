@@ -34,7 +34,7 @@
 
 #if defined(CRYPTO_SHA2)
 
-#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#if defined(ARM64_BOARD_CONFIG_A04BR3) || defined(ARM64_BOARD_CONFIG_BEGONIA)
 /*
  * A04BR3 has no corecrypto kext, so g_crypto_funcs stays NULL. SHA-256 uses
  * XNU's built-in implementation directly, as the A04BR3 PRNG does; this also
@@ -82,7 +82,7 @@ SHA256_Final(void *digest, SHA256_CTX *ctx)
 	ccdigest_final(di, ctx->ctx, digest);
 }
 
-#if defined(ARM64_BOARD_CONFIG_A04BR3)
+#if defined(ARM64_BOARD_CONFIG_A04BR3) || defined(ARM64_BOARD_CONFIG_BEGONIA)
 #include "a04br3_bearssl/inc/bearssl_hash.h"
 
 _Static_assert(sizeof(br_sha384_context) <= sizeof(SHA512_CTX),
