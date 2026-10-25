@@ -137,9 +137,7 @@ cl_direct_read_lock_t *cluster_lock_direct_read(vnode_t vp, lck_rw_type_t exclus
 void cluster_unlock_direct_read(cl_direct_read_lock_t *lck);
 
 /* UPL routines */
-#ifndef XNU_KERNEL_PRIVATE
 int     ubc_create_upl(vnode_t, off_t, int, upl_t *, upl_page_info_t **, int);
-#endif /* XNU_KERNEL_PRIVATE */
 int     ubc_upl_map(upl_t, vm_offset_t *);
 int     ubc_upl_unmap(upl_t);
 int     ubc_upl_map_range(upl_t, vm_offset_t, vm_size_t, vm_prot_t, vm_offset_t *);

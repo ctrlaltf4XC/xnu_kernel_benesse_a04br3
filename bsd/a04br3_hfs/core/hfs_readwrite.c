@@ -72,6 +72,7 @@
 #include	"FileMgrInternal.h"
 #include	"BTreesInternal.h"
 #include	"hfs_cnode.h"
+#include	<sys/decmpfs.h>
 #include	"hfs_dbg.h"
 
 #if HFS_CONFIG_KEY_ROLL
