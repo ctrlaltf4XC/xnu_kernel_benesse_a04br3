@@ -31,7 +31,7 @@
 
 #include <TargetConditionals.h>
 
-#define HFS_COMPRESSION 1
+#define HFS_COMPRESSION 0
 #define FIFO 1
 
 // #define HFS_LEAK_DEBUG 1
