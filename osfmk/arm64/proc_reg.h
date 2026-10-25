@@ -209,6 +209,10 @@
 #define MMU_I_CLINE 6
 #define MMU_CLINE   6
 
+#elif defined (BEGONIA) /* MT6785: 64-byte instruction/data cache lines. */
+#define MMU_I_CLINE 6
+#define MMU_CLINE   6
+
 #elif defined (BCM2837) /* Raspberry Pi 3 */
 
 /* I-Cache. We don't have detailed spec so we just follow the ARM technical reference. */
