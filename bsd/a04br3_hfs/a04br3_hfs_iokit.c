@@ -18,10 +18,10 @@
 #include <pexpert/pexpert.h>
 #include <sys/sysctl.h>
 
-#include "hfs.h"
-#include "hfs_cnode.h"
-#include "hfs_dbg.h"
-#include "hfs_iokit.h"
+#include "core/hfs.h"
+#include "core/hfs_cnode.h"
+#include "core/hfs_dbg.h"
+#include "core/hfs_iokit.h"
 #include "hfs_encodings/hfs_encodings_internal.h"
 
 #ifndef panic_on_assert
