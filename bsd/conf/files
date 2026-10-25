@@ -109,8 +109,6 @@ bsd/dev/a04br3_msdc.c		standard
 bsd/dev/begonia_display.c			standard
 bsd/dev/begonia_msdc.c		standard
 bsd/dev/begonia_touch.c			standard
-bsd/dev/begonia_usb.c			standard
-bsd/dev/begonia_usb_controller.c		standard
 bsd/dev/a04br3_sample.c			standard
 bsd/dev/a04br3_root_prepare.c		standard
 bsd/dev/mem.c				standard
