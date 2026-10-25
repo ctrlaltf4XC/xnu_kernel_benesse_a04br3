@@ -47,6 +47,7 @@
 
 #include "hfs.h"
 #include "hfs_cnode.h"
+extern int hfs_file_is_compressed(struct cnode *cp, int skiplock);
 #include "hfs_mount.h"
 #include "hfs_dbg.h"
 #include "hfs_attrlist.h"
